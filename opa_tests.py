@@ -1,3 +1,5 @@
+#Testing VSC and GitHub integration with this line of code. Please ignore.
+
 # opa_tests.py
 # Operational Amplifier (OPA) test procedures
 # Tests for GBW (Gain-Bandwidth Product) and SR (Slew Rate)
@@ -8,6 +10,7 @@ def test_parameter():
     This function defines the available test names, parameter lists, and details.
     Parameters are only written to the datalog when their corresponding test is actually executed.
     """
+    
     return [
         {
             "test_name": "OPA_RS622_Test",
