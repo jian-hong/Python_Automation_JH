@@ -1,7 +1,5 @@
 # main.py
 
-#im doing some testing here
-
 from instruments import Instruments
 from logic_tests import *
 from opa_tests import *
