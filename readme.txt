@@ -1,4 +1,4 @@
-rs29511/
+LabAutomation/
 ├── configurations.py          # Global test configuration: VCC ranges, limits, filenames, sample count
 ├── instruments.py     # VISA abstraction layer: instrument discovery, connection, basic I/O
 ├── scope_setup.py     # Oscilloscope configuration: channels, timebase, triggers, measurements
