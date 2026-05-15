@@ -601,5 +601,3 @@ def setup_logging(config: Optional[AppConfig] = None) -> logging.Logger:
         logger.addHandler(console_handler)
     
     return logger
-
-
