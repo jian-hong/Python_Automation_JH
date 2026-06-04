@@ -30,9 +30,10 @@ def run(root):
     # ── 3. Create push_button.bat in repo root ──
     push_btn_bat = os.path.join(root, "push_button.bat")
     pyw = os.path.join(root, "Github_Auto", "push_button.pyw")
-    if not os.path.exists(push_btn_bat):
-        with open(push_btn_bat, "w") as f:
-            f.write(f'@echo off\nstart "" pythonw "{pyw}"\n')
+    src_btn = os.path.join(root, "push_button.bat")
+    if not os.path.exists(push_btn_bat) and os.path.exists(src_btn):
+        import shutil
+        shutil.copy2(src_btn, push_btn_bat)
 
     # ── 4. Register "push" in PowerShell profile (Windows only) ──
     if sys.platform == "win32":
@@ -83,14 +84,24 @@ def run(root):
     with open(settings_path, "w") as f:
         json.dump(settings, f, indent=2)
 
-    # ── 6. Launch floating push button silently ──
+    # ── 6. Launch push button using venv pythonw directly ──
+    pyw = os.path.join(root, "Github_Auto", "push_button.pyw")
+    pythonw = os.path.join(root, "venv", "Scripts", "pythonw.exe")
+
     if os.path.exists(pyw):
-        try:
-            subprocess.Popen(["pythonw", pyw])
-            print("Push button launched — bottom-right of your screen.")
-            print("Relaunch anytime: .\\push_button")
-        except Exception:
-            pass
+        if os.path.exists(pythonw):
+            popen_kwargs = {"close_fds": True}
+            if sys.platform == "win32":
+                popen_kwargs["creationflags"] = 0x00000008
+            subprocess.Popen([pythonw, pyw], **popen_kwargs)
+            print("Push button active — bottom-right of screen.")
+        else:
+            try:
+                os.startfile(pyw)
+                print("Push button active — bottom-right of screen.")
+            except Exception as e:
+                print(f"Push button could not launch: {e}")
+                print("Run manually: .\\push_button.bat")
 
     print()
     print("  All done. Reopen your terminal then type: push")

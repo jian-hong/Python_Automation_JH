@@ -14,6 +14,8 @@ except ImportError:
     input("Press Enter to close...")
     sys.exit(1)
 
+NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
+
 
 def run_git(args, check=True):
     """Run a git command and return the CompletedProcess result."""
@@ -324,17 +326,6 @@ def show_review_popup(default_title, default_description, ai_success=True, git_n
     return result
 
 
-def get_unique_branch_name(base_name):
-    branch_name = base_name
-    suffix = 2
-    while True:
-        remote = run_git(["ls-remote", "--heads", "origin", branch_name])
-        if not remote.stdout.strip():
-            return branch_name
-        branch_name = f"{base_name}-{suffix}"
-        suffix += 1
-
-
 def create_pull_request(config, branch_name, title, description, git_name="", git_email=""):
     repo = f"{config['GITHUB_REPO_OWNER']}/{config['GITHUB_REPO_NAME']}"
     headers = {
@@ -381,6 +372,33 @@ def create_pull_request(config, branch_name, title, description, git_name="", gi
     return pr_url
 
 
+def show_version_history():
+    print("Recent commits (latest first):")
+    print("-" * 50)
+    log = subprocess.run(
+        ["git", "log", "--oneline", "--since=30 days ago", "-20"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+    lines = log.splitlines()
+    for i, line in enumerate(lines):
+        print(f"  [{i+1:2d}] {line}")
+
+    print()
+    print("To restore a file to a previous version:")
+    print("  git checkout <hash> -- filename.py")
+    print()
+    print("Example — restore configurations.py from 3 commits ago:")
+    if len(lines) >= 3:
+        hash3 = lines[2].split()[0]
+        print(f"  git checkout {hash3} -- configurations.py")
+    print()
+    print("To see what changed in a specific commit:")
+    print("  git show <hash>")
+    input("Press Enter to close...")
+
+
 def main():
     try:
         config = load_config()
@@ -399,7 +417,12 @@ def main():
         if not git_name:
             git_name = "Team Member"
 
-        subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
+        subprocess.run(
+            ["git", "fetch", "origin"],
+            capture_output=True,
+            text=True,
+            creationflags=NO_WINDOW,
+        )
 
         diff_result = subprocess.run(
             ["git", "diff", "origin/main...HEAD"],
@@ -471,15 +494,15 @@ def main():
             module,
         )
 
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        preview_branch = f"{module}/{date_str}-auto"
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        branch_name = f"{module}/{timestamp}"
 
         popup_result = show_review_popup(
             title,
             description,
             ai_success=ai_success,
             git_name=git_name,
-            branch_name=preview_branch,
+            branch_name=branch_name,
         )
         if not popup_result["confirmed"]:
             print("Cancelled.")
@@ -487,9 +510,6 @@ def main():
 
         title = popup_result["title"]
         description = popup_result["description"]
-
-        base_branch_name = preview_branch
-        branch_name = get_unique_branch_name(base_branch_name)
 
         run_git(["checkout", "-b", branch_name])
         run_git(["add", "-A"])
@@ -501,6 +521,23 @@ def main():
         )
         print(pr_url)
         print(f"PR created by: {git_name}")
+
+        old_branches = subprocess.run(
+            ["git", "branch", "--list", f"{module}/*"],
+            capture_output=True,
+            text=True,
+            creationflags=NO_WINDOW,
+        ).stdout.strip().splitlines()
+
+        for old in old_branches:
+            old = old.strip().lstrip("* ")
+            if old and old != branch_name:
+                subprocess.run(
+                    ["git", "branch", "-D", old],
+                    capture_output=True,
+                    text=True,
+                    creationflags=NO_WINDOW,
+                )
 
     except subprocess.CalledProcessError:
         sys.exit(1)
@@ -515,4 +552,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "--history":
+        show_version_history()
+    else:
+        main()

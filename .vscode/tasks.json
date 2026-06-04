@@ -4,24 +4,49 @@
     {
       "label": "Push to GitHub",
       "type": "shell",
-      "command": "${workspaceFolder}/Github_Auto/git-push.bat",
+      "windows": {"command": "${workspaceFolder}/Github_Auto/git-push.bat"},
+      "osx":     {"command": "bash ${workspaceFolder}/Github_Auto/git-push.sh"},
+      "linux":   {"command": "bash ${workspaceFolder}/Github_Auto/git-push.sh"},
+      "group": {"kind": "build", "isDefault": false},
+      "presentation": {"reveal": "always", "panel": "new", "focus": true},
+      "problemMatcher": []
+    },
+    {
+      "label": "Launch push button",
+      "type": "shell",
       "windows": {
-        "command": "${workspaceFolder}/Github_Auto/git-push.bat"
+        "command": "cmd /c start /b cmd /c \"\"${workspaceFolder}\\push_button.bat\"\""
       },
       "osx": {
-        "command": "bash ${workspaceFolder}/Github_Auto/git-push.sh"
+        "command": "nohup python3 '${workspaceFolder}/Github_Auto/push_button.pyw' > /dev/null 2>&1 &"
       },
-      "linux": {
-        "command": "bash ${workspaceFolder}/Github_Auto/git-push.sh"
-      },
-      "group": {
-        "kind": "build",
-        "isDefault": false
+      "runOptions": {
+        "runOn": "folderOpen"
       },
       "presentation": {
-        "reveal": "always",
-        "panel": "new",
-        "focus": true
+        "reveal": "never",
+        "panel": "shared",
+        "close": true,
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Auto-fetch on open",
+      "type": "shell",
+      "windows": {
+        "command": "git fetch origin; $n=(git log HEAD..origin/main --oneline 2>$null); if($n){Write-Host ''; Write-Host '  NEW on main:' -ForegroundColor Yellow; Write-Host $n; Write-Host '  Pull before editing shared files.' -ForegroundColor Yellow; Write-Host ''}"
+      },
+      "osx": {
+        "command": "git fetch origin 2>/dev/null; N=$(git log HEAD..origin/main --oneline 2>/dev/null); [ -n \"$N\" ] && echo '' && echo 'NEW on main:' && echo \"$N\" && echo 'Pull before editing shared files.' && echo ''"
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "presentation": {
+        "reveal": "never",
+        "close": true,
+        "showReuseMessage": false
       },
       "problemMatcher": []
     }
