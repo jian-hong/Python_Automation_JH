@@ -25,5 +25,5 @@ echo.
 if errorlevel 1 (
     echo.
     echo Something went wrong. Check the error above.
+    pause
 )
-pause
