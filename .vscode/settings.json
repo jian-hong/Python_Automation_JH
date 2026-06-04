@@ -4,7 +4,7 @@
   "python.terminal.activateEnvInCurrentTerminal": true,
   "terminal.integrated.env.windows": {
     "VIRTUAL_ENV": "${workspaceFolder}/venv",
-    "PATH": "${workspaceFolder}/venv/Scripts;${env:PATH}"
+    "PATH": "${workspaceFolder}\\venv\\Scripts;${env:PATH}"
   },
   "terminal.integrated.env.osx": {
     "VIRTUAL_ENV": "${workspaceFolder}/venv",

@@ -17,6 +17,24 @@ except ImportError:
 NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 
+def get_git_name():
+    for scope in ([], ["--global"], ["--system"]):
+        try:
+            r = subprocess.run(
+                ["git", "config"] + scope + ["user.name"],
+                capture_output=True,
+                text=True,
+                creationflags=NO_WINDOW,
+                timeout=5,
+            )
+            name = r.stdout.strip()
+            if name:
+                return name
+        except Exception:
+            continue
+    return None
+
+
 def run_git(args, check=True):
     """Run a git command and return the CompletedProcess result."""
     try:
@@ -403,19 +421,31 @@ def main():
     try:
         config = load_config()
 
-        git_name = subprocess.run(
-            ["git", "config", "user.name"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        git_name = get_git_name()
+
+        if not git_name:
+            from tkinter import simpledialog
+            _root = tk.Tk()
+            _root.withdraw()
+            git_name = simpledialog.askstring(
+                "Your name",
+                "Enter your name for GitHub PRs:",
+                parent=_root,
+            ) or "Team Member"
+            _root.destroy()
+            subprocess.run(
+                ["git", "config", "--global", "user.name", git_name],
+                capture_output=True,
+                creationflags=NO_WINDOW,
+            )
+            print(f"Saved git name: {git_name}")
+
         git_email = subprocess.run(
             ["git", "config", "user.email"],
             capture_output=True,
             text=True,
+            creationflags=NO_WINDOW,
         ).stdout.strip()
-
-        if not git_name:
-            git_name = "Team Member"
 
         subprocess.run(
             ["git", "fetch", "origin"],

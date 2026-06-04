@@ -13,12 +13,35 @@
     },
     {
       "label": "Launch push button",
-      "type": "shell",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": ["/d", "/c", "push_button.bat"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "windows": {
-        "command": "cmd /c start /b cmd /c \"\"${workspaceFolder}\\push_button.bat\"\""
+        "type": "process",
+        "command": "cmd.exe",
+        "args": ["/d", "/c", "push_button.bat"],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        }
       },
       "osx": {
-        "command": "nohup python3 '${workspaceFolder}/Github_Auto/push_button.pyw' > /dev/null 2>&1 &"
+        "type": "process",
+        "command": "${workspaceFolder}/venv/bin/pythonw",
+        "args": ["Github_Auto/push_button.pyw"],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        }
+      },
+      "linux": {
+        "type": "process",
+        "command": "${workspaceFolder}/venv/bin/pythonw",
+        "args": ["Github_Auto/push_button.pyw"],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        }
       },
       "runOptions": {
         "runOn": "folderOpen"

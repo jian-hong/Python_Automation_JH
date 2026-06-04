@@ -29,11 +29,29 @@ def run(root):
 
     # ── 3. Create push_button.bat in repo root ──
     push_btn_bat = os.path.join(root, "push_button.bat")
-    pyw = os.path.join(root, "Github_Auto", "push_button.pyw")
-    src_btn = os.path.join(root, "push_button.bat")
-    if not os.path.exists(push_btn_bat) and os.path.exists(src_btn):
-        import shutil
-        shutil.copy2(src_btn, push_btn_bat)
+    if not os.path.exists(push_btn_bat):
+        with open(push_btn_bat, "w", newline="\r\n") as f:
+            f.write(
+                '@echo off\r\n'
+                'cd /d "%~dp0"\r\n'
+                'set PYTHONW=%~dp0venv\\Scripts\\pythonw.exe\r\n'
+                'set PYW=%~dp0Github_Auto\\push_button.pyw\r\n'
+                '\r\n'
+                'if not exist "%PYTHONW%" (\r\n'
+                '    echo ERROR: venv not found. Run: python install.py\r\n'
+                '    pause\r\n'
+                '    exit /b 1\r\n'
+                ')\r\n'
+                '\r\n'
+                'if not exist "%PYW%" (\r\n'
+                '    echo ERROR: push_button.pyw not found in Github_Auto\\\r\n'
+                '    pause\r\n'
+                '    exit /b 1\r\n'
+                ')\r\n'
+                '\r\n'
+                'start "" "%PYTHONW%" "%PYW%"\r\n'
+                'exit /b 0\r\n'
+            )
 
     # ── 4. Register "push" in PowerShell profile (Windows only) ──
     if sys.platform == "win32":
@@ -55,6 +73,13 @@ def run(root):
         )
         if "registered" in result.stdout:
             print("push command registered — reopen terminal to use it.")
+
+        setup = os.path.join(root, "Github_Auto", "setup_push_command.bat")
+        if os.path.exists(setup):
+            subprocess.run(
+                ["cmd", "/c", setup, "silent"],
+                capture_output=True,
+            )
 
     # ── 5. Update .vscode/settings.json to auto-activate venv ──
     import json
@@ -84,24 +109,22 @@ def run(root):
     with open(settings_path, "w") as f:
         json.dump(settings, f, indent=2)
 
-    # ── 6. Launch push button using venv pythonw directly ──
+    # ── 6. Launch push button ──
     pyw = os.path.join(root, "Github_Auto", "push_button.pyw")
     pythonw = os.path.join(root, "venv", "Scripts", "pythonw.exe")
 
-    if os.path.exists(pyw):
-        if os.path.exists(pythonw):
-            popen_kwargs = {"close_fds": True}
-            if sys.platform == "win32":
-                popen_kwargs["creationflags"] = 0x00000008
-            subprocess.Popen([pythonw, pyw], **popen_kwargs)
-            print("Push button active — bottom-right of screen.")
-        else:
-            try:
-                os.startfile(pyw)
-                print("Push button active — bottom-right of screen.")
-            except Exception as e:
-                print(f"Push button could not launch: {e}")
-                print("Run manually: .\\push_button.bat")
+    if os.path.exists(pyw) and os.path.exists(pythonw):
+        subprocess.Popen(
+            [pythonw, pyw],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            close_fds=False,
+        )
+        print("Push button active — bottom-right of screen.")
+    else:
+        print("Run push_button.bat to launch the button manually.")
 
     print()
     print("  All done. Reopen your terminal then type: push")

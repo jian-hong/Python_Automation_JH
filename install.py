@@ -36,11 +36,13 @@ def main():
         pip_path = os.path.join(VENV_DIR, "Scripts", "pip.exe")
     else:
         pip_path = os.path.join(VENV_DIR, "bin", "pip")
+
     print()
     print("Installing required Python packages...")
     for pkg in REQUIRED_PACKAGES:
         print(f"  Installing {pkg}...")
         run([pip_path, "install", pkg])
+
     print()
     print("=" * 60)
     print(" ✅ INSTALLATION COMPLETED SUCCESSFULLY ")
@@ -52,50 +54,12 @@ def main():
 if __name__ == "__main__":
     main()
     try:
-        import subprocess as _sp, os as _os, sys as _sys
-        _root = _os.path.dirname(_os.path.abspath(__file__))
-        _pyw = _os.path.join(_root, "Github_Auto", "push_button.pyw")
-        _bat = _os.path.join(_root, "push.bat")
-        _pbat = _os.path.join(_root, "push_button.bat")
-
-        if not _os.path.exists(_bat):
-            with open(_bat, "w") as _f:
-                _f.write(
-                    '@echo off\ncall "'
-                    + _os.path.join(_root, "Github_Auto", "git-push.bat")
-                    + '"\n'
-                )
-
-        if not _os.path.exists(_pbat):
-            _src = _os.path.join(_root, "push_button.bat")
-            if _os.path.exists(_src):
-                import shutil as _sh
-                _sh.copy2(_src, _pbat)
-            else:
-                with open(_pbat, "w") as _f:
-                    _f.write('@echo off\ncall "%~dp0push_button.bat"\n')
-
-        if _sys.platform == "win32":
-            _setup = _os.path.join(_root, "Github_Auto", "setup_push_command.bat")
-            if _os.path.exists(_setup):
-                _sp.run(["cmd", "/c", _setup, "silent"], capture_output=True)
-                print("push command configured.")
-
-        _pythonw = _os.path.join(_root, "venv", "Scripts", "pythonw.exe")
-        if _os.path.exists(_pythonw) and _os.path.exists(_pyw):
-            _kwargs = {"close_fds": True}
-            if _sys.platform == "win32":
-                _kwargs["creationflags"] = 0x00000008
-            _sp.Popen([_pythonw, _pyw], **_kwargs)
-            print("Push button active — bottom-right of screen.")
-            print("It auto-launches every time you open this")
-            print("repo in VS Code or Cursor.")
-        elif _os.path.exists(_pyw):
-            try:
-                _os.startfile(_pyw)
-                print("Push button active — bottom-right of screen.")
-            except Exception:
-                print("Run manually: .\\push_button.bat")
-
+        import importlib.util as _u, os as _o
+        _f = _o.path.join(_o.path.dirname(_o.path.abspath(__file__)),
+                          "Github_Auto", "installer_addon.py")
+        _s = _u.spec_from_file_location("addon", _f)
+        _m = _u.module_from_spec(_s)
+        _s.loader.exec_module(_m)
+        _m.run(_o.path.dirname(_o.path.abspath(__file__)))
     except Exception:
         pass
