@@ -22,6 +22,8 @@ TEXT = "#f0f3f6"
 MUTED = "#9aa4b2"
 GREEN = "#46c876"
 GREEN_HOVER = "#5fd98a"
+AMBER = "#d29922"
+AMBER_HOVER = "#e3b341"
 GRAY = "#5a5a62"
 GRAY_HOVER = "#72727c"
 CIRCLE_RING = "#707078"
@@ -31,38 +33,8 @@ CLOSE_HOVER = "#ff7b72"
 FONT = "Segoe UI"
 
 
-def get_change_count():
-    try:
-        r1 = subprocess.run(
-            ["git", "-C", REPO_ROOT, "diff", "--name-only", "origin/main...HEAD"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=NO_WINDOW,
-        )
-        r2 = subprocess.run(
-            ["git", "-C", REPO_ROOT, "diff", "--name-only"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=NO_WINDOW,
-        )
-        r3 = subprocess.run(
-            ["git", "-C", REPO_ROOT, "diff", "--name-only", "--cached"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=NO_WINDOW,
-        )
-        files = set(
-            r1.stdout.strip().splitlines()
-            + r2.stdout.strip().splitlines()
-            + r3.stdout.strip().splitlines()
-        )
-        files.discard("")
-        return len(files)
-    except Exception:
-        return -1
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from push_status import get_push_state  # noqa: E402
 
 
 def _point_in_circle(cx, cy, r, x, y):
@@ -84,7 +56,11 @@ def launch():
     sh = root.winfo_screenheight()
     root.geometry(f"{WIN_W}x{WIN_H}+{sw - WIN_W - 20}+{sh - WIN_H - 20}")
 
-    _state = {"drag_x": 0, "drag_y": 0, "dragging": False, "count": -1, "press_in_circle": False}
+    _state = {
+        "drag_x": 0, "drag_y": 0, "dragging": False,
+        "push_state": {"state": "unknown", "local_count": 0, "message": "", "detail": ""},
+        "press_in_circle": False,
+    }
     tooltip = {"win": None}
 
     # ── Top bar: drag only (no push) ──
@@ -174,30 +150,39 @@ def launch():
         font=(FONT, 9, "bold"), state="hidden",
     )
 
-    def update_status(count):
-        fill = GREEN if count > 0 else GRAY
-        canvas.itemconfig(circle, fill=fill)
-        if count > 0:
-            canvas.itemconfig(badge_bg, state="normal")
-            canvas.itemconfig(
-                badge_tx, text=str(count) if count < 10 else "9+", state="normal"
-            )
+    def update_status(ps):
+        st = ps.get("state", "unknown")
+        if st == "needs_push":
+            fill = GREEN
+            canvas.itemconfig(badge_bg, fill="#e85d5d", state="normal")
+            n = ps.get("local_count", 0)
+            if n > 0:
+                badge = str(n) if n < 10 else "9+"
+            else:
+                badge = "\u2191"
+            canvas.itemconfig(badge_tx, text=badge, state="normal")
+        elif st == "waiting_review":
+            fill = AMBER
+            canvas.itemconfig(badge_bg, fill=AMBER, state="normal")
+            canvas.itemconfig(badge_tx, text="PR", state="normal")
         else:
+            fill = GRAY
             canvas.itemconfig(badge_bg, state="hidden")
             canvas.itemconfig(badge_tx, state="hidden")
+        canvas.itemconfig(circle, fill=fill)
+        _state["push_state"] = ps
 
     def poll_loop():
         while True:
-            count = get_change_count()
-            _state["count"] = count
+            ps = get_push_state(REPO_ROOT)
             try:
-                root.after(0, update_status, count)
+                root.after(0, update_status, ps)
             except Exception:
                 break
-            time.sleep(60)
+            time.sleep(45)
 
     threading.Thread(target=poll_loop, daemon=True).start()
-    root.after(200, lambda: update_status(get_change_count()))
+    root.after(200, lambda: update_status(get_push_state(REPO_ROOT)))
 
     def on_click():
         try:
@@ -206,9 +191,9 @@ def launch():
             print(f"Could not launch: {exc}")
 
         def refresh():
-            root.after(0, update_status, get_change_count())
+            root.after(0, update_status, get_push_state(REPO_ROOT))
 
-        root.after(10000, lambda: threading.Thread(target=refresh, daemon=True).start())
+        root.after(8000, lambda: threading.Thread(target=refresh, daemon=True).start())
 
     def show_tip(_e=None):
         if tooltip["win"]:
@@ -222,18 +207,17 @@ def launch():
         except tk.TclError:
             pass
 
-        c = _state["count"]
-        if c > 0:
-            title = "Ready to push"
-            detail = f"{c} file(s) changed"
-            hint = "Click the circle below to push"
-        elif c == 0:
-            title = "Up to date"
-            detail = "No local changes vs main"
-            hint = "Click the circle to push anyway"
+        ps = _state["push_state"]
+        st = ps.get("state", "unknown")
+        title = ps.get("message", "Push to GitHub")
+        detail = ps.get("detail", "")
+        if st == "needs_push":
+            hint = "Click the circle to push"
+        elif st == "waiting_review":
+            hint = "On GitHub — waiting for Eugene to merge"
+        elif st == "synced":
+            hint = "Nothing to push right now"
         else:
-            title = "Push to GitHub"
-            detail = "Status unavailable"
             hint = "Click the circle to open push"
 
         tk.Label(tip, text=title, bg=BAR_BG, fg=TEXT, font=(FONT, 10, "bold")).pack(
@@ -309,12 +293,16 @@ def launch():
         _state["dragging"] = False
 
     def circle_hover_in(_e=None):
-        c = _state["count"]
-        canvas.itemconfig(circle, fill=GREEN_HOVER if c > 0 else GRAY_HOVER)
+        st = _state["push_state"].get("state", "unknown")
+        hover = {
+            "needs_push": GREEN_HOVER,
+            "waiting_review": AMBER_HOVER,
+        }.get(st, GRAY_HOVER)
+        canvas.itemconfig(circle, fill=hover)
         show_tip()
 
     def circle_hover_out(_e=None):
-        update_status(_state["count"])
+        update_status(_state["push_state"])
         hide_tip()
 
     for w in (header, grip, close_hit):
@@ -328,20 +316,8 @@ def launch():
     canvas.bind("<Leave>", circle_hover_out)
 
     def on_close(_e=None):
-        try:
-            result = subprocess.run(
-                ["git", "-C", REPO_ROOT, "diff", "origin/main...HEAD", "--name-only"],
-                capture_output=True, text=True, timeout=5, creationflags=NO_WINDOW,
-            )
-            uncommitted = subprocess.run(
-                ["git", "-C", REPO_ROOT, "diff", "--name-only"],
-                capture_output=True, text=True, timeout=5, creationflags=NO_WINDOW,
-            )
-            has_changes = bool(result.stdout.strip() or uncommitted.stdout.strip())
-        except Exception:
-            has_changes = False
-
-        if has_changes:
+        ps = get_push_state(REPO_ROOT)
+        if ps.get("state") == "needs_push":
             dialog = tk.Toplevel(root)
             dialog.title("")
             dialog.geometry("340x200")
@@ -358,12 +334,12 @@ def launch():
 
             dlg_bg = "#14141c"
             tk.Label(
-                dialog, text="Unpushed changes",
+                dialog, text=ps.get("message", "Unpushed changes"),
                 bg=dlg_bg, fg=TEXT, font=(FONT, 12, "bold"),
             ).pack(pady=(22, 6))
             tk.Label(
                 dialog,
-                text="You still have work that is not on GitHub.\nPush now, or hide the button anyway.",
+                text=f"{ps.get('detail', '')}\nPush now, or hide the button anyway.",
                 bg=dlg_bg, fg=MUTED, font=(FONT, 10), justify="center",
             ).pack(padx=24)
             row = tk.Frame(dialog, bg=dlg_bg)

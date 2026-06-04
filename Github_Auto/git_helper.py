@@ -43,6 +43,7 @@ def run_git(args, check=True):
             capture_output=True,
             text=True,
             check=check,
+            creationflags=NO_WINDOW,
         )
     except subprocess.CalledProcessError as exc:
         print(f"Git command failed: git {' '.join(args)}")
@@ -51,6 +52,104 @@ def run_git(args, check=True):
         if exc.stderr:
             print(exc.stderr)
         raise
+
+
+def get_current_branch():
+    r = subprocess.run(
+        ["git", "branch", "--show-current"],
+        capture_output=True,
+        text=True,
+        creationflags=NO_WINDOW,
+    )
+    return (r.stdout or "").strip()
+
+
+def has_local_changes():
+    r = subprocess.run(
+        ["git", "status", "--porcelain"],
+        capture_output=True,
+        text=True,
+        creationflags=NO_WINDOW,
+    )
+    return bool((r.stdout or "").strip())
+
+
+def commits_ahead_of(ref):
+    r = subprocess.run(
+        ["git", "rev-list", f"{ref}..HEAD", "--count"],
+        capture_output=True,
+        text=True,
+        creationflags=NO_WINDOW,
+    )
+    try:
+        return int((r.stdout or "0").strip() or 0)
+    except ValueError:
+        return 0
+
+
+def get_last_commit_summary():
+    title_r = subprocess.run(
+        ["git", "log", "-1", "--pretty=%s"],
+        capture_output=True,
+        text=True,
+        creationflags=NO_WINDOW,
+    )
+    body_r = subprocess.run(
+        ["git", "log", "-1", "--pretty=%b"],
+        capture_output=True,
+        text=True,
+        creationflags=NO_WINDOW,
+    )
+    title = (title_r.stdout or "").strip() or "update: changes"
+    body = (body_r.stdout or "").strip() or "Committed changes pending review."
+    return title, body
+
+
+def fetch_origin(timeout=45):
+    print("Fetching latest from GitHub...")
+    try:
+        subprocess.run(
+            ["git", "fetch", "origin"],
+            capture_output=True,
+            text=True,
+            creationflags=NO_WINDOW,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        print("Warning: fetch timed out — continuing with local git state.")
+
+
+def remote_branch_exists(branch):
+    r = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin", branch],
+        capture_output=True,
+        text=True,
+        creationflags=NO_WINDOW,
+    )
+    return bool((r.stdout or "").strip())
+
+
+def get_existing_pr_url(config, branch_name):
+    owner = config["GITHUB_REPO_OWNER"]
+    repo = f"{owner}/{config['GITHUB_REPO_NAME']}"
+    headers = {
+        "Authorization": f"Bearer {config['GITHUB_TOKEN']}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    resp = requests.get(
+        f"https://api.github.com/repos/{repo}/pulls",
+        headers=headers,
+        params={
+            "head": f"{owner}:{branch_name}",
+            "state": "open",
+            "base": config["DEFAULT_BRANCH"],
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    pulls = resp.json()
+    return pulls[0]["html_url"] if pulls else None
 
 
 def load_config():
@@ -108,7 +207,8 @@ def generate_commit_message(api_key, model, diff_text, module):
         return title, description, ai_success
 
     try:
-        print("Asking SEA-LION for summary...")
+        print("Asking SEA-LION for summary... (max 15s)")
+        sys.stdout.flush()
         response = requests.post(
             "https://api.sea-lion.ai/v1/chat/completions",
             headers={
@@ -137,7 +237,7 @@ def generate_commit_message(api_key, model, diff_text, module):
                 "temperature": 0.3,
                 "max_tokens": 120,
             },
-            timeout=20,
+            timeout=(5, 15),
         )
 
         if response.status_code != 200:
@@ -365,6 +465,13 @@ def create_pull_request(config, branch_name, title, description, git_name="", gi
         },
         timeout=60,
     )
+    if pr_response.status_code == 422:
+        existing = get_existing_pr_url(config, branch_name)
+        if existing:
+            print(f"Pull request already open: {existing}")
+            return existing
+        pr_response.raise_for_status()
+
     pr_response.raise_for_status()
     pr_data = pr_response.json()
     pr_number = pr_data["number"]
@@ -447,12 +554,7 @@ def main():
             creationflags=NO_WINDOW,
         ).stdout.strip()
 
-        subprocess.run(
-            ["git", "fetch", "origin"],
-            capture_output=True,
-            text=True,
-            creationflags=NO_WINDOW,
-        )
+        fetch_origin()
 
         diff_result = subprocess.run(
             ["git", "diff", "origin/main...HEAD"],
@@ -480,24 +582,39 @@ def main():
             text=True,
         ).stdout.strip()
 
+        local_diff = "\n".join(filter(None, [unstaged, staged]))
         full_diff = "\n".join(filter(None, [diff_text, unstaged, staged]))
 
-        unpushed = subprocess.run(
-            ["git", "log", "origin/main..HEAD", "--oneline"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        default_branch = config["DEFAULT_BRANCH"]
+        current_branch = get_current_branch()
+        ahead_of_main = commits_ahead_of(f"origin/{default_branch}")
+        has_local = bool(local_diff.strip())
+        has_commits_vs_main = ahead_of_main > 0
 
-        has_uncommitted = bool(full_diff.strip())
-        has_unpushed_commits = bool(unpushed.strip())
-
-        if not has_uncommitted and not has_unpushed_commits:
+        if not has_local and not has_commits_vs_main:
             print("=" * 50)
             print(" Everything is already up to date.")
             print(" No changes to push. You are in sync with main.")
             print("=" * 50)
             input("Press Enter to close...")
             sys.exit(0)
+
+        if (
+            not has_local
+            and has_commits_vs_main
+            and current_branch != default_branch
+            and remote_branch_exists(current_branch)
+            and commits_ahead_of(f"origin/{current_branch}") == 0
+        ):
+            existing_pr = get_existing_pr_url(config, current_branch)
+            if existing_pr:
+                print("=" * 50)
+                print(" Your changes are already on GitHub.")
+                print(f" Open PR: {existing_pr}")
+                print(" Waiting for review — no need to push again.")
+                print("=" * 50)
+                input("Press Enter to close...")
+                sys.exit(0)
 
         changed_files = []
         names_result = subprocess.run(
@@ -517,15 +634,51 @@ def main():
             changed_files.append(filepath)
 
         module = detect_module(changed_files)
-        title, description, ai_success = generate_commit_message(
-            config["SEA_LION_API_KEY_SISWA"],
-            config["SEA_LION_MODEL"],
-            full_diff,
-            module,
-        )
+
+        if has_local:
+            print("New file changes detected — generating summary...")
+            title, description, ai_success = generate_commit_message(
+                config["SEA_LION_API_KEY_SISWA"],
+                config["SEA_LION_MODEL"],
+                local_diff or full_diff,
+                module,
+            )
+        else:
+            print("Commits already saved — skipping AI summary.")
+            title, description = get_last_commit_summary()
+            ai_success = False
 
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         branch_name = f"{module}/{timestamp}"
+
+        if (
+            not has_local
+            and current_branch != default_branch
+            and remote_branch_exists(current_branch)
+            and commits_ahead_of(f"origin/{current_branch}") == 0
+        ):
+            existing_pr = get_existing_pr_url(config, current_branch)
+            if existing_pr:
+                print("=" * 50)
+                print(" Already pushed — no AI or commit needed.")
+                print(f" Open PR: {existing_pr}")
+                print("=" * 50)
+                input("Press Enter to close...")
+                sys.exit(0)
+            print("Branch on GitHub — creating PR without new commit...")
+            branch_name = current_branch
+            push_result = run_git(["push", "-u", "origin", branch_name], check=False)
+            if push_result.returncode != 0:
+                err = (push_result.stderr or "") + (push_result.stdout or "")
+                if "up to date" not in err.lower():
+                    push_result.check_returncode()
+            pr_url = create_pull_request(
+                config, branch_name, title, description, git_name, git_email
+            )
+            print(pr_url)
+            print(f"PR created by: {git_name}")
+            input("Press Enter to close...")
+            sys.exit(0)
 
         popup_result = show_review_popup(
             title,
@@ -541,10 +694,40 @@ def main():
         title = popup_result["title"]
         description = popup_result["description"]
 
-        run_git(["checkout", "-b", branch_name])
-        run_git(["add", "-A"])
-        run_git(["commit", "-m", title])
-        run_git(["push", "origin", branch_name])
+        current_branch = get_current_branch()
+        created_new_branch = False
+
+        if has_local:
+            if current_branch == default_branch:
+                run_git(["checkout", "-b", branch_name])
+                created_new_branch = True
+            else:
+                branch_name = current_branch
+                print(f"Committing on existing branch: {branch_name}")
+            run_git(["add", "-A"])
+            if has_local_changes():
+                run_git(["commit", "-m", title])
+            else:
+                print("Note: no new files to commit after staging.")
+        else:
+            if current_branch == default_branch:
+                run_git(["checkout", "-b", branch_name])
+                created_new_branch = True
+            else:
+                branch_name = current_branch
+                print(f"Reusing branch with existing commits: {branch_name}")
+                print("(working tree clean — skipping commit)")
+
+        push_result = run_git(
+            ["push", "-u", "origin", branch_name],
+            check=False,
+        )
+        if push_result.returncode != 0:
+            err = (push_result.stderr or "") + (push_result.stdout or "")
+            if "up to date" in err.lower() or "everything up-to-date" in err.lower():
+                print("Branch already pushed to GitHub.")
+            else:
+                push_result.check_returncode()
 
         pr_url = create_pull_request(
             config, branch_name, title, description, git_name, git_email
@@ -552,22 +735,23 @@ def main():
         print(pr_url)
         print(f"PR created by: {git_name}")
 
-        old_branches = subprocess.run(
-            ["git", "branch", "--list", f"{module}/*"],
-            capture_output=True,
-            text=True,
-            creationflags=NO_WINDOW,
-        ).stdout.strip().splitlines()
+        if created_new_branch:
+            old_branches = subprocess.run(
+                ["git", "branch", "--list", f"{module}/*"],
+                capture_output=True,
+                text=True,
+                creationflags=NO_WINDOW,
+            ).stdout.strip().splitlines()
 
-        for old in old_branches:
-            old = old.strip().lstrip("* ")
-            if old and old != branch_name:
-                subprocess.run(
-                    ["git", "branch", "-D", old],
-                    capture_output=True,
-                    text=True,
-                    creationflags=NO_WINDOW,
-                )
+            for old in old_branches:
+                old = old.strip().lstrip("* ")
+                if old and old != branch_name:
+                    subprocess.run(
+                        ["git", "branch", "-D", old],
+                        capture_output=True,
+                        text=True,
+                        creationflags=NO_WINDOW,
+                    )
 
     except subprocess.CalledProcessError:
         sys.exit(1)
