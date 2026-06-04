@@ -76,99 +76,91 @@ def detect_module(changed_files):
     return "-".join(modules) if modules else "general"
 
 
-def generate_commit_message(api_key, model, diff_text, module, unpushed_log="", unpushed_count=0):
+def generate_commit_message(api_key, model, diff_text, module):
     import re
 
     title = f"update: {module} changes"
-    description = "Please describe your changes below."
+    description = "Describe what you changed in this session."
     ai_success = False
-
-    def clean(s):
-        s = re.sub(r"\s*\(\d+\s*chars?\).*$", "", s)
-        s = re.sub(r"^[-*\s]+", "", s)
-        return s.strip()
 
     if not diff_text or len(diff_text.strip()) < 10:
         print("No actual code changes detected in diff.")
         return title, description, ai_success
 
     try:
-        print(f"SEA_LION_API_KEY_SISWA present: {bool(os.getenv('SEA_LION_API_KEY_SISWA'))}")
-        print("Calling SEA-LION API...")
-
+        print("Asking SEA-LION for summary...")
         response = requests.post(
             "https://api.sea-lion.ai/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
-                "Accept": "application/json",
             },
             json={
                 "model": model,
                 "messages": [
                     {
+                        "role": "system",
+                        "content": "You are a git commit assistant. Be concise and direct.",
+                    },
+                    {
                         "role": "user",
-                        "content": f"""You are a git commit assistant.
-Summarise ALL of these unpushed changes as one push.
-
-Unpushed commits so far ({unpushed_count}):
-{unpushed_log[:500]}
-
-Full diff vs origin/main:
-{diff_text[:6000]}
-
-Output exactly two lines:
-Line 1: overall commit title (feat/fix/config, under 60 chars)
-Line 2: one sentence covering everything changed (under 120 chars)""",
-                    }
+                        "content": (
+                            f"Write a git commit summary for these changes.\n"
+                            f"Output exactly two lines:\n"
+                            f"Line 1: title starting with feat/fix/config, max 60 chars\n"
+                            f"Line 2: one sentence max 100 chars\n\n"
+                            f"Diff:\n{diff_text[:3000]}"
+                        ),
+                    },
                 ],
+                "chat_template_kwargs": {"enable_thinking": False},
+                "temperature": 0.3,
+                "max_tokens": 120,
             },
-            timeout=60,
+            timeout=20,
         )
-        print(f"SEA-LION response status: {response.status_code}")
+
         if response.status_code != 200:
-            print(f"SEA-LION error response: {response.text}")
-            return title, description, ai_success
+            print(f"SEA-LION error: {response.status_code}")
+            return title, description, False
 
-        response_data = response.json()
-        print(f"SEA-LION full JSON: {response_data}")
-
-        raw = response_data["choices"][0]["message"].get("content")
+        data = response.json()
+        raw = (data["choices"][0]["message"].get("content") or "").strip()
 
         if not raw:
-            reasoning = response_data["choices"][0]["message"].get("reasoning_content", "")
+            reasoning = data["choices"][0]["message"].get("reasoning_content", "")
             matches = re.findall(r"`([^`]{10,})`", reasoning)
             if len(matches) >= 2:
-                title = matches[-2].strip()
-                description = matches[-1].strip()
-                ai_success = True
+                raw = matches[-2] + "\n" + matches[-1]
             elif len(matches) == 1:
-                title = matches[-1].strip()
-                description = "Please describe your changes below."
-                ai_success = True
-            else:
-                ai_success = False
-        else:
-            print(f"SEA-LION raw content: {raw}")
-            lines = [line.strip() for line in raw.strip().splitlines() if line.strip()]
-            if len(lines) >= 2:
-                title = lines[0]
-                description = " ".join(lines[1:])
-                ai_success = True
-            elif len(lines) == 1:
-                title = lines[0]
-                description = "Please describe your changes below."
-                ai_success = True
+                raw = matches[-1]
 
-        title = clean(title)
-        description = clean(description)
+        if not raw:
+            return title, description, False
+
+        def clean(s):
+            s = re.sub(r"\s*\(\d+\s*chars?\).*$", "", s)
+            s = re.sub(r"^[-*\s]+", "", s)
+            return s.strip()
+
+        lines = [clean(l) for l in raw.splitlines() if clean(l)]
+        if len(lines) >= 2:
+            title = lines[0][:60]
+            description = " ".join(lines[1:])[:200]
+            ai_success = True
+        elif len(lines) == 1:
+            title = lines[0][:60]
+            ai_success = True
+
+    except requests.exceptions.Timeout:
+        print("SEA-LION timeout — popup will open for manual input.")
     except Exception as exc:
-        print(f"SEA-LION call failed: {exc}")
+        print(f"SEA-LION unavailable: {exc}")
 
     return title, description, ai_success
 
 
-def show_review_popup(default_title, default_description, ai_success=True, push_context=""):
+def show_review_popup(default_title, default_description, ai_success=True, git_name="Team Member", branch_name="main"):
     FONT_LABEL = ("Segoe UI", 9)
     FONT_INPUT = ("Consolas", 10)
     FONT_TITLE = ("Segoe UI Semibold", 11)
@@ -213,7 +205,7 @@ def show_review_popup(default_title, default_description, ai_success=True, push_
 
     tk.Label(
         top_bar,
-        text=push_context or "→ ready to push",
+        text=f"{git_name}  →  {branch_name}",
         bg=BAR_BG,
         fg=TEXT_MUTED,
         font=("Segoe UI", 9),
@@ -313,13 +305,14 @@ def show_review_popup(default_title, default_description, ai_success=True, push_
     status_text = (
         "SEA-LION AI generated · edit freely before pushing"
         if ai_success
-        else "AI unavailable · please describe your changes"
+        else "AI unavailable — describe your changes then click Push now"
     )
+    status_fg = TEXT_MUTED if ai_success else "#e3b341"
     tk.Label(
         window,
         text=status_text,
         bg=BG,
-        fg=TEXT_MUTED,
+        fg=status_fg,
         font=("Segoe UI", 8),
         padx=20,
         pady=8,
@@ -342,7 +335,7 @@ def get_unique_branch_name(base_name):
         suffix += 1
 
 
-def create_pull_request(config, branch_name, title, description):
+def create_pull_request(config, branch_name, title, description, git_name="", git_email=""):
     repo = f"{config['GITHUB_REPO_OWNER']}/{config['GITHUB_REPO_NAME']}"
     headers = {
         "Authorization": f"Bearer {config['GITHUB_TOKEN']}",
@@ -350,12 +343,14 @@ def create_pull_request(config, branch_name, title, description):
         "X-GitHub-Api-Version": "2022-11-28",
     }
 
+    pr_body = f"**Submitted by:** {git_name} ({git_email})\n\n{description}"
+
     pr_response = requests.post(
         f"https://api.github.com/repos/{repo}/pulls",
         headers=headers,
         json={
             "title": title,
-            "body": description,
+            "body": pr_body,
             "head": branch_name,
             "base": config["DEFAULT_BRANCH"],
         },
@@ -390,8 +385,19 @@ def main():
     try:
         config = load_config()
 
-        print("Pulling latest changes...")
-        run_git(["pull", "origin", "main"])
+        git_name = subprocess.run(
+            ["git", "config", "user.name"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        git_email = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        if not git_name:
+            git_name = "Team Member"
 
         subprocess.run(["git", "fetch", "origin"], capture_output=True, text=True)
 
@@ -423,9 +429,22 @@ def main():
 
         full_diff = "\n".join(filter(None, [diff_text, unstaged, staged]))
 
-        if not full_diff and unpushed_count == 0:
-            print("Nothing new compared to origin/main. Nothing to push.")
-            return
+        unpushed = subprocess.run(
+            ["git", "log", "origin/main..HEAD", "--oneline"],
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+        has_uncommitted = bool(full_diff.strip())
+        has_unpushed_commits = bool(unpushed.strip())
+
+        if not has_uncommitted and not has_unpushed_commits:
+            print("=" * 50)
+            print(" Everything is already up to date.")
+            print(" No changes to push. You are in sync with main.")
+            print("=" * 50)
+            input("Press Enter to close...")
+            sys.exit(0)
 
         changed_files = []
         names_result = subprocess.run(
@@ -450,19 +469,17 @@ def main():
             config["SEA_LION_MODEL"],
             full_diff,
             module,
-            unpushed_log=unpushed_log,
-            unpushed_count=unpushed_count,
         )
 
         date_str = datetime.now().strftime("%Y-%m-%d")
         preview_branch = f"{module}/{date_str}-auto"
-        push_context = f"→ {unpushed_count} unpushed commit(s) + local changes"
 
         popup_result = show_review_popup(
             title,
             description,
             ai_success=ai_success,
-            push_context=push_context,
+            git_name=git_name,
+            branch_name=preview_branch,
         )
         if not popup_result["confirmed"]:
             print("Cancelled.")
@@ -479,9 +496,11 @@ def main():
         run_git(["commit", "-m", title])
         run_git(["push", "origin", branch_name])
 
-        pr_url = create_pull_request(config, branch_name, title, description)
+        pr_url = create_pull_request(
+            config, branch_name, title, description, git_name, git_email
+        )
         print(pr_url)
-        print("Done! PR created successfully.")
+        print(f"PR created by: {git_name}")
 
     except subprocess.CalledProcessError:
         sys.exit(1)

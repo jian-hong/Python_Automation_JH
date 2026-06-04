@@ -51,15 +51,12 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Launch Git automation button (Github_Auto addon)
     try:
-        import subprocess as _sp, os as _os
-        _pyw = _os.path.join(
-            _os.path.dirname(_os.path.abspath(__file__)),
-            "Github_Auto", "push_button.pyw"
-        )
-        _sp.Popen(["pythonw", _pyw])
-        print()
-        print("Git push button launched. To relaunch: .\\push_button")
+        import importlib.util as _ilu, os as _os
+        _f = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                           "Github_Auto", "installer_addon.py")
+        _s = _ilu.spec_from_file_location("installer_addon", _f)
+        _m = _ilu.module_from_spec(_s); _s.loader.exec_module(_m)
+        _m.run(_os.path.dirname(_os.path.abspath(__file__)))
     except Exception:
         pass

@@ -19,6 +19,7 @@ if not exist %VENV% (
 call %VENV%
 echo Checking automation dependencies...
 %PIP% install requests python-dotenv --quiet --disable-pip-version-check
+%PIP% install pywin32 winshell --quiet --disable-pip-version-check 2>nul
 
 echo.
 %PYTHON% git_helper.py

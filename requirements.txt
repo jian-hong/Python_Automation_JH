@@ -11,3 +11,7 @@ numpy>=1.24.0
 # Git automation dependencies
 requests>=2.31.0
 python-dotenv>=1.0.0
+
+# Taskbar shortcut (Windows optional)
+pywin32
+winshell
