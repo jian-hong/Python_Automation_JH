@@ -17,17 +17,75 @@ except ImportError:
 NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 
+def _git_text_kwargs():
+    """UTF-8 capture for git output (avoids cp1252 UnicodeDecodeError on Windows)."""
+    return {
+        "capture_output": True,
+        "text": True,
+        "encoding": "utf-8",
+        "errors": "replace",
+        "creationflags": NO_WINDOW,
+    }
+
+
+def ensure_github_auth():
+    """
+    Test GitHub connectivity. If credentials missing,
+    trigger Git Credential Manager authentication and wait.
+    On a new machine this opens the browser login once,
+    then GCM stores the token permanently.
+    """
+    print("Checking GitHub authentication...")
+
+    # Test silently first
+    test = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin"],
+        timeout=15,
+        **_git_text_kwargs(),
+    )
+
+    if test.returncode == 0:
+        print("GitHub authenticated.")
+        return  # already works, continue
+
+    # Auth missing — run fetch WITHOUT capture so
+    # Git Credential Manager can show its browser/popup
+    print()
+    print("=" * 50)
+    print("GitHub login required on this machine.")
+    print("A browser window will open — sign in to GitHub.")
+    print("Return here after signing in.")
+    print("=" * 50)
+    print()
+
+    auth_result = subprocess.run(
+        ["git", "fetch", "origin"],
+        # NO capture_output — GCM needs to show its UI
+        # NO creationflags — must allow credential window
+        timeout=120,
+    )
+
+    if auth_result.returncode != 0:
+        print()
+        print("Authentication failed or timed out.")
+        print("Please run this manually first, then try again:")
+        print("  git fetch origin")
+        input("Press Enter to close...")
+        sys.exit(1)
+
+    print("Authentication successful. Continuing...")
+    print()
+
+
 def get_git_name():
     for scope in ([], ["--global"], ["--system"]):
         try:
             r = subprocess.run(
                 ["git", "config"] + scope + ["user.name"],
-                capture_output=True,
-                text=True,
-                creationflags=NO_WINDOW,
                 timeout=5,
+                **_git_text_kwargs(),
             )
-            name = r.stdout.strip()
+            name = (r.stdout or "").strip()
             if name:
                 return name
         except Exception:
@@ -40,10 +98,8 @@ def run_git(args, check=True):
     try:
         return subprocess.run(
             ["git"] + args,
-            capture_output=True,
-            text=True,
             check=check,
-            creationflags=NO_WINDOW,
+            **_git_text_kwargs(),
         )
     except subprocess.CalledProcessError as exc:
         print(f"Git command failed: git {' '.join(args)}")
@@ -55,31 +111,19 @@ def run_git(args, check=True):
 
 
 def get_current_branch():
-    r = subprocess.run(
-        ["git", "branch", "--show-current"],
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
-    )
+    r = subprocess.run(["git", "branch", "--show-current"], **_git_text_kwargs())
     return (r.stdout or "").strip()
 
 
 def has_local_changes():
-    r = subprocess.run(
-        ["git", "status", "--porcelain"],
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
-    )
+    r = subprocess.run(["git", "status", "--porcelain"], **_git_text_kwargs())
     return bool((r.stdout or "").strip())
 
 
 def commits_ahead_of(ref):
     r = subprocess.run(
         ["git", "rev-list", f"{ref}..HEAD", "--count"],
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
+        **_git_text_kwargs(),
     )
     try:
         return int((r.stdout or "0").strip() or 0)
@@ -88,33 +132,24 @@ def commits_ahead_of(ref):
 
 
 def get_last_commit_summary():
-    title_r = subprocess.run(
-        ["git", "log", "-1", "--pretty=%s"],
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
-    )
-    body_r = subprocess.run(
-        ["git", "log", "-1", "--pretty=%b"],
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
-    )
+    title_r = subprocess.run(["git", "log", "-1", "--pretty=%s"], **_git_text_kwargs())
+    body_r = subprocess.run(["git", "log", "-1", "--pretty=%b"], **_git_text_kwargs())
     title = (title_r.stdout or "").strip() or "update: changes"
     body = (body_r.stdout or "").strip() or "Committed changes pending review."
     return title, body
 
 
-def fetch_origin(timeout=45):
+def fetch_origin(timeout=30):
     print("Fetching latest from GitHub...")
     try:
-        subprocess.run(
+        fetch_result = subprocess.run(
             ["git", "fetch", "origin"],
-            capture_output=True,
-            text=True,
-            creationflags=NO_WINDOW,
             timeout=timeout,
+            **_git_text_kwargs(),
         )
+        if fetch_result.returncode != 0:
+            print("Re-authenticating with GitHub...")
+            subprocess.run(["git", "fetch", "origin"], timeout=120)
     except subprocess.TimeoutExpired:
         print("Warning: fetch timed out — continuing with local git state.")
 
@@ -122,9 +157,7 @@ def fetch_origin(timeout=45):
 def remote_branch_exists(branch):
     r = subprocess.run(
         ["git", "ls-remote", "--heads", "origin", branch],
-        capture_output=True,
-        text=True,
-        creationflags=NO_WINDOW,
+        **_git_text_kwargs(),
     )
     return bool((r.stdout or "").strip())
 
@@ -500,11 +533,13 @@ def create_pull_request(config, branch_name, title, description, git_name="", gi
 def show_version_history():
     print("Recent commits (latest first):")
     print("-" * 50)
-    log = subprocess.run(
-        ["git", "log", "--oneline", "--since=30 days ago", "-20"],
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
+    log = (
+        subprocess.run(
+            ["git", "log", "--oneline", "--since=30 days ago", "-20"],
+            **_git_text_kwargs(),
+        ).stdout
+        or ""
+    ).strip()
 
     lines = log.splitlines()
     for i, line in enumerate(lines):
@@ -525,6 +560,7 @@ def show_version_history():
 
 
 def main():
+    ensure_github_auth()
     try:
         config = load_config()
 
@@ -547,45 +583,30 @@ def main():
             )
             print(f"Saved git name: {git_name}")
 
-        git_email = subprocess.run(
-            ["git", "config", "user.email"],
-            capture_output=True,
-            text=True,
-            creationflags=NO_WINDOW,
-        ).stdout.strip()
+        git_email = (
+            subprocess.run(["git", "config", "user.email"], **_git_text_kwargs()).stdout
+            or ""
+        ).strip()
 
         fetch_origin()
 
-        diff_result = subprocess.run(
-            ["git", "diff", "origin/main...HEAD"],
-            capture_output=True,
-            text=True,
-        )
-        diff_text = diff_result.stdout.strip()
+        default_branch = config["DEFAULT_BRANCH"]
+        diff_result = run_git([f"diff", f"origin/{default_branch}...HEAD"], check=False)
+        diff_text = (diff_result.stdout or "").strip()
 
-        log_result = subprocess.run(
-            ["git", "log", "origin/main..HEAD", "--oneline"],
-            capture_output=True,
-            text=True,
+        log_result = run_git(
+            [f"log", f"origin/{default_branch}..HEAD", "--oneline"],
+            check=False,
         )
-        unpushed_log = log_result.stdout.strip()
+        unpushed_log = (log_result.stdout or "").strip()
         unpushed_count = len([line for line in unpushed_log.splitlines() if line])
 
-        unstaged = subprocess.run(
-            ["git", "diff"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-        staged = subprocess.run(
-            ["git", "diff", "--cached"],
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
+        unstaged = (run_git(["diff"], check=False).stdout or "").strip()
+        staged = (run_git(["diff", "--cached"], check=False).stdout or "").strip()
 
         local_diff = "\n".join(filter(None, [unstaged, staged]))
         full_diff = "\n".join(filter(None, [diff_text, unstaged, staged]))
 
-        default_branch = config["DEFAULT_BRANCH"]
         current_branch = get_current_branch()
         ahead_of_main = commits_ahead_of(f"origin/{default_branch}")
         has_local = bool(local_diff.strip())
@@ -617,15 +638,16 @@ def main():
                 sys.exit(0)
 
         changed_files = []
-        names_result = subprocess.run(
-            ["git", "diff", "--name-only", "origin/main...HEAD"],
-            capture_output=True,
-            text=True,
+        names_result = run_git(
+            [f"diff", "--name-only", f"origin/{default_branch}...HEAD"],
+            check=False,
         )
-        changed_files.extend(line for line in names_result.stdout.splitlines() if line.strip())
+        changed_files.extend(
+            line for line in (names_result.stdout or "").splitlines() if line.strip()
+        )
 
         status = run_git(["status", "--porcelain"])
-        for line in status.stdout.splitlines():
+        for line in (status.stdout or "").splitlines():
             if not line.strip():
                 continue
             filepath = line[3:].strip()
@@ -736,22 +758,18 @@ def main():
         print(f"PR created by: {git_name}")
 
         if created_new_branch:
-            old_branches = subprocess.run(
-                ["git", "branch", "--list", f"{module}/*"],
-                capture_output=True,
-                text=True,
-                creationflags=NO_WINDOW,
-            ).stdout.strip().splitlines()
+            old_branches = (
+                subprocess.run(
+                    ["git", "branch", "--list", f"{module}/*"],
+                    **_git_text_kwargs(),
+                ).stdout
+                or ""
+            ).strip().splitlines()
 
             for old in old_branches:
                 old = old.strip().lstrip("* ")
                 if old and old != branch_name:
-                    subprocess.run(
-                        ["git", "branch", "-D", old],
-                        capture_output=True,
-                        text=True,
-                        creationflags=NO_WINDOW,
-                    )
+                    subprocess.run(["git", "branch", "-D", old], **_git_text_kwargs())
 
     except subprocess.CalledProcessError:
         sys.exit(1)
