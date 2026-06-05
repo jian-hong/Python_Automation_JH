@@ -12,6 +12,8 @@ LabAutomation/
 
 
 
+# workflow test marker
+
 To add on in future
 ├── limits.py        		# Datasheet limits only (no logic), add pass/fail criteria
 ├── ldo_tests.py	 		# LDO test cases: threshold levels, propagation delay, disable timing

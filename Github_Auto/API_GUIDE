@@ -1,0 +1,20 @@
+curl -X 'POST' \
+  https://api.sea-lion.ai/v1/chat/completions \
+  -H 'Accept: text/plain' \
+  -H 'Authorization: Bearer YOUR_API_KEY' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "max_completion_tokens": 20,
+    "messages": [
+      {
+        "role": "user",
+        "content": "What is Deep Learning?"
+      }
+    ],
+    "model": "aisingapore/Qwen-SEA-LION-v4.5-27B-IT"
+  }'
+
+curl 'https://api.sea-lion.ai/v4.5/models' \
+  -H 'Authorization: Bearer YOUR_API_KEY'
+
+\\ Prefer QWEN MODEL_ID = "aisingapore/"

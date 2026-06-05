@@ -1,0 +1,77 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Push to GitHub",
+      "type": "shell",
+      "windows": {"command": "${workspaceFolder}/Github_Auto/git-push.bat"},
+      "osx":     {"command": "bash ${workspaceFolder}/Github_Auto/git-push.sh"},
+      "linux":   {"command": "bash ${workspaceFolder}/Github_Auto/git-push.sh"},
+      "group": {"kind": "build", "isDefault": false},
+      "presentation": {"reveal": "always", "panel": "new", "focus": true},
+      "problemMatcher": []
+    },
+    {
+      "label": "Launch push button",
+      "type": "process",
+      "command": "cmd.exe",
+      "args": ["/d", "/c", "push_button.bat"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "windows": {
+        "type": "process",
+        "command": "cmd.exe",
+        "args": ["/d", "/c", "push_button.bat"],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        }
+      },
+      "osx": {
+        "type": "process",
+        "command": "${workspaceFolder}/venv/bin/pythonw",
+        "args": ["Github_Auto/push_button.pyw"],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        }
+      },
+      "linux": {
+        "type": "process",
+        "command": "${workspaceFolder}/venv/bin/pythonw",
+        "args": ["Github_Auto/push_button.pyw"],
+        "options": {
+          "cwd": "${workspaceFolder}"
+        }
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "presentation": {
+        "reveal": "never",
+        "panel": "shared",
+        "close": true,
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Auto-fetch on open",
+      "type": "shell",
+      "windows": {
+        "command": "git fetch origin; $n=(git log HEAD..origin/main --oneline 2>$null); if($n){Write-Host ''; Write-Host '  NEW on main:' -ForegroundColor Yellow; Write-Host $n; Write-Host '  Pull before editing shared files.' -ForegroundColor Yellow; Write-Host ''}"
+      },
+      "osx": {
+        "command": "git fetch origin 2>/dev/null; N=$(git log HEAD..origin/main --oneline 2>/dev/null); [ -n \"$N\" ] && echo '' && echo 'NEW on main:' && echo \"$N\" && echo 'Pull before editing shared files.' && echo ''"
+      },
+      "runOptions": {
+        "runOn": "folderOpen"
+      },
+      "presentation": {
+        "reveal": "never",
+        "close": true,
+        "showReuseMessage": false
+      },
+      "problemMatcher": []
+    }
+  ]
+}

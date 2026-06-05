@@ -1,0 +1,12 @@
+env.local
+Github_Auto/env.local
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+Thumbs.db
+*.log
+datalog_output/
+*.xlsx
+*.csv
