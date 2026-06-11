@@ -31,7 +31,6 @@ def dmm_setup_voltage(dmm):
     
     Args:
         dmm: PyVISA DMM resource handle
-        dmm: what do you mean wowoowowowo
     Returns:
         float: Measured voltage in volts
     """
