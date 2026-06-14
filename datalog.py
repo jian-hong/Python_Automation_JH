@@ -23,7 +23,7 @@ class DataLogger:
         self.user_id = user_id
         self.start_time = time.time()
         self.beginning_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        self.entries = []
+        self.entries = ['lolollololo']
         self.columns = ['parameters', 'min', 'max', 'T_ms', 'Value', 'pass_fail', 'soft_bin']
 
     def log_test(self, parameter, result, t_ms=None, duration_ms=None):
