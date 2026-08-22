@@ -1,0 +1,22 @@
+# Bench defaults — ATE ↔ #Test_Database
+
+jsonrpc:
+  host: "127.0.0.1"
+  # 8765 is AirGPT — ATE uses 8766
+  port: 8766
+
+# Tree axes: Component / Part / Package / Version_N
+# (year is metadata only; fixture/gain config is NOT a folder)
+test_database: "C:\\Users\\OoiJianHong\\#Test_Database\\OpAmp\\RS622\\TTSOP8\\Version_1"
+lab_report: "C:\\Users\\OoiJianHong\\#Test_Database\\OpAmp\\RS622\\TTSOP8\\Version_1\\workbook\\RS622XK_Lab_Report_TTSOP.xlsx"
+research_excel: "C:\\Users\\OoiJianHong\\Downloads\\VOS Research.xlsx"
+screenshot_dir: "C:\\Users\\OoiJianHong\\#Test_Database\\OpAmp\\RS622\\TTSOP8\\Version_1\\ORT\\DUT_1\\screenshots"
+sheet_map: "C:\\Users\\OoiJianHong\\#Test_Database\\OpAmp\\RS622\\TTSOP8\\Version_1\\_manifest\\sheet_map.yaml"
+
+default_vcc: 5.0
+current_limit_a: 0.10
+default_part: rs622
+sample_size: 4
+year: "2026"
+
+stm_bridge_enabled: false

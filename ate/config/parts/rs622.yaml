@@ -1,0 +1,138 @@
+# RS622XK fixture / lab-report binding
+# Tree: #Test_Database/OpAmp/RS622/TTSOP8/Version_1
+# Reference: LabAutomation_14.7 Eugene/main.py gain comments + test plan
+
+part: RS622XK
+model: RS622XK
+component: OpAmp
+device: RS622
+package: TTSOP8
+version: Version_1
+sample_size: 4
+year: "2026"
+lab_report: "C:\\Users\\OoiJianHong\\#Test_Database\\OpAmp\\RS622\\TTSOP8\\Version_1\\workbook\\RS622XK_Lab_Report_TTSOP.xlsx"
+database_root: "C:\\Users\\OoiJianHong\\#Test_Database\\OpAmp\\RS622\\TTSOP8\\Version_1"
+
+fixture_modes:
+  BUFFER:
+    label: "Voltage Follower (Buffer)"
+    board_class: general
+    rf: short
+    ri: open
+    gain: 1
+    checklist:
+      - "General testboard in BUFFER / voltage-follower mode (RF=short, RI=open)"
+      - "RL = 10 kΩ; CL per test (typ 100 pF)"
+      - "Probes: CH1 = IN+, CH2 = VOUT"
+    tests: [slew, settling, sssr, lssr, no_phase_reversal, power_on]
+  G11:
+    label: "Non-inverting Gain = 11"
+    board_class: general
+    rf: "10k"
+    ri: "1k"
+    gain: 11
+    checklist:
+      - "General testboard Gain = 11 (RF=10k, RI=1k)"
+      - "IN+ / GND per GBW procedure"
+    tests: [gbw]
+    gain_profiles:
+      default:
+        label: "Std G11 — RI=1k RF=10k"
+        rf: "10k"
+        ri: "1k"
+        gain: 11
+      alt_100r_1k:
+        label: "Alt G11 — RI=100R RF=1k"
+        rf: "1k"
+        ri: "100"
+        gain: 11
+  G_NEG100:
+    label: "Inverting Gain = -100 (ORT)"
+    board_class: general
+    rf: "100k"
+    ri: "1k"
+    gain: -100
+    checklist:
+      - "General testboard inverting Gain = -100 (RF=100k, RI=1k)"
+      - "RL = 10 kΩ, CL = 100 pF"
+    tests: [ort]
+  ATE:
+    label: "ATE-only (future STM/relay)"
+    board_class: general
+    checklist:
+      - "ATE / STM relay bank not automated yet"
+    tests: [psrr, cmrr, aol, vohl, emirr]
+  # --- Research only (special VOS boards — NOT general lab testboard) ---
+  G201:
+    label: "Research only — High-gain VOS / AC (~201)"
+    board_class: research
+    gain: 201
+    checklist:
+      - "Special VOS/AC board — not the general lab testboard"
+      - "Confirm actual closed-loop gain in Setup"
+    tests: [vos_sweep, ac_gain_check, ac_vin_sweep]
+  G1001:
+    label: "Research only — Datasheet VOS Gain = 1001"
+    board_class: research
+    rf: "100k"
+    ri: "100"
+    gain: 1001
+    checklist:
+      - "VOS characterization board — not the general lab testboard"
+      - "Gain = 1001 (RF=100k, RI=100Ω)"
+      - "100Ω pulldown on IN+"
+    tests: [vos_lab]
+
+# Eugene scope presets (LabAutomation_14.7) — vertical/horizontal for photo paste
+scope_presets:
+  slew_pos:
+    timebase: 200e-9
+    ch1_scale: 0.2
+    ch1_offset: 0.208
+    ch2_scale: 0.2
+    ch2_offset: -0.208
+    time_offset: 201e-9
+    trig_level: -0.00846
+    trig_slope: POS
+  slew_neg:
+    timebase: 200e-9
+    ch1_scale: 0.2
+    ch1_offset: -0.184
+    ch2_scale: 0.2
+    ch2_offset: 0.06
+    time_offset: 520e-9
+    trig_level: 0.1
+    trig_slope: NEG
+  slew:
+    timebase: 200e-9
+    ch1_scale: 0.2
+    ch1_offset: 0.208
+    ch2_scale: 0.2
+    ch2_offset: -0.208
+    time_offset: 201e-9
+    trig_level: -0.00846
+    trig_slope: POS
+  ort_pos:
+    timebase: 500e-9
+    ch1_scale: 0.2
+    ch1_offset: 0.6
+    ch2_scale: 1.0
+    ch2_offset: -3.0
+    time_offset: 1e-6
+  ort_neg:
+    timebase: 500e-9
+    ch1_scale: 0.2
+    ch1_offset: 0.4
+    ch2_scale: 1.0
+    ch2_offset: -0.5
+    time_offset: 1e-6
+  gbw:
+    timebase: 200e-6
+  sssr:
+    timebase: 200e-9
+    amp_vpp: 0.1
+    freq_hz: 500000
+  lssr:
+    timebase: 500e-9
+    amp_vpp: 4.0
+    freq_hz: 250000

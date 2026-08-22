@@ -28,6 +28,41 @@ def _git_text_kwargs():
     }
 
 
+def get_repo_info():
+    """
+    Read owner and repo name directly from git remote URL.
+    Works for any repo — no need to update env.local when
+    the remote changes.
+    Supports HTTPS:  https://github.com/owner/repo.git
+    Supports token:  https://token@github.com/owner/repo.git
+    Supports SSH:    git@github.com:owner/repo.git
+    Falls back to env.local values if remote can't be parsed.
+    """
+    import re
+
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            timeout=5,
+            **_git_text_kwargs(),
+        )
+        url = (result.stdout or "").strip()
+        match = re.search(
+            r"github\.com[:/]([^/]+)/([^/.]+?)(?:\.git)?$", url
+        )
+        if match:
+            owner = match.group(1)
+            repo = match.group(2)
+            return owner, repo
+    except Exception:
+        pass
+    load_dotenv(os.path.join(os.path.dirname(__file__), "env.local"))
+    return (
+        os.getenv("GITHUB_REPO_OWNER", ""),
+        os.getenv("GITHUB_REPO_NAME", ""),
+    )
+
+
 def ensure_github_auth():
     """
     Test GitHub connectivity. If credentials missing,
@@ -58,23 +93,52 @@ def ensure_github_auth():
     print("=" * 50)
     print()
 
-    auth_result = subprocess.run(
+    subprocess.run(
         ["git", "fetch", "origin"],
         # NO capture_output — GCM needs to show its UI
         # NO creationflags — must allow credential window
         timeout=120,
     )
 
-    if auth_result.returncode != 0:
+    test = subprocess.run(
+        ["git", "ls-remote", "--heads", "origin"],
+        timeout=15,
+        **_git_text_kwargs(),
+    )
+    if test.returncode == 0:
+        print("Authentication successful. Continuing...")
         print()
-        print("Authentication failed or timed out.")
-        print("Please run this manually first, then try again:")
-        print("  git fetch origin")
-        input("Press Enter to close...")
-        sys.exit(1)
+        return
 
-    print("Authentication successful. Continuing...")
+    owner, repo = get_repo_info()
+    try:
+        url_result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            timeout=5,
+            **_git_text_kwargs(),
+        )
+        url = (url_result.stdout or "").strip() or "(unknown)"
+    except Exception:
+        url = "(unknown)"
+
     print()
+    print("=" * 50)
+    print(f"Cannot access: {owner}/{repo}")
+    print()
+    print("Most likely causes:")
+    print("  1. GITHUB_TOKEN in env.local is wrong")
+    print("     — get your OWN token from:")
+    print("       github.com → Settings → Developer settings")
+    print("       → Personal access tokens → Classic")
+    print("       → Scope: tick 'repo' only")
+    print()
+    print("  2. Wrong repo in remote URL")
+    print(f"     — current remote: {url}")
+    print("       run: git remote -v   to check")
+    print("=" * 50)
+    print()
+    input("Press Enter to close...")
+    sys.exit(1)
 
 
 def get_git_name():
@@ -190,8 +254,6 @@ def load_config():
 
     required = {
         "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN"),
-        "GITHUB_REPO_OWNER": os.getenv("GITHUB_REPO_OWNER"),
-        "GITHUB_REPO_NAME": os.getenv("GITHUB_REPO_NAME"),
         "DEFAULT_BRANCH": os.getenv("DEFAULT_BRANCH"),
         "DEFAULT_REVIEWER": os.getenv("DEFAULT_REVIEWER"),
         "SEA_LION_API_KEY_SISWA": os.getenv("SEA_LION_API_KEY_SISWA"),
@@ -201,6 +263,17 @@ def load_config():
     missing = [key for key, value in required.items() if not value]
     if missing:
         raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
+
+    owner, repo = get_repo_info()
+    if not owner or not repo:
+        raise ValueError(
+            "Could not detect repo from git remote. "
+            "Check: git remote -v (or set GITHUB_REPO_OWNER/NAME in env.local)"
+        )
+
+    required["GITHUB_REPO_OWNER"] = owner
+    required["GITHUB_REPO_NAME"] = repo
+    print(f"Repo detected: {owner}/{repo}")
 
     return required
 

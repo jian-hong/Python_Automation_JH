@@ -26,7 +26,7 @@ class ConnectionType(Enum):
     LAN = "lan"
     GPIB = "gpib"
     AUTO = "auto"
-   
+    
 class ImageFormat(Enum):
     """支持的图片格式"""
     PNG = "png"

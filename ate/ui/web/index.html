@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ATE Control — OPA Bench</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css?v=20260822a" />
+</head>
+<body>
+  <div class="bg"></div>
+  <div class="app-shell">
+    <aside class="family-rail glass" aria-label="Product family">
+      <p class="family-rail-label">Family</p>
+      <button type="button" class="family-btn active" data-family="opamp">OpAmp</button>
+      <button type="button" class="family-btn" data-family="logic">Logic</button>
+      <button type="button" class="family-btn family-stub" data-family="level" title="Stub slot — no Level suite yet">Level</button>
+    </aside>
+    <div class="app">
+    <header class="glass bar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div class="brand-copy">
+          <p class="brand-kicker">Operator console</p>
+          <h1 id="brand-title">OpAmp ATE</h1>
+          <p class="sub" id="db-breadcrumb">#Test_Database · select campaign</p>
+        </div>
+      </div>
+      <div class="gate-dock" id="gate-dock" aria-label="Pending operator actions">
+        <div class="gate-bubbles" id="gate-bubbles"></div>
+        <button type="button" class="gate-dock-btn hidden" id="gate-dock-btn" title="Open pending Continue / Abort">
+          <span class="gate-badge" id="gate-badge">0</span>
+          <span>Continue</span>
+        </button>
+      </div>
+      <div class="header-actions">
+        <div class="status-tiles" id="tiles">
+          <span class="tile" data-k="MSO">MSO</span>
+          <span class="tile" data-k="PSU">PSU</span>
+          <span class="tile" data-k="AWG">AWG</span>
+        </div>
+        <span id="header-bin" class="run-pill ready">READY</span>
+        <button type="button" id="btn-stop" class="btn danger btn-compact">STOP</button>
+        <div class="clock" id="clock"></div>
+      </div>
+    </header>
+
+    <nav class="tabs glass">
+      <button class="tab active" data-page="setup">Setup</button>
+      <button class="tab" data-page="run">Run</button>
+      <button class="tab" data-page="results">Results</button>
+    </nav>
+
+    <main>
+      <section id="page-setup" class="page active">
+        <div class="grid">
+          <div class="glass panel wide">
+            <h2>Test Database</h2>
+            <p class="hint">Component → Part → Package → Version_N. Config/gain is a board mode, not a folder. Year is run metadata only.</p>
+            <div class="db-grid">
+              <label>Component
+                <select id="db-component"></select>
+              </label>
+              <label>Part / device
+                <select id="db-part"></select>
+              </label>
+              <label>Package
+                <select id="db-package"></select>
+              </label>
+              <label>Version
+                <select id="db-version"></select>
+              </label>
+              <label>Model name
+                <input id="db-model" type="text" readonly />
+              </label>
+              <label>Year (meta)
+                <input id="db-year" type="text" placeholder="2026" />
+              </label>
+            </div>
+            <div class="row" style="margin-top:10px">
+              <button id="btn-apply-db" class="btn accent">Apply campaign</button>
+              <button id="btn-open-db" class="btn ghost">Open DB folder</button>
+              <button id="btn-open-sessions" class="btn ghost">Open sessions</button>
+            </div>
+            <div class="row" style="margin-top:10px; align-items:flex-end">
+              <label style="flex:1 1 280px">Existing xlsx path
+                <input id="db-xlsx-path" type="text" placeholder="C:\Users\...\Lab_Report.xlsx" />
+              </label>
+              <button id="btn-import-xlsx" class="btn ghost">Import xlsx into campaign</button>
+            </div>
+            <p class="hint">Import copies the file into this campaign workbook/ and stubs sheet_map.yaml from sheet names if missing (FILL_ME paste cells). A filled sheet_map is left intact. Blank path opens a file picker.</p>
+            <p class="hint" id="db-path-hint">Photos: …</p>
+            <p class="hint" id="db-excel-hint">Lab report: …</p>
+          </div>
+
+          <div class="glass panel">
+            <h2>Session</h2>
+            <div class="row">
+              <button id="btn-discover" class="btn">Discover</button>
+              <button id="btn-open" class="btn accent">Open Session</button>
+              <button id="btn-shot" class="btn">Screenshot</button>
+              <button id="btn-folder" class="btn ghost">Open Screenshots</button>
+            </div>
+            <p class="hint" id="session-hint">Init = Discover → Open Session</p>
+          </div>
+
+          <div class="glass panel">
+            <h2>Run — DUT / Channel</h2>
+            <div class="dut-picks" id="dut-picks">
+              <span class="hint">DUTs:</span>
+              <label class="check"><input type="checkbox" class="dut-cb" value="1" checked /> 1</label>
+              <label class="check"><input type="checkbox" class="dut-cb" value="2" /> 2</label>
+              <label class="check"><input type="checkbox" class="dut-cb" value="3" /> 3</label>
+              <label class="check"><input type="checkbox" class="dut-cb" value="4" /> 4</label>
+            </div>
+            <div class="dut-picks" id="channel-picks">
+              <span class="hint">Channels (category → A all DUTs → B; or B-only if B checked alone):</span>
+              <label class="check"><input type="checkbox" class="ch-cb" value="CHA" checked /> A</label>
+              <label class="check"><input type="checkbox" class="ch-cb" value="CHB" /> B</label>
+            </div>
+            <input id="unit" type="hidden" value="1" />
+            <p class="hint" id="param-active-hint">Order: same board/category → all DUTs on that channel → next channel → next category.</p>
+          </div>
+
+          <div class="glass panel" id="panel-gain-boards">
+            <h2>Board gains (locked)</h2>
+            <p class="hint">Gain follows the physical board — not a software knob. VOS ≈201 is research-only.</p>
+            <div id="gain-boards" class="gain-boards"></div>
+            <label class="check manual-toggle">
+              <input id="manual-mode" type="checkbox" /> Manual parameters
+            </label>
+            <div id="param-advanced" class="param-advanced hidden">
+              <div class="param-grid">
+                <label>VCC (V)<input id="vcc" type="number" step="0.1" value="5.0" /></label>
+                <label>Freq (Hz)<input id="freq" type="number" step="1" value="500" /></label>
+                <label>Amp Vpp<input id="amp" type="number" step="0.001" value="0.004" /></label>
+                <label>Repeats<input id="repeats" type="number" step="1" value="3" /></label>
+              </div>
+              <label class="check"><input id="reset" type="checkbox" /> Reset instruments before run</label>
+              <p class="hint">PSU: Iset=100 mA, OVP=Vset+0.3 V, OCP=Iset+0.1 A.</p>
+            </div>
+          </div>
+
+          <div class="glass panel wide">
+            <h2>Test program</h2>
+            <p class="hint">Boards start collapsed — click a row to expand tests downward. Order: category (board) → channel → DUTs → tests. Popup shows short test name (ORT / Settling / GBW). Continue only when board / DUT / channel must change.</p>
+            <div id="test-plans" class="test-plans"></div>
+            <div id="test-list" class="test-list"></div>
+            <button id="btn-start" class="btn accent big" disabled>START</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-run" class="page">
+        <div class="grid run-grid">
+          <div class="glass panel wide">
+            <h2>Progress</h2>
+            <div class="progress-wrap">
+              <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <p class="hint" id="progress-meta">0 / 0 · —</p>
+            <div id="next-banner" class="next-banner">Next: —</div>
+            <div id="step-status-bar" class="step-status-bar"></div>
+          </div>
+          <div class="glass panel">
+            <h2>Timeline</h2>
+            <ul id="timeline" class="timeline"></ul>
+          </div>
+          <div class="glass panel">
+            <h2>History</h2>
+            <ul id="history" class="history"></ul>
+          </div>
+          <div class="glass panel wide">
+            <h2>Log</h2>
+            <pre id="log" class="log"></pre>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-results" class="page">
+        <div class="glass panel">
+          <h2>Last results</h2>
+          <table id="results-table"><thead><tr><th>DUT</th><th>Test</th><th>OK</th><th>Summary</th></tr></thead><tbody></tbody></table>
+          <p class="hint" id="results-db-hint">Lab report + session JSON under the selected Version_N.</p>
+        </div>
+      </section>
+    </main>
+    </div>
+  </div>
+
+  <div id="modal" class="modal hidden">
+    <div class="glass modal-card">
+      <p class="modal-kind" id="modal-kind"></p>
+      <h2 id="modal-title">Operator action</h2>
+      <p class="hint" id="modal-next"></p>
+      <ul id="modal-list"></ul>
+      <div class="row">
+        <button id="modal-continue" class="btn accent">Continue</button>
+        <button id="modal-abort" class="btn danger">Abort</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=20260822a"></script>
+</body>
+</html>
