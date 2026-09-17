@@ -36,7 +36,7 @@ def load_part_yaml(part_key: str = "") -> dict[str, Any]:
 
 
 def normalize_pass_mode(raw: Any) -> str:
-    """Canonical: range | min-only | max-only | empty."""
+    """Canonical: range | min-only | max-only | fail-open | unspec | empty."""
     s = str(raw or "").strip().lower().replace("_", "-")
     if s in ("min-only", "min"):
         return "min-only"
@@ -44,6 +44,10 @@ def normalize_pass_mode(raw: Any) -> str:
         return "max-only"
     if s in ("range", "minmax", "min-max"):
         return "range"
+    if s in ("fail-open", "failopen"):
+        return "fail-open"
+    if s in ("unspec", "unspecified"):
+        return "unspec"
     return ""
 
 
@@ -155,10 +159,13 @@ def load_part_datasheet(part_key: str = "") -> dict[str, Any]:
 def judge_value(value: Any, mn: Any, mx: Any, pass_mode: Any = None) -> str:
     """pass / fail / unspec. typ is display-only.
 
-    pass_mode: range (both), min_only / min-only, max_only / max-only.
-    Empty infers from whichever of min/max is present.
+    pass_mode: range (both), min_only / min-only, max_only / max-only,
+    fail-open (missing limits -> fail, never fake PASS), unspec (missing
+    limits stay unspec). Empty infers from whichever of min/max is present.
     """
     mode = normalize_pass_mode(pass_mode)
+    if mode == "unspec":
+        return "unspec"
     if mode == "min-only":
         mx = None
     elif mode == "max-only":
@@ -166,7 +173,11 @@ def judge_value(value: Any, mn: Any, mx: Any, pass_mode: Any = None) -> str:
     v = _num(value)
     lo = _num(mn)
     hi = _num(mx)
-    if v is None or (lo is None and hi is None):
+    if lo is None and hi is None:
+        if mode == "fail-open":
+            return "fail"
+        return "unspec"
+    if v is None:
         return "unspec"
     if lo is not None and v < lo:
         return "fail"

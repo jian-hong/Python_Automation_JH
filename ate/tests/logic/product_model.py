@@ -45,7 +45,7 @@ _UNCONFIRMED_STATUSES = frozenset(
         "FROM DATASHEET FUNCTION TABLE",
     }
 )
-_PASS_MODES = frozenset({"range", "min_only", "max_only"})
+_PASS_MODES = frozenset({"range", "min_only", "max_only", "fail_open", "unspec"})
 
 
 def _norm_status(raw: Any) -> str:
@@ -1102,6 +1102,7 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
         "isolation_status": model.isolation_status,
         "icc_pins": list(plan["pins"]),
         "icc_corners": int(plan["n"]),
+        "icc_corner_rows": [dict(r) for r in (plan.get("corners") or [])[:16]],
         "gaps": list(model_gaps(model)),
         "has_oe": model.has_oe(),
         "limit_mode": dict(model.limit_mode),

@@ -95,7 +95,19 @@ Then Jane's tree is `Logic/RS1G08/SC70-5/Jane/Version_1`. Ariff's tree next to i
 
 `inventory.yaml` `pic:` is the tracking-sheet owner. It does not lock the part. Empty pic must not clobber another SKU of the same part (see `migrate_operator_folders._pic_label_map`).
 
-## Add a test (minimum)
+## Add a test (STANDARD FORMAT -- match Setup)
+
+Three live-UI paths. Detail + Path B yaml: `docs/LOGIC_DC.md`. Plug-in list: `docs/ATE_PLUGIN.md`.
+
+| Path | Live UI | Check |
+|------|---------|-------|
+| **A -- new body** | `register(TestSpec)` below; checkbox under Setup **Test program** after worker restart | `check_family_load` |
+| **B -- Logic DC recipe** | Same DC ids; Setup **Logic DC recipe** + part/limits yaml | `check_logic_dc`, `check_add_test` |
+| **C -- Detect / Wrap** | Setup **Detected tests (golden + ate/tests)** -> **Wrap + enable on part** | `check_test_detect` |
+
+`pass_mode` (range / min-only / max-only / fail-open / unspec) is first-class on limits yaml + Test program / Logic DC panel. Missing limits stay unspec unless fail-open (then fail -- never fake PASS).
+
+## Add a test (Path A template)
 
 ```python
 # ate/tests/<family>/my_slot.py

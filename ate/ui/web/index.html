@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917logicdc2" />
+  <link rel="stylesheet" href="styles.css?v=20260917logicdc4" />
 </head>
 <body>
   <div class="bg"></div>
@@ -206,7 +206,7 @@
             </div>
             <p class="hint" id="np-hint">Folders: #Test_Database / {class} / {part} / {package} / {operator} / Version_1. Create copies the tracking-sheet xlsx into workbook/ when a report path exists. DEMO never stamps PASS.</p>
             <h3 class="subhead">Detected tests (golden + ate/tests)</h3>
-            <p class="hint">AST scan only -- never runs golden code. Rows with input() stay blocked until rewritten to Continue. Wrap writes a TestSpec scaffold; copy enables ids on another same-family part.</p>
+            <p class="hint">Path C of STANDARD FORMAT. AST scan only -- never runs golden code. Rows with input() stay blocked until rewritten to Continue. Tick wrap-ready rows then <strong>Wrap + enable on part</strong>. Copy enables ids on another same-family part.</p>
             <div class="row" style="margin-top:8px; align-items:flex-end; gap:8px; flex-wrap:wrap">
               <button type="button" id="btn-refresh-detected" class="btn ghost">Refresh scan</button>
               <label>Wrap family
@@ -280,30 +280,35 @@
 
           <div class="glass panel wide hidden" id="panel-logic-dc">
             <h2>Logic DC recipe</h2>
-            <p class="hint">Path B: same TestSpec ids; SKU differs by truth table + pin roles + limits. UNCONFIRMED / PROVISIONAL is not Datasheet-signed and not greenable. Isolation is unused ties from the table (Y tracks the swept pin). See docs/LOGIC_DC.md.</p>
+            <p class="hint">Path B of STANDARD FORMAT (checklist is under Test program). Same TestSpec ids; SKU differs by truth table + pin roles + limits. UNCONFIRMED / PROVISIONAL is not Datasheet-signed and not greenable. Isolation is unused ties from the table (Y tracks the swept pin). PROPOSED / HOLD CONFIRM rows stay visible and are skipped at run.</p>
             <p class="hint" id="logic-dc-status">Apply a Logic campaign with product_model to edit.</p>
             <p class="hint" id="logic-dc-meta"></p>
             <div id="logic-dc-gaps" class="hint"></div>
             <div id="logic-dc-body"></div>
-            <div class="param-grid">
-              <label>vcc_list
-                <input id="logic-dc-vcc-list" type="text" />
+            <details id="logic-dc-json" class="logic-dc-json">
+              <summary>YAML JSON (engineer -- Save product_model)</summary>
+              <div class="param-grid">
+                <label>vcc_list
+                  <input id="logic-dc-vcc-list" type="text" />
+                </label>
+                <label>pass_mode (JSON)
+                  <textarea id="logic-dc-pass-mode" class="mono-edit" rows="5"></textarea>
+                </label>
+              </div>
+              <label class="logic-dc-block">truth_table
+                <textarea id="logic-dc-truth" class="mono-edit" rows="10"></textarea>
               </label>
-              <label>pass_mode (JSON)
-                <textarea id="logic-dc-pass-mode" class="mono-edit" rows="5"></textarea>
+              <label class="logic-dc-block">isolation
+                <textarea id="logic-dc-isolation" class="mono-edit" rows="8"></textarea>
               </label>
-            </div>
-            <label class="logic-dc-block">truth_table
-              <textarea id="logic-dc-truth" class="mono-edit" rows="10"></textarea>
-            </label>
-            <label class="logic-dc-block">isolation
-              <textarea id="logic-dc-isolation" class="mono-edit" rows="8"></textarea>
-            </label>
+              <div class="row" style="margin-top:8px">
+                <button type="button" id="btn-save-logic-dc" class="btn">Save product_model</button>
+              </div>
+            </details>
             <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px">
-              <button type="button" id="btn-save-logic-dc" class="btn">Save product_model</button>
               <button type="button" id="btn-save-test-params" class="btn accent">Save Version overlay</button>
             </div>
-            <p class="hint" id="logic-dc-hint">Save product_model writes part yaml. Save Version overlay writes this campaign <code>_manifest/test_params.yaml</code> only.</p>
+            <p class="hint" id="logic-dc-hint">Save Version overlay writes this campaign <code>_manifest/test_params.yaml</code> (vcc_list + pass_mode). Save product_model (inside YAML JSON) writes part yaml and cannot promote Datasheet-signed.</p>
           </div>
 
           <div class="glass panel" id="panel-gain-boards">
@@ -314,10 +319,22 @@
 
           <div class="glass panel wide">
             <h2>Test program</h2>
-            <p class="hint">Boards start collapsed. Tick the tests to run (Select all / Clear). Order: category (board) → channel → DUTs → tests.</p>
+            <div id="add-test-format" class="add-test-format">
+              <p class="hint"><strong>STANDARD FORMAT</strong> -- stop at the first row that holds. Same three paths as AGENTS.md. Detail: docs/LOGIC_DC.md. No wizard-Python.</p>
+              <table class="logic-dc-table">
+                <thead><tr><th>Path</th><th>Live UI</th><th>Check</th></tr></thead>
+                <tbody>
+                  <tr><td>A -- new body</td><td>register(TestSpec); checkbox appears here after worker restart</td><td>check_family_load</td></tr>
+                  <tr><td>B -- Logic DC recipe</td><td>Logic DC recipe panel (same DC ids, yaml)</td><td>check_logic_dc / check_add_test</td></tr>
+                  <tr><td>C -- Detect / Wrap</td><td>Detected tests (golden + ate/tests) then Wrap + enable on part</td><td>check_test_detect</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="hint">Boards start collapsed. Tick the tests to run (Select all / Clear). Order: category (board) -> channel -> DUTs -> tests. pass_mode per spec is editable below (range / min-only / max-only / fail-open / unspec). Save Version overlay writes campaign _manifest/test_params.yaml. Missing min/max stay unspec unless fail-open.</p>
             <div class="row test-list-actions">
               <button type="button" id="btn-tests-all" class="btn ghost">Select all</button>
               <button type="button" id="btn-tests-none" class="btn ghost">Clear</button>
+              <button type="button" id="btn-save-pass-mode" class="btn ghost">Save pass_mode overlay</button>
             </div>
             <div id="test-plans" class="test-plans"></div>
             <div id="test-list" class="test-list"></div>
@@ -476,6 +493,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260917logicdc2"></script>
+  <script src="app.js?v=20260917logicdc4"></script>
 </body>
 </html>

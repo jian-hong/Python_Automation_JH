@@ -512,6 +512,12 @@ def _logic_dc_for_catalog(part_key: str) -> dict[str, Any] | None:
     from ate.core.specs import load_part_specs
 
     ui["specs"] = load_part_specs(part_key, overlay=overlay)
+    try:
+        from ate.fixture.modes import enabled_tests_for_part
+
+        ui["enabled_tests"] = list(enabled_tests_for_part(part_key) or [])
+    except Exception:
+        ui["enabled_tests"] = []
     return ui
 
 

@@ -621,7 +621,7 @@ function params() {
 }
 
 function selectedTests() {
-  return [...document.querySelectorAll(".test-item input:checked")].map((i) => i.value);
+  return [...document.querySelectorAll("#test-list .test-item input[type=checkbox]:checked")].map((i) => i.value);
 }
 
 function mergeTestDefaults(ids) {
@@ -985,6 +985,31 @@ function renderDutPicks() {
   box.innerHTML = html;
 }
 
+function wirePassModeSync() {
+  document.querySelectorAll(".logic-dc-mode").forEach((sel) => {
+    sel.onchange = () => {
+      const id = sel.getAttribute("data-id");
+      if (!id) return;
+      document.querySelectorAll(`.logic-dc-mode[data-id="${id}"]`).forEach((other) => {
+        if (other !== sel) other.value = sel.value;
+      });
+    };
+  });
+}
+  const modes = [
+    ["", "infer"],
+    ["range", "range"],
+    ["min-only", "min-only"],
+    ["max-only", "max-only"],
+    ["fail-open", "fail-open"],
+    ["unspec", "unspec"],
+  ];
+  const c = String(cur || "").replace(/_/g, "-");
+  const opts = modes.map(([v, lab]) => `<option value="${v}" ${v === c ? "selected" : ""}>${lab}</option>`).join("");
+  const cls = extraClass ? `logic-dc-mode ${extraClass}` : "logic-dc-mode";
+  return `<select class="${cls}" data-id="${sid}">${opts}</select>`;
+}
+
 function renderLogicDc() {
   const panel = $("panel-logic-dc");
   const body = $("logic-dc-body");
@@ -1008,6 +1033,16 @@ function renderLogicDc() {
       ` · schmitt ${dc.schmitt ? "yes" : "no"} · ICC ${dc.icc_corners || 0} corners (2^n)` +
       (dc.isolation_status ? ` · isolation ${dc.isolation_status}` : "");
   }
+  const enabled = dc.enabled_tests || [];
+  const enHtml = "<h3 class=\"subhead\">Enabled tests</h3>" +
+    (enabled.length
+      ? `<p class="logic-dc-chips">${enabled.map((id) => `<span class="mode-tag">${id}</span>`).join(" ")}</p>`
+      : "<p class=\"hint\">No enabled_tests on this part yaml.</p>");
+  const vcc = (dc.vcc_list || dc.vcc_sweep_list || []).join(", ");
+  const recipeHtml =
+    "<h3 class=\"subhead\">Recipe</h3>" +
+    `<p class="hint">logic_inputs: ${inputs.join(", ") || "--"} · vcc_list: ${vcc || "--"} · ICC pins: ${(dc.icc_pins || []).join(",") || "--"}</p>` +
+    `<label>vcc_list (comma)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>`;
   const tt = dc.truth_table || [];
   const pins = tt.length ? Object.keys(tt[0]) : inputs.concat([dc.output_pin || "Y"]);
   let ttHtml = "<h3 class=\"subhead\">Truth table</h3>";
@@ -1021,42 +1056,63 @@ function renderLogicDc() {
       "</tbody></table>";
   }
   const iso = dc.isolation || {};
-  let isoHtml = "<h3 class=\"subhead\">Isolation (run = first track, else invert)</h3>";
-  isoHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Sweep</th><th>Hold</th><th>Y</th><th>Source</th></tr></thead><tbody>";
+  let isoHtml = "<h3 class=\"subhead\">Isolation (run = first track, else invert; skip PROPOSED)</h3>";
+  isoHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Sweep</th><th>Hold</th><th>Y</th><th>Status</th><th>Used</th></tr></thead><tbody>";
   inputs.forEach((pin) => {
-    const run = ((iso[pin] || {}).run) || [];
-    if (!run.length) {
-      isoHtml += `<tr><td>${pin}</td><td colspan="3">UNSURE -- no derivable combo</td></tr>`;
+    const block = iso[pin] || {};
+    const run = block.run || [];
+    const all = (block.all && block.all.length) ? block.all : run;
+    const runKey = (p) => {
+      const hold = p.hold || p.fix || {};
+      const holdTxt = Object.keys(hold).map((k) => `${k}=${hold[k]}`).join(" ");
+      return `${p.sweep || pin}|${holdTxt}|${p.y_expect || ""}`;
+    };
+    const runSet = new Set(run.map(runKey));
+    if (!all.length) {
+      isoHtml += `<tr><td>${pin}</td><td colspan="4">UNSURE -- no derivable combo</td></tr>`;
       return;
     }
-    run.forEach((p) => {
+    all.forEach((p) => {
       const hold = p.hold || p.fix || {};
       const holdTxt = Object.keys(hold).map((k) => `${k}=${hold[k]}`).join(" ") || "--";
-      isoHtml += `<tr><td>${p.sweep || pin}</td><td>${holdTxt}</td><td>${p.y_expect || ""}</td><td>${p.source || ""}</td></tr>`;
+      const st = p.status || p.source || "";
+      const used = runSet.has(runKey(p)) ? "run" : "";
+      isoHtml += `<tr><td>${p.sweep || pin}</td><td>${holdTxt}</td><td>${p.y_expect || ""}</td><td>${st}</td><td>${used}</td></tr>`;
     });
   });
   isoHtml += "</tbody></table>";
-  const vcc = (dc.vcc_list || dc.vcc_sweep_list || []).join(", ");
+  const cornerRows = dc.icc_corner_rows || [];
+  const cornerPins = dc.icc_pins || inputs;
+  let cornerHtml = `<h3 class="subhead">ICC corners (${dc.icc_corners || cornerRows.length} = 2^n)</h3>`;
+  if (!cornerRows.length) {
+    cornerHtml += "<p class=\"hint\">No derived ICC corners.</p>";
+  } else {
+    cornerHtml += "<table class=\"logic-dc-table\" id=\"logic-dc-corners\"><thead><tr>" +
+      cornerPins.map((p) => `<th>${p}</th>`).join("") +
+      "</tr></thead><tbody>" +
+      cornerRows.map((row) => "<tr>" + cornerPins.map((p) => `<td>${row[p] ?? ""}</td>`).join("") + "</tr>").join("") +
+      "</tbody></table>";
+    if ((dc.icc_corners || 0) > cornerRows.length) {
+      cornerHtml += `<p class="hint">Showing first ${cornerRows.length} of ${dc.icc_corners}.</p>`;
+    }
+  }
   const specs = dc.specs || [];
-  const modes = ["range", "min-only", "max-only"];
   let specHtml = "<h3 class=\"subhead\">Limits + pass_mode</h3>";
   specHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Id</th><th>Mode</th><th>Min</th><th>Max</th><th>Test</th></tr></thead><tbody>";
   specs.forEach((s) => {
     const sid = s.id || "";
-    const cur = String(s.pass_mode || "");
-    const opts = modes.map((m) => `<option value="${m}" ${m === cur ? "selected" : ""}>${m}</option>`).join("");
-    specHtml += `<tr><td>${sid}</td><td><select class="logic-dc-mode" data-id="${sid}">${opts}</select></td>` +
-      `<td>${s.min != null ? s.min : ""}</td><td>${s.max != null ? s.max : ""}</td><td>${s.test || ""}</td></tr>`;
+    const unspec = s.min == null && s.max == null ? " unspec" : "";
+    specHtml += `<tr><td>${sid}</td><td>${passModeSelect(sid, s.pass_mode)}</td>` +
+      `<td>${s.min != null ? s.min : "unspec"}</td><td>${s.max != null ? s.max : "unspec"}</td><td>${s.test || ""}${unspec}</td></tr>`;
   });
   specHtml += "</tbody></table>";
   const gaps = (dc.gaps || []).map((g) => `<li>${g}</li>`).join("");
   const gapHtml = gaps ? `<h3 class="subhead">Gaps</h3><ul class="hint">${gaps}</ul>` : "";
-  body.innerHTML =
-    `<label>vcc_list (comma)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>` +
-    ttHtml + isoHtml + specHtml + gapHtml;
-  if (hint) {
+  body.innerHTML = enHtml + recipeHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
+  if (hint && !hint.textContent) {
     hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (pass_mode + vcc_list). Ctrl+F5 after worker restart if RPC is new.";
   }
+  wirePassModeSync();
 }
 
 function kindLabel(kind) {
@@ -2335,33 +2391,39 @@ async function loadTests() {
       const checked = !isResearch && preferred.has(t.id) ? "checked" : "";
       const tag = t.short_tag || t.id;
       const instr = (t.required_instruments || []).join("+") || "MSO+PSU+AWG";
-      const specBits = (t.specs || []).map((s) => {
-        const bits = [s.id || ""];
-        if (s.pass_mode) bits.push(String(s.pass_mode));
-        if (s.min != null) bits.push(`min ${s.min}`);
-        if (s.max != null) bits.push(`max ${s.max}`);
-        if (s.typ != null) bits.push(`typ ${s.typ} ${s.unit || ""}`.trim());
-        return bits.join(" ");
-      }).join("; ");
+      const specRows = (t.specs || []).map((s) => {
+        const sid = s.id || "";
+        const unspec = s.min == null && s.max == null;
+        const lim = unspec
+          ? "unspec"
+          : [s.min != null ? `min ${s.min}` : "", s.max != null ? `max ${s.max}` : ""].filter(Boolean).join(" ");
+        return `<div class="test-spec-row"><span class="mode-tag">${sid}</span> ${passModeSelect(sid, s.pass_mode, "test-pass-mode")} <span class="hint">${lim}</span></div>`;
+      }).join("");
       const info = (t.info && (t.info.description || t.info.title)) || t.notes || "";
-      const specLine = specBits || "datasheet unspec -- Results: Fetch limits";
-      const extra = [info, specLine].filter(Boolean).join(" · ");
+      const specLine = specRows || "<span class=\"mode-tag\">datasheet unspec -- Results: Fetch limits</span>";
       grid.innerHTML += `
-        <label class="test-item" for="${id}" title="${extra.replace(/"/g, "&quot;")}">
-          <input id="${id}" type="checkbox" value="${t.id}" ${checked} />
-          <span><strong>${tag}</strong> — ${t.label}<br/><span class="mode-tag">${specLine}</span><br/><span class="mode-tag">${t.fixture_mode} · ${instr}${isResearch ? " · research" : ""}</span>${info ? `<br/><span class="hint">${info}</span>` : ""}</span>
-        </label>`;
+        <div class="test-item">
+          <label class="check" for="${id}">
+            <input id="${id}" type="checkbox" value="${t.id}" ${checked} />
+            <span><strong>${tag}</strong> — ${t.label}</span>
+          </label>
+          <div class="test-spec-block">${specLine}<br/><span class="mode-tag">${t.fixture_mode} · ${instr}${isResearch ? " · research" : ""}</span>${info ? `<br/><span class="hint">${info}</span>` : ""}</div>
+        </div>`;
     }
     wrap.appendChild(grid);
     box.appendChild(wrap);
   }
   renderRunPlans();
-  document.querySelectorAll(".test-item input").forEach((inp) => {
+  document.querySelectorAll(".test-item input[type=checkbox]").forEach((inp) => {
     inp.addEventListener("change", () => {
       renderRunPlans();
       applyTestDefaults(false);
     });
   });
+  document.querySelectorAll(".test-pass-mode").forEach((sel) => {
+    sel.addEventListener("click", (ev) => ev.stopPropagation());
+  });
+  wirePassModeSync();
   applyTestDefaults(false);
 }
 
@@ -2548,27 +2610,48 @@ if ($("btn-forget-person")) {
   };
 }
 
+async function saveTestParamsOverlay() {
+  const pass_mode = {};
+  document.querySelectorAll("#logic-dc-body .logic-dc-mode").forEach((sel) => {
+    const id = sel.getAttribute("data-id");
+    if (id && sel.value) pass_mode[id] = sel.value;
+  });
+  document.querySelectorAll(".test-pass-mode").forEach((sel) => {
+    const id = sel.getAttribute("data-id");
+    if (id && sel.value) pass_mode[id] = sel.value;
+  });
+  const blob = { pass_mode };
+  const logicPanel = $("panel-logic-dc");
+  const logicOpen = logicPanel && !logicPanel.classList.contains("hidden");
+  const vccInput = $("logic-dc-vcc") || $("logic-dc-vcc-list");
+  if (logicOpen && vccInput) {
+    const vccRaw = (vccInput.value || "").trim();
+    blob.vcc_list = vccRaw
+      ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : [];
+  }
+  const res = await rpc("save_test_params", { test_params: blob });
+  const hint = $("logic-dc-hint");
+  if (hint) hint.textContent = `Saved ${res.path || "_manifest/test_params.yaml"}`;
+  log(`Saved Version overlay test_params.yaml\n`);
+  await loadParamDefaults();
+  await loadTests();
+  return res;
+}
+
 if ($("btn-save-test-params")) {
   $("btn-save-test-params").onclick = async () => {
     try {
-      const vccRaw = (
-        (($("logic-dc-vcc") && $("logic-dc-vcc").value) || "")
-        || (($("logic-dc-vcc-list") && $("logic-dc-vcc-list").value) || "")
-      ).trim();
-      const vcc_list = vccRaw
-        ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
-        : [];
-      const pass_mode = {};
-      document.querySelectorAll(".logic-dc-mode").forEach((sel) => {
-        const id = sel.getAttribute("data-id");
-        if (id && sel.value) pass_mode[id] = sel.value;
-      });
-      const res = await rpc("save_test_params", { test_params: { vcc_list, pass_mode } });
-      const hint = $("logic-dc-hint");
-      if (hint) hint.textContent = `Saved ${res.path || "_manifest/test_params.yaml"}`;
-      log(`Saved Version overlay test_params.yaml\n`);
-      await loadParamDefaults();
-      await loadTests();
+      await saveTestParamsOverlay();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+if ($("btn-save-pass-mode")) {
+  $("btn-save-pass-mode").onclick = async () => {
+    try {
+      await saveTestParamsOverlay();
     } catch (e) {
       alert(e.message);
     }
@@ -2902,14 +2985,14 @@ $("btn-folder").onclick = async () => {
 
 if ($("btn-tests-all")) {
   $("btn-tests-all").onclick = () => {
-    document.querySelectorAll("#test-list .test-item input").forEach((i) => { i.checked = true; });
+    document.querySelectorAll("#test-list .test-item input[type=checkbox]").forEach((i) => { i.checked = true; });
     renderRunPlans();
     applyTestDefaults(false);
   };
 }
 if ($("btn-tests-none")) {
   $("btn-tests-none").onclick = () => {
-    document.querySelectorAll("#test-list .test-item input").forEach((i) => { i.checked = false; });
+    document.querySelectorAll("#test-list .test-item input[type=checkbox]").forEach((i) => { i.checked = false; });
     renderRunPlans();
     applyTestDefaults(false);
   };

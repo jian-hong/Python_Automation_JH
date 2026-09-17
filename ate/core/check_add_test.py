@@ -25,14 +25,20 @@ def check_add_test() -> list[str]:
         return errors
     doc = _DOC.read_text(encoding="utf-8")
     for needle in (
+        "STANDARD FORMAT",
         "Path A",
         "Path B",
-        "Detect",
+        "Path C",
+        "Detected tests",
+        "Wrap + enable on part",
+        "Test program",
         "logic_inputs",
         "truth_table",
         "test_params.yaml",
         "pass_mode",
+        "fail-open",
         "enabled_tests",
+        "unspec",
         "check_logic_dc",
         "check_family_load",
         "check_test_detect",
@@ -48,11 +54,13 @@ def check_add_test() -> list[str]:
     agents = _AGENTS.read_text(encoding="utf-8") if _AGENTS.is_file() else ""
     if "register(TestSpec" not in agents:
         errors.append("AGENTS.md must keep the Path A register(TestSpec) template")
+    if "STANDARD FORMAT" not in agents or "Path A" not in agents:
+        errors.append("AGENTS.md must name STANDARD FORMAT Path A/B/C")
     if "LOGIC_DC.md" not in agents:
         errors.append("AGENTS.md must point at docs/LOGIC_DC.md for Logic DC SKUs")
     plugin = _PLUGIN.read_text(encoding="utf-8") if _PLUGIN.is_file() else ""
-    if "LOGIC_DC.md" not in plugin:
-        errors.append("docs/ATE_PLUGIN.md must point at LOGIC_DC.md")
+    if "STANDARD FORMAT" not in plugin or "LOGIC_DC.md" not in plugin:
+        errors.append("docs/ATE_PLUGIN.md must name STANDARD FORMAT and point at LOGIC_DC.md")
     src = _LOGIC_DC.read_text(encoding="utf-8")
     if "family_ingest" in src:
         errors.append("logic_dc.py must not import family_ingest")

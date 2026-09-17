@@ -21,6 +21,12 @@ def main() -> int:
         errors.append("max-only must ignore min")
     if judge_value(0.4, 1, 2, pass_mode="range") != "fail":
         errors.append("range below min must fail")
+    if judge_value(1, None, None, pass_mode="fail-open") != "fail":
+        errors.append("fail-open with no limits must fail")
+    if judge_value(1, None, None) != "unspec":
+        errors.append("missing limits default unspec (not fake PASS)")
+    if judge_value(1, 0, 2, pass_mode="unspec") != "unspec":
+        errors.append("explicit unspec must not stamp PASS")
     specs = load_part_specs("rs622")
     row = enrich_measurement({"id": "VOS_mV", "value": 0.7}, specs=specs, test_id="vos_sweep")
     if row.get("result") != "pass" or row.get("max") != 3.0:

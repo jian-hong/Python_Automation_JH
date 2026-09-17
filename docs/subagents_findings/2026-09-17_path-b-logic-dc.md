@@ -5,7 +5,7 @@ Keywords: path-b, logic-dc, product_model, isolation, rs1g97, rs1g08, rs1g126, i
 
 ## main_idea
 
-One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_model` YAML. 2-input AND (RS1G08) and 3-input RS1G97 share the same TestSpec.run. Isolation is derived from truth_table (Y tracks swept pin; invert only if no track combo -- See Lim algorithm, not per-SKU hardcodes). ICC corners = 2^n. Version overlay `_manifest/test_params.yaml`. pass_mode first-class. RS1G97 truth_table is Datasheet §4 FUNCTION TABLE rows with status UNCONFIRMED (not Datasheet-signed, not greenable). C invert A:L B:H is the run fallback; C-track A:H B:L is PROPOSED HOLD CONFIRM. Setup panel `#panel-logic-dc` edits truth_table/isolation/pass_mode/vcc_list/gaps and visualises recipe. Add SKU: `docs/LOGIC_DC.md`. See Lim wrap is `seelim_dc.py` locator only.
+One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_model` YAML. 2-input AND (RS1G08) and 3-input RS1G97 share the same TestSpec.run. Isolation is derived from truth_table (Y tracks swept pin; invert only if no track combo -- See Lim algorithm, not per-SKU hardcodes). ICC corners = 2^n. Version overlay `_manifest/test_params.yaml`. pass_mode first-class (range / min-only / max-only / fail-open / unspec). RS1G97 truth_table is Datasheet §4 FUNCTION TABLE rows with status UNCONFIRMED (not Datasheet-signed, not greenable). C invert A:L B:H is the run fallback; C-track A:H B:L is PROPOSED HOLD CONFIRM. STANDARD FORMAT checklist is `#add-test-format` on Setup Test program (Path A/B/C). `#panel-logic-dc` visualises enabled tests, recipe, truth table, isolation including PROPOSED, ICC corners, limits+pass_mode. Add SKU: `docs/LOGIC_DC.md`. See Lim wrap is `seelim_dc.py` locator only.
 
 ## traps
 
@@ -20,6 +20,8 @@ One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_mo
 - vcc_op_min/max are range metadata, not a sweep. Do not expand vcc_list.
 - Do not touch family_ingest / extra_families / registry FAMILY_PACKAGES.
 - IOZ/IOFF only when oe != none.
+- `#add-test-format` must stay on Test program (always visible), not inside hidden `#panel-logic-dc`.
+- Empty pass_mode select must be `infer`, not a fake `range`. Missing limits: unspec unless fail-open.
 
 ## cite
 

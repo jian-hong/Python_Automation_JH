@@ -946,6 +946,14 @@ h3.subhead {
   font-family: var(--mono);
   font-size: var(--fs-xs);
 }
+.logic-dc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.logic-dc-json { margin-top: 10px; }
+.logic-dc-json summary { cursor: pointer; color: var(--muted); font-size: var(--fs-sm); }
+.test-spec-block { flex: 1; min-width: 0; }
+.test-spec-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.test-pass-mode { font-family: var(--mono); font-size: var(--fs-xs); }
+.add-test-format { margin: 0 0 10px; }
+.add-test-format .logic-dc-table { margin-top: 6px; }
 
 .test-plan { margin-bottom: 10px; }
 .test-plan.hidden { display: none; }

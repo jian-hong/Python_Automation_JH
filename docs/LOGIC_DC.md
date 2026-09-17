@@ -1,18 +1,22 @@
-# Logic DC -- one system, scale by data
+# STANDARD FORMAT -- write / import a test (live UI)
 
-Live console only (`ate/` + worker **8766** + UI **5174**). Path B TestSpecs stay physics bodies. Do not add wizard-Python, xyflow, a second runner, or scrape en.run-ic.com.
+Live console only (`ate/` + worker **8766** + UI **5174**). Vibe-coder map: `AGENTS.md`. Plug-in slots: `docs/ATE_PLUGIN.md`. UI chrome: `ate/ui/web/UI_CONTRACT.md`. Path B TestSpecs stay physics bodies. Do not add wizard-Python, xyflow, a second runner, or scrape en.run-ic.com.
 
 New RS1Gxx (2-input, 3-input, N-input, with/without OE) should not need a forked `logic_dc.py`.
 
-## Which path (match the live UI)
+## Which path (labels match Setup)
 
-| Path | When | Where in Setup | Check |
-|------|------|----------------|-------|
-| **A -- new TestSpec body** | New physics (not already `input_threshold` / `icc` / ...) | Test program checkbox after worker restart | `check_family_load` |
-| **B -- Logic DC recipe** | Same DC ids, new SKU | Test program + **Logic DC** panel | `check_logic_dc`, `check_add_test` |
-| **C -- Detect / Wrap** | Golden `test_*` already exists | Setup **Detected tests** -> Wrap | `check_test_detect` |
+Stop at the first row that holds. Same three paths as `AGENTS.md` + `docs/ATE_PLUGIN.md`.
 
-Path A template is still the `register(TestSpec)` block in `AGENTS.md`. Path C is Setup Detected tests (AST only; `input()` stays blocked). Wrap goldens via existing `seelim_dc` / `ariff_dc` locators -- do not copy See Lim limits into YAML.
+| Path | When | Live UI (Setup tab) | Check |
+|------|------|---------------------|-------|
+| **A -- new body** | New physics (not already `input_threshold` / `icc` / ...) | `register(TestSpec)` then idle-restart worker. Checkbox appears under **Test program** | `check_family_load` |
+| **B -- Logic DC recipe** | Same DC ids, new SKU | **Logic DC recipe** panel (truth table, `logic_inputs`, `vcc_list`, limits + `pass_mode`) + **Test program** ticks | `check_logic_dc`, `check_add_test` |
+| **C -- Detect / Wrap** | Golden `test_*` already exists | **Detected tests (golden + ate/tests)** -> **Wrap + enable on part** | `check_test_detect` |
+
+Path A template: `register(TestSpec)` in `AGENTS.md`. Path C: AST only; `input()` stays blocked. Wrap goldens via existing `seelim_dc` / `ariff_dc` locators -- do not copy See Lim limits into YAML.
+
+Setup **Test program** shows this table in `#add-test-format` (always visible). `pass_mode` is editable on **Test program** (per spec) and on **Logic DC recipe** (limits table). **Save pass_mode overlay** / **Save Version overlay** writes `_manifest/test_params.yaml`. Missing min/max stay **unspec** unless `fail-open` (then fail). Never fake PASS.
 
 ## Add RS1Gxx with only part + limits + truth (Path B)
 
@@ -88,9 +92,11 @@ Setup **Logic DC** panel:
 |------|-------|---------|
 | `range` | min <= value <= max | Schmitt VT+/VT-, VCC |
 | `min-only` | value >= min | VIH, VOH |
-| `max-only` | value <= max | ICC, ΔICC, II, IOZ, VOL, VIL |
+| `max-only` | value <= max | ICC, dICC, II, IOZ, VOL, VIL |
+| `fail-open` | missing min and max -> fail | honest fail-closed when limits not typed |
+| `unspec` | never PASS | operator force; also the default when limits missing |
 
-Empty yaml `pass_mode` is inferred from the spec id. Missing limits stay **unspec** (not fake PASS). Panel + Test program + Results show mode with min/max/result.
+Empty yaml `pass_mode` is inferred from the spec id (`infer` in the panel). Missing limits stay **unspec** unless `fail-open`. Panel + Test program + Results show mode with min/max/result. UNCONFIRMED truth tables cannot green a PASS.
 
 ### Pin drive (3+ inputs)
 

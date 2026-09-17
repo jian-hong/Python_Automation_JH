@@ -402,12 +402,18 @@ def _panel_ok() -> list[str]:
     ):
         if need not in html:
             errors.append(f"Logic DC panel missing {need}")
+    if 'id="add-test-format"' not in html:
+        errors.append("STANDARD FORMAT checklist (#add-test-format) missing")
     if "loadLogicDcPanel" not in js or "get_product_model" not in js:
         errors.append("app.js must load Logic DC product_model")
     if "saveLogicDcPanel" not in js:
         errors.append("app.js must save Logic DC product_model")
     if "renderLogicDc" not in js or "save_test_params" not in js:
         errors.append("app.js must visualise recipe + save Version overlay")
+    if "icc_corner_rows" not in js or "Enabled tests" not in js or "fail-open" not in js:
+        errors.append("app.js must visualise enabled tests, ICC corners, fail-open")
+    if judge_value(1, None, None, pass_mode="fail-open") != "fail":
+        errors.append("fail-open with no limits must fail")
     srv = Path(__file__).resolve().parents[1] / "worker" / "server.py"
     text = srv.read_text(encoding="utf-8")
     if 'method == "get_product_model"' not in text or 'method == "save_product_model"' not in text:
@@ -463,6 +469,9 @@ def _scale_and_overlay_ok() -> list[str]:
         errors.append("max-only must ignore min")
     if infer_pass_mode({"id": "VIH_V", "min": 2.0}) != "min-only":
         errors.append("VIH default pass_mode min-only")
+    over_specs = {s.get("id"): s for s in load_part_specs("rs1g08", overlay={"pass_mode": {"ICC_uA": "fail-open"}})}
+    if str(over_specs.get("ICC_uA", {}).get("pass_mode") or "") != "fail-open":
+        errors.append("test_params overlay must set pass_mode fail-open")
     return errors
 
 
