@@ -16,6 +16,9 @@ INSTRUMENT_SENSE VOH: force Y-high from truth_table vector; DMM sense V(Y).
 INSTRUMENT_SENSE VOL: force Y-low from truth_table vector; DMM sense V(Y).
   Loaded IOL from CONFIRMED vol_table (PSU CH2 Y-load source rail = VCC unless vref given).
 SETTLE: measure-after-settle (recipe settle_s / stable_n / stable_eps_V / settle_timeout_s).
+  Every PSU VCC switch and pin force uses settle-to-stable (eps/N + hard timeout),
+  including ICC / ΔICC / II / IOZ -- not sleep(_settle) only. Timeout raises
+  RuntimeError / FAIL; never returns the last reading as a measurement.
 INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
   Not applicable when oe=none.
 
@@ -200,16 +203,6 @@ def _step_v(model: ProductModel) -> float:
     return 0.05
 
 
-def _settle(model: ProductModel, default: float = 0.05) -> float:
-    raw = model.recipe.get("settle_s")
-    try:
-        if raw is not None:
-            return float(raw)
-    except (TypeError, ValueError):
-        pass
-    return default
-
-
 def _recipe_num(model: ProductModel, key: str, default: float) -> float:
     raw = model.recipe.get(key)
     try:
@@ -220,13 +213,19 @@ def _recipe_num(model: ProductModel, key: str, default: float) -> float:
     return float(default)
 
 
-def _wait_settled_voltage(dmm, model: ProductModel, *, setup: bool = True) -> float:
-    """Wait settle_s, then measure. Repeat until stable_n within eps or timeout.
+def _wait_settled(dmm, model: ProductModel, *, kind: str = "voltage", setup: bool = True) -> float:
+    """Wait settle_s, then measure until stable_n within eps, or FAIL.
 
     Measure-after-settle, not before. Recipe is not a DC limit.
+    kind voltage: DMM volts vs stable_eps_V.
+    kind current: DMM amps vs the same recipe number (not a new DC spec).
+    settle_timeout_s expiry raises RuntimeError (FAIL). Never returns the last
+    reading. Sleep is capped by remaining time so this cannot hang forever.
     """
-    from dmm_setup import dmm_read, dmm_setup_voltage
+    from dmm_setup import dmm_read, dmm_setup_current, dmm_setup_voltage
 
+    if kind not in ("voltage", "current"):
+        raise RuntimeError(f"settle kind {kind!r} must be voltage or current")
     settle_s = max(0.0, _recipe_num(model, "settle_s", 0.05))
     try:
         n = int(model.recipe.get("stable_n") or 3)
@@ -235,21 +234,49 @@ def _wait_settled_voltage(dmm, model: ProductModel, *, setup: bool = True) -> fl
     n = max(1, n)
     eps = _recipe_num(model, "stable_eps_V", 0.005)
     timeout = _recipe_num(model, "settle_timeout_s", 2.0)
+    if timeout <= 0:
+        raise RuntimeError(f"settle timeout {timeout}s: invalid (must be > 0; never hang)")
     if setup:
-        dmm_setup_voltage(dmm)
+        if kind == "current":
+            dmm_setup_current(dmm)
+        else:
+            dmm_setup_voltage(dmm)
     t0 = time.monotonic()
     window: list[float] = []
-    v = 0.0
-    while True:
-        time.sleep(settle_s)
+    max_iters = n + 8 + int(timeout / max(settle_s, 0.001) + 1)
+    for _ in range(max_iters):
+        remaining = timeout - (time.monotonic() - t0)
+        if remaining <= 0:
+            raise RuntimeError(
+                f"settle timeout {timeout}s: DMM {kind} not stable "
+                f"(need {n} within {eps}, got {window!r})"
+            )
+        time.sleep(min(settle_s, remaining) if settle_s > 0 else 0.0)
+        if (time.monotonic() - t0) >= timeout:
+            raise RuntimeError(
+                f"settle timeout {timeout}s: DMM {kind} not stable "
+                f"(need {n} within {eps}, got {window!r})"
+            )
         v = float(dmm_read(dmm))
         window.append(v)
         if len(window) > n:
             window = window[-n:]
         if len(window) >= n and (max(window) - min(window)) <= eps:
             return sum(window) / len(window)
-        if (time.monotonic() - t0) >= timeout:
-            return sum(window) / len(window) if window else v
+    raise RuntimeError(
+        f"settle timeout {timeout}s: DMM {kind} not stable "
+        f"(need {n} within {eps}, got {window!r})"
+    )
+
+
+def _wait_settled_voltage(dmm, model: ProductModel, *, setup: bool = True) -> float:
+    """Settled DMM voltage. Timeout raises RuntimeError / FAIL."""
+    return _wait_settled(dmm, model, kind="voltage", setup=setup)
+
+
+def _wait_settled_current_ua(dmm, model: ProductModel, *, setup: bool = True) -> float:
+    """Settled DMM current in uA. Timeout raises RuntimeError / FAIL."""
+    return _wait_settled(dmm, model, kind="current", setup=setup) * 1e6
 
 
 def _vmax_for_ii(model: ProductModel, vcc: float) -> float:
@@ -293,7 +320,7 @@ def _power_vcc(instr, vcc: float, ilim: float) -> None:
     from psu_setup import power_on_protected
 
     power_on_protected(instr.psu, 1, vcc, ilim, ovp=max(5.6, vcc * 1.1))
-    time.sleep(0.2)
+    # Caller must settle-to-stable (voltage or current) after this VCC switch.
 
 
 def _power_down(instr) -> None:
@@ -379,14 +406,6 @@ def _avg_voltage(dmm, n: int = 3) -> float:
     return sum(readings) / len(readings)
 
 
-def _avg_current_ua(dmm, n: int = 5) -> float:
-    from dmm_setup import dmm_read, dmm_setup_current
-
-    dmm_setup_current(dmm)
-    readings = [float(dmm_read(dmm)) for _ in range(max(1, n))]
-    return (sum(readings) / len(readings)) * 1e6
-
-
 def _mid(vcc: float) -> float:
     return float(vcc) / 2.0
 
@@ -417,11 +436,9 @@ def _sweep_threshold(
     pattern: IsolationPattern,
     rising: bool,
 ) -> Optional[float]:
-    from dmm_setup import dmm_setup_voltage
-
     drives = _drive_for_sweep(model, pattern.sweep_pin)
     _apply_levels(instr, model, pattern.fix, vcc, ilim, drives=drives)
-    dmm_setup_voltage(instr.dmm)
+    _wait_settled_voltage(instr.dmm, model)
     step = _step_v(model)
     n = int(round(vcc / step))
     seq = list(range(0, n + 1))
@@ -540,12 +557,11 @@ def _run_icc(instr, params: Any) -> dict[str, Any]:
     try:
         for vcc in vccs:
             _power_vcc(instr, vcc, ilim)
-            time.sleep(_settle(model))
+            _wait_settled_current_ua(instr.dmm, model)
             any_ok = False
             for vec in corners:
                 _apply_levels(instr, model, vec, vcc, ilim)
-                time.sleep(_settle(model))
-                i_ua = _avg_current_ua(instr.dmm)
+                i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
                 rec = {"VCC": vcc, "ICC_uA": i_ua}
                 rec.update({f"IN_{k}": v for k, v in vec.items()})
                 rows.append(rec)
@@ -595,6 +611,7 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
     try:
         for vcc in vccs:
             _power_vcc(instr, vcc, ilim)
+            _wait_settled_current_ua(instr.dmm, model)
             for near in pins:
                 for others_high in (True, False):
                     levels: dict[str, Any] = {}
@@ -605,13 +622,13 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
                     if model.has_oe() and model.oe_pin not in levels:
                         levels[model.oe_pin] = model.oe_active_level()
                     _apply_levels(instr, model, levels, vcc, ilim)
+                    _wait_settled_current_ua(instr.dmm, model, setup=False)
                     near_v = max(0.0, vcc - offset_v)
                     drive = model.pin_drive.get(near)
                     if drive is None:
                         raise RuntimeError(f"delta_icc: no pin_drive for {near}")
                     _apply_pin(instr, drive, near_v, ilim)
-                    time.sleep(_settle(model, 0.5))
-                    i_ua = _avg_current_ua(instr.dmm)
+                    i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
                     rows.append(
                         {
                             "VCC": vcc,
@@ -656,17 +673,18 @@ def _run_ii(instr, params: Any) -> dict[str, Any]:
                 ):
                     raise RuntimeError(f"ii: operator stopped before pin {pin}")
                 _power_vcc(instr, vcc, ilim)
+                _wait_settled_current_ua(instr.dmm, model)
                 others = {p: "H" for p in model.logic_inputs if p != pin}
                 if model.has_oe():
                     others[model.oe_pin] = model.oe_active_level()
                 _apply_levels(instr, model, others, vcc, ilim)
+                _wait_settled_current_ua(instr.dmm, model, setup=False)
                 drive = model.pin_drive.get(pin)
                 if drive is None:
                     raise RuntimeError(f"ii: no pin_drive for {pin}")
                 for vi in (0.0, float(vmax)):
                     _apply_pin(instr, drive, vi, ilim)
-                    time.sleep(_settle(model))
-                    i_ua = _avg_current_ua(instr.dmm)
+                    i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
                     rows.append({"VCC": vcc, "PIN": pin, "VI": vi, "II_uA": i_ua})
     finally:
         _power_down(instr)
@@ -751,10 +769,11 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
                     vref = 0.0  # fixture sink rail; not a datasheet Vref
                 _power_vcc(instr, vcc, ilim)
                 _apply_y_vector(instr, model, True, vcc, ilim)
+                _wait_settled_voltage(instr.dmm, model)
                 if vplus is not None:
                     power_on_protected(instr.psu, 3, float(vplus), ilim)
                 power_on_protected(instr.psu, 2, float(vref), abs(float(ioh)), ocp=max(0.05, abs(float(ioh)) * 1.2))
-                measured = _wait_settled_voltage(instr.dmm, model)
+                measured = _wait_settled_voltage(instr.dmm, model, setup=False)
                 ok = measured >= float(spec)
                 mid = str(entry.get("id") or f"VOH_{str(vcc).replace('.', 'p')}V")
                 rows.append(
@@ -836,10 +855,11 @@ def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
                     vref = vcc  # fixture source rail; not a datasheet Vref
                 _power_vcc(instr, vcc, ilim)
                 _apply_y_vector(instr, model, False, vcc, ilim)
+                _wait_settled_voltage(instr.dmm, model)
                 power_on_protected(instr.psu, 2, float(vref), abs(float(iol)), ocp=max(0.05, abs(float(iol)) * 1.2))
                 if vplus is not None:
                     power_on_protected(instr.psu, 3, float(vplus), ilim)
-                measured = _wait_settled_voltage(instr.dmm, model)
+                measured = _wait_settled_voltage(instr.dmm, model, setup=False)
                 ok = measured <= float(spec)
                 mid = str(entry.get("id") or f"VOL_{str(vcc).replace('.', 'p')}V")
                 rows.append(
@@ -914,11 +934,13 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
     try:
         for vcc in vccs:
             _power_vcc(instr, vcc, ilim)
+            _wait_settled_current_ua(instr.dmm, model)
             inactive = {model.oe_pin: model.oe_inactive_level()}
             # data don't-care: one data vector is enough; do not invent extra
             for p in model.logic_inputs:
                 inactive.setdefault(p, "L")
             _apply_levels(instr, model, inactive, vcc, ilim)
+            _wait_settled_current_ua(instr.dmm, model, setup=False)
             if isinstance(vouts_raw, list) and vouts_raw:
                 vouts = [float(x) for x in vouts_raw]
             else:
@@ -926,8 +948,7 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
                 vouts = [0.0, float(vmax)]
             for vo in vouts:
                 _force_psu(instr, 2, vo, ilim)
-                time.sleep(_settle(model, 0.5))
-                i_ua = _avg_current_ua(instr.dmm)
+                i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
                 rows.append(
                     {
                         "VCC": vcc,

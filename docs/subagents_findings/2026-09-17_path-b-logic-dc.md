@@ -21,7 +21,8 @@ One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_mo
 - Do not touch family_ingest / extra_families / registry FAMILY_PACKAGES.
 - IOZ/IOFF only when oe != none.
 - `#add-test-format` must stay on Test program (always visible), not inside hidden `#panel-logic-dc`.
-- Empty pass_mode select must be `infer`, not a fake `range`. Missing limits: unspec unless fail-open.
+- settle timeout must raise RuntimeError / FAIL. Never return last reading (measure-as-pass). Never hang forever (no unbounded while True).
+- ICC / ΔICC / II / IOZ must settle-to-stable after VCC and each force, not sleep(_settle) then _avg_current_ua.
 
 ## cite
 

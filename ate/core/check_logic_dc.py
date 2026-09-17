@@ -7,6 +7,7 @@ from __future__ import annotations
 import ast
 import re
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -445,6 +446,126 @@ def _buf126_ok() -> list[str]:
     return errors
 
 
+def _fn_src(src: str, name: str) -> str:
+    tree = ast.parse(src)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            chunk = ast.get_source_segment(src, node)
+            if chunk:
+                return chunk
+    return ""
+
+
+def _settle_loop_ok() -> list[str]:
+    """Timeout must FAIL (not last-reading pass). ICC/force must settle-to-stable."""
+    errors: list[str] = []
+    src = _LOGIC_DC.read_text(encoding="utf-8")
+    if "time.sleep(_settle" in src:
+        errors.append("logic_dc must not sleep(_settle) only; settle-to-stable + hard timeout")
+    if re.search(r"return sum\(window\) / len\(window\) if window else", src):
+        errors.append("_wait_settled must not soft-return last reading on timeout")
+    if "settle timeout" not in src:
+        errors.append("logic_dc settle timeout must raise RuntimeError / FAIL")
+    wait_src = _fn_src(src, "_wait_settled")
+    volt_src = _fn_src(src, "_wait_settled_voltage")
+    if not wait_src or not volt_src:
+        errors.append("logic_dc must define _wait_settled and _wait_settled_voltage")
+    if wait_src:
+        if "while True" in wait_src:
+            errors.append("_wait_settled must not hang forever (no unbounded while True)")
+        if "raise RuntimeError" not in wait_src:
+            errors.append("_wait_settled timeout must raise RuntimeError")
+        # timeout branch must not return a measurement
+        if re.search(r"if \(time\.monotonic\(\) - t0\) >= timeout:\s+return ", wait_src):
+            errors.append("_wait_settled must not return last reading when timeout expires")
+    power_src = _fn_src(src, "_power_vcc")
+    if "time.sleep" in power_src:
+        errors.append("_power_vcc must not sleep-as-settle; caller uses settle-to-stable")
+    for name in ("_run_icc", "_run_delta_icc", "_run_ii", "_run_ioz"):
+        body = _fn_src(src, name)
+        if not body:
+            errors.append(f"logic_dc {name} missing")
+            continue
+        if "_wait_settled_current_ua" not in body and "_wait_settled(" not in body:
+            errors.append(f"{name} must settle-to-stable (current) after VCC/force, not sleep then avg")
+        if "_avg_current_ua" in body:
+            errors.append(f"{name} must not measure current via _avg_current_ua after sleep-only")
+        if "_power_vcc" in body and "_wait_settled_current_ua" not in body:
+            errors.append(f"{name} must wait settled after _power_vcc")
+        if name == "_run_icc" and body.count("_wait_settled_current_ua") < 2:
+            errors.append("_run_icc must wait settled after VCC and after each _apply_levels")
+        if name == "_run_delta_icc" and body.count("_wait_settled_current_ua") < 3:
+            errors.append("_run_delta_icc must wait settled after VCC, _apply_levels, and pin force")
+    voh_src = _fn_src(src, "_run_voh_path_b")
+    vol_src = _fn_src(src, "_run_vol_path_b")
+    if "_wait_settled_voltage" not in voh_src or "_wait_settled_voltage" not in vol_src:
+        errors.append("VOH/VOL must keep settled voltage (min_only/max_only; no invented loads)")
+    from ate.tests.logic import logic_dc as ldc
+
+    m = load_product_model("rs1g97")
+    if m is None:
+        errors.append("rs1g97 product_model missing for settle SIM")
+        return errors
+    fast = replace(
+        m,
+        recipe={
+            **dict(m.recipe),
+            "settle_s": 0.0,
+            "stable_n": 3,
+            "stable_eps_V": 0.001,
+            "settle_timeout_s": 0.05,
+        },
+    )
+
+    class _FlatDmm:
+        def query(self, *_a, **_k):
+            return "1.234"
+
+        def write(self, *_a, **_k):
+            return None
+
+    class _RampDmm:
+        def __init__(self) -> None:
+            self.n = 0
+
+        def query(self, *_a, **_k):
+            self.n += 1
+            return str(self.n * 0.1)
+
+        def write(self, *_a, **_k):
+            return None
+
+    try:
+        got = ldc._wait_settled_voltage(_FlatDmm(), fast, setup=False)
+        if abs(float(got) - 1.234) > 1e-9:
+            errors.append(f"settled voltage SIM must return the stable mean, got {got!r}")
+    except Exception as exc:
+        errors.append(f"settled voltage SIM raised on stable DMM: {exc!r}")
+    try:
+        ldc._wait_settled_voltage(_RampDmm(), fast, setup=False)
+        errors.append("settle timeout must raise RuntimeError / FAIL (not return last reading)")
+    except RuntimeError as exc:
+        if "settle timeout" not in str(exc).lower() and "not stable" not in str(exc).lower():
+            errors.append(f"settle timeout error must name timeout/not stable, got {exc!r}")
+    except Exception as exc:
+        errors.append(f"settle timeout must be RuntimeError, got {exc!r}")
+
+    class _FlatCurr:
+        def query(self, *_a, **_k):
+            return "1e-6"
+
+        def write(self, *_a, **_k):
+            return None
+
+    try:
+        i_ua = ldc._wait_settled_current_ua(_FlatCurr(), fast, setup=False)
+        if abs(float(i_ua) - 1.0) > 1e-6:
+            errors.append(f"settled current SIM must return uA, got {i_ua!r}")
+    except Exception as exc:
+        errors.append(f"settled current SIM raised on stable DMM: {exc!r}")
+    return errors
+
+
 def _registry_ok() -> list[str]:
     errors: list[str] = []
     load_family("logic")
@@ -627,6 +748,7 @@ def check_logic_dc() -> list[str]:
     errors += _scale_and_overlay_ok()
     errors += _seelim_wrap_ok()
     errors += _registry_ok()
+    errors += _settle_loop_ok()
     errors += _panel_ok()
     load_family("opamp")
     return errors
