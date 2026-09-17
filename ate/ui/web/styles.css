@@ -947,6 +947,20 @@ h3.subhead {
   font-size: var(--fs-xs);
 }
 .logic-dc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.vcc-chip, .vcc-range-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  margin: 4px 0;
+}
+.vcc-chip label, .vcc-range-row label { margin: 0; }
+.vcc-chip input, .vcc-range-row input { width: 5.5em; }
+.vcc-range-row input.vcc-range-label { width: 8em; }
+.logic-dc-stim { display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0; }
 .logic-dc-json { margin-top: 10px; }
 .logic-dc-json summary { cursor: pointer; color: var(--muted); font-size: var(--fs-sm); }
 #logic-dc-card-fields textarea { width: 100%; min-height: 3.2em; }

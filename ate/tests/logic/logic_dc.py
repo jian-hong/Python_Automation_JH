@@ -47,9 +47,12 @@ from ate.tests.logic.product_model import (
     load_product_model,
     logic_volts,
     lookup_pass_mode,
+    lookup_vcc_grid_limits,
     operator_pause,
     path_b_handoff,
     resolve_data_paths,
+    vcc_grid_stimulus,
+    vcc_grid_unconfirmed,
     vectors_for_output,
 )
 
@@ -63,6 +66,28 @@ def _require(instr, *names: str) -> None:
     missing = [n for n in names if getattr(instr, remap[n], None) is None]
     if missing:
         raise RuntimeError(f"Missing instruments: {', '.join(missing)}")
+
+
+def _needs_awg(model: ProductModel) -> bool:
+    if any(dm.src == "awg" for dm in (model.pin_drive or {}).values()):
+        return True
+    return vcc_grid_stimulus(model) == "AWG"
+
+
+def _needs_mso(model: ProductModel, test_id: str) -> bool:
+    tid = str(test_id or "").strip().lower()
+    if vcc_grid_stimulus(model) != "PSU_MSO":
+        return False
+    return tid in {"input_threshold", "vth"}
+
+
+def _require_for(instr, model: ProductModel, test_id: str = "") -> None:
+    names = ["PSU", "DMM"]
+    if _needs_awg(model):
+        names.append("AWG")
+    if _needs_mso(model, test_id):
+        names.append("MSO")
+    _require(instr, *names)
 
 
 def _pause(params: Any, title: str, checklist: Optional[list[str]] = None) -> bool:
@@ -139,6 +164,9 @@ def _meas(
     if _provisional_dc(model, test_id):
         row["greenable"] = False
         row["status"] = "PROVISIONAL"
+    if str(test_id or "").strip().lower() in {"input_threshold", "vth"} and vcc_grid_unconfirmed(model):
+        row["greenable"] = False
+        row["status"] = "UNCONFIRMED"
     return row
 
 
@@ -167,7 +195,11 @@ def _finish(model: ProductModel, test_id: str, payload: dict[str, Any]) -> dict[
     greenable = signed and not _provisional_dc(model, test_id)
     if uses_tt and is_unconfirmed_status(model.truth_table_status):
         greenable = False
+    if str(test_id or "").strip().lower() in {"input_threshold", "vth"} and vcc_grid_unconfirmed(model):
+        greenable = False
     data["greenable"] = bool(greenable)
+    data["vcc_grid"] = dict(model.vcc_grid or {})
+    data["stimulus"] = vcc_grid_stimulus(model)
     if not greenable and uses_tt:
         tag = (
             f"truth_table.status={model.truth_table_status or 'UNCONFIRMED'} "
@@ -439,9 +471,15 @@ def _force_psu(instr, ch: int, volts: float, ilim: float) -> None:
 
 
 def _drive_for_sweep(model: ProductModel, sweep_pin: str) -> dict[str, DriveMap]:
-    """Swept pin on AWG CH1 for fine steps; other pins keep YAML map (shifted if clash)."""
+    """PSU_MSO keeps YAML pin_drive. AWG stimulus: swept pin on AWG CH1."""
     drives = dict(model.pin_drive)
     sweep = str(sweep_pin).upper()
+    if vcc_grid_stimulus(model) == "PSU_MSO":
+        if sweep not in drives:
+            raise RuntimeError(
+                f"PSU_MSO: pin_drive missing {sweep} (keep YAML map; do not steal AWG CH1)"
+            )
+        return drives
     drives[sweep] = DriveMap(src="awg", ch=1)
     for name, dm in list(drives.items()):
         if name == sweep:
@@ -546,8 +584,8 @@ def _sweep_threshold(
 
 
 def _run_input_threshold(instr, params: Any) -> dict[str, Any]:
-    _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
+    _require_for(instr, model, "input_threshold")
     with path_b_handoff(params, model, "input_threshold"):
         ilim = _current_limit(params, model)
         vccs = _vcc_corners(params, model)
@@ -588,6 +626,11 @@ def _run_input_threshold(instr, params: Any) -> dict[str, Any]:
                             "fix": dict(pat.fix),
                             "y_expect": pat.y_expect,
                         }
+                        lim = lookup_vcc_grid_limits(model, vcc) or {}
+                        if lim:
+                            rec["vcc_owner"] = lim.get("source")
+                            rec["VIH_min_V"] = lim.get("VIH_min_V")
+                            rec["VIL_max_V"] = lim.get("VIL_max_V")
                         if schmitt:
                             rec["VT+"] = rise
                             rec["VT-"] = fall
@@ -614,10 +657,34 @@ def _run_input_threshold(instr, params: Any) -> dict[str, Any]:
         else:
             summary = f"VTH n={len(rows)} last VIH={last.get('VIH')} VIL={last.get('VIL')}"
             meas = []
+            for rec in rows:
+                vcc = rec.get("VCC")
+                tag = str(vcc).replace(".", "p")
+                lim = lookup_vcc_grid_limits(model, vcc) or {}
+                if rec.get("VIH") is not None:
+                    row = _meas(model, f"VIH_{tag}V", rec["VIH"], "V", test_id="input_threshold")
+                    if lim.get("VIH_min_V") is not None:
+                        row["min"] = lim["VIH_min_V"]
+                    row["pass_mode"] = lookup_pass_mode(model, "VIH", "input_threshold") or "min_only"
+                    meas.append(row)
+                if rec.get("VIL") is not None:
+                    row = _meas(model, f"VIL_{tag}V", rec["VIL"], "V", test_id="input_threshold")
+                    if lim.get("VIL_max_V") is not None:
+                        row["max"] = lim["VIL_max_V"]
+                    row["pass_mode"] = lookup_pass_mode(model, "VIL", "input_threshold") or "max_only"
+                    meas.append(row)
             if last.get("VIH") is not None:
-                meas.append(_meas(model, "VIH_V", last["VIH"], "V", test_id="input_threshold"))
+                last_vih = _meas(model, "VIH_V", last["VIH"], "V", test_id="input_threshold")
+                lim_last = lookup_vcc_grid_limits(model, last.get("VCC")) or {}
+                if lim_last.get("VIH_min_V") is not None:
+                    last_vih["min"] = lim_last["VIH_min_V"]
+                meas.append(last_vih)
             if last.get("VIL") is not None:
-                meas.append(_meas(model, "VIL_V", last["VIL"], "V", test_id="input_threshold"))
+                last_vil = _meas(model, "VIL_V", last["VIL"], "V", test_id="input_threshold")
+                lim_last = lookup_vcc_grid_limits(model, last.get("VCC")) or {}
+                if lim_last.get("VIL_max_V") is not None:
+                    last_vil["max"] = lim_last["VIL_max_V"]
+                meas.append(last_vil)
         return _finish(
             model,
             "input_threshold",
@@ -631,8 +698,8 @@ def pattern_rising_first(pat: IsolationPattern) -> bool:
 
 def _run_icc(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE ICC: DMM-on-VCC (series with PSU CH1 / DUT VCC).
-    _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
+    _require_for(instr, model, "icc")
     with path_b_handoff(params, model, "icc"):
         ilim = _current_limit(params, model)
         pins = icc_pins(model)
@@ -669,7 +736,6 @@ def _run_icc(instr, params: Any) -> dict[str, Any]:
 
 def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at VCC-offset.
-    _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
     offset = model.recipe.get("delta_offset_v")
     if offset is None:
@@ -677,6 +743,7 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
             "delta_icc: recipe.delta_offset_v missing (datasheet dICC, e.g. VCC-0.6). "
             "Do not invent; add it to product_model YAML."
         )
+    _require_for(instr, model, "delta_icc")
     offset_v = float(offset)
     with path_b_handoff(params, model, "delta_icc"):
         ilim = _current_limit(params, model)
@@ -742,8 +809,8 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
 
 def _run_ii(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE II: DMM in series with the swept input; force VI.
-    _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
+    _require_for(instr, model, "ii")
     with path_b_handoff(params, model, "ii"):
         ilim = _current_limit(params, model)
         vccs = _vcc_corners(params, model, "ii_vcc_list")
@@ -834,10 +901,8 @@ def _apply_y_vector(instr, model: ProductModel, high: bool, vcc: float, ilim: fl
 
 def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE VOH: force Y-high; DMM sense V(Y). Loaded IOH only from voh_table.
-    _require(instr, "PSU", "DMM")
     model = _model(params)
-    if getattr(instr, "gen", None) is None:
-        raise RuntimeError("Missing instruments: AWG")
+    _require_for(instr, model, "voh")
     with path_b_handoff(params, model, "voh"):
         ilim = _current_limit(params, model)
         key = str(getattr(params, "part", "") or "").lower()
@@ -923,10 +988,8 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
 
 def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE VOL: force Y-low; DMM sense V(Y). Loaded IOL only from vol_table.
-    _require(instr, "PSU", "DMM")
     model = _model(params)
-    if getattr(instr, "gen", None) is None:
-        raise RuntimeError("Missing instruments: AWG")
+    _require_for(instr, model, "vol")
     with path_b_handoff(params, model, "vol"):
         ilim = _current_limit(params, model)
         key = str(getattr(params, "part", "") or "").lower()
@@ -1016,7 +1079,7 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
             "Remove ioz from enabled_tests."
         )
     # INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
-    _require(instr, "PSU", "AWG", "DMM")
+    _require_for(instr, model, "ioz")
     with path_b_handoff(params, model, "ioz"):
         ilim = _current_limit(params, model)
         vccs = _vcc_corners(params, model, "ioz_vcc_list")
@@ -1101,56 +1164,56 @@ _register(
     "input_threshold",
     "Input threshold (VTH)",
     "VTH",
-    frozenset({"PSU", "AWG", "DMM"}),
+    frozenset({"PSU", "DMM"}),
     _run_input_threshold,
 )
 _register(
     "vth",
     "VTH",
     "VTH",
-    frozenset({"PSU", "AWG", "DMM"}),
+    frozenset({"PSU", "DMM"}),
     _run_input_threshold,
 )
 _register(
     "icc",
     "ICC",
     "Icc",
-    frozenset({"PSU", "AWG", "DMM"}),
+    frozenset({"PSU", "DMM"}),
     _run_icc_dispatch,
 )
 _register(
     "delta_icc",
     "Delta ICC",
     "DeltaICC",
-    frozenset({"PSU", "AWG", "DMM"}),
+    frozenset({"PSU", "DMM"}),
     _run_delta_icc,
 )
 _register(
     "ii",
     "Input current (II)",
     "II",
-    frozenset({"PSU", "AWG", "DMM"}),
+    frozenset({"PSU", "DMM"}),
     _run_ii,
 )
 _register(
     "voh",
     "VOH",
     "VOH",
-    frozenset({"PSU", "DMM", "AWG"}),
+    frozenset({"PSU", "DMM"}),
     _run_voh_dispatch,
 )
 _register(
     "vol",
     "VOL",
     "VOL",
-    frozenset({"PSU", "DMM", "AWG"}),
+    frozenset({"PSU", "DMM"}),
     _run_vol_dispatch,
 )
 _register(
     "ioz",
     "IOZ (OE inactive)",
     "IOZ",
-    frozenset({"PSU", "AWG", "DMM"}),
+    frozenset({"PSU", "DMM"}),
     _run_ioz,
 )
 

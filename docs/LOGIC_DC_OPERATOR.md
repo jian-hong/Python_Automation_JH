@@ -69,8 +69,8 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 
 1. Product-model schema load (`ate/config/parts/<key>.yaml` `product_model` / `logic_dc:`). Isolation derives from `truth_table` (Y tracks the swept pin; invert only if no track combo).
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
-3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green.
-4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). Visual tables **Save Version overlay** write `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (vcc_list, pass_mode, `stable_eps_A`).
+3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **DRAFT / UNCONFIRMED until JH CONFIRM** -- numbers are not greenable.
+4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, stimulus PSU_MSO vs AWG, n) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` only (`vcc_grid`, merged `vcc_list`, `pass_mode` VIH=min_only / VIL=max_only, `sample_size`, `stable_eps_A`). Not xyflow. Visual tables still write pass_mode on the limits table.
 5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4. Timeout SIM raises. **Not a reproduce claim.**
 
 DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure. START.bat is still how the zip console comes up.
@@ -86,12 +86,27 @@ After each PSU VCC switch and pin force: **PSU -> settle -> measure**. Voltage m
 | ICC | DMM-on-VCC (DMM in series with PSU CH1 / DUT VCC) | All `2^n` corners. Null `stable_eps_A` = NON_TIGHT. Overlay amps for tight settle-to-stable |
 | ΔICC | DMM-on-VCC; one input at VCC-offset, others at rail | Needs `recipe.delta_offset_v` (97/126: 0.6). Do not invent the offset |
 | II | DMM in series with the swept input; force VI | Per input, VI=0 and VI=max |
-| VTH / VIH / VIL | Force unused ties from truth_table; DMM sense V(Y) | 97 Schmitt = VT+/VT- (range). 126 = VIH min_only / VIL max_only |
+| VTH / VIH / VIL | Force unused ties from truth_table; DMM sense V(Y) | 97 Schmitt = VT+/VT- (range). 126 = VIH min_only / VIL max_only. 34 DRAFT: per-VCC limits from `vcc_grid` (UNCONFIRMED until JH CONFIRM -- not greenable) |
 | VOH | Force Y=H from truth_table; DMM sense V(Y); IOH via PSU CH2 | Loaded rows only from CONFIRMED `voh_table`. Judge **VOH >= min** (`min_only`) |
 | VOL | Force Y=L from truth_table; DMM sense V(Y); IOL via PSU CH2 | Loaded rows only from CONFIRMED `vol_table`. Judge **VOL <= max** (`max_only`) |
 | IOZ | Only if OE exists. OE inactive; DMM in series with Y; PSU CH2 force Vout | 126: yes. 97 `oe: none`: do **not** tick ioz |
 
-PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC -- fixture, not a datasheet Vref). RS1G97 pin C is PSU CH3 (checklist: AWG CH1=A CH2=B). RS1G126: AWG CH1=A CH2=OE; no C.
+PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC -- fixture, not a datasheet Vref) **only when the CONFIRMED card says so (97/126)**. RS1G97 pin C is PSU CH3 (checklist: AWG CH1=A CH2=B). RS1G126: AWG CH1=A CH2=OE; no C. RS1GT34 DRAFT PSU_MSO: PSU CH1=VCC, PSU CH3=A; DMM/SCOPE on Y; NC not wired; **do not invent PSU CH2 or AWG Freq/Amp**.
+
+## Customise Parameters (`vcc_grid`)
+
+Setup **Logic DC recipe** -- Customise Parameters (no xyflow):
+
+1. **FIXED POINTS** chips -- add/remove VCC; each chip has editable VIH min / VIL max.
+2. **RANGE SWEEPS** -- Add range start/stop/step (default 0.1); optional label; **same** VIH/VIL limits for every stepped VCC in that band. Range steps inherit band limits -- they are not stored as a fixed-point row.
+3. Preview merged `vcc_list` before START.
+4. Stimulus: **PSU_MSO** (hides Freq/Amp; omit Hz/V -- do not invent) vs **AWG**.
+5. n (`sample_size`); pass_mode VIH=`min_only` VIL=`max_only`.
+6. **Save Version overlay** writes campaign `_manifest/test_params.yaml` only (not Save product_model).
+
+Runner merges `fixed_points` + `ranges` -> `vcc_list`. Per-VCC VIH/VIL from the owning fixed point or range. Exact-VCC fixed points overwrite range-step ownership.
+
+Numbers on `vcc_grid` stay **UNCONFIRMED until JH CONFIRM** -- fail-closed for numbers green.
 
 Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/`.
 
@@ -167,3 +182,12 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 
 - VIH min_only / VIL max_only. OE active high. IOZ when OE inactive (data don't-care; Vout sweep per recipe `ioz_vcc_list` / `ioz_vout_list` already on the card -- do not invent).
 - ICC corners = 4 (A+OE).
+
+**RS1GT34 extra (DRAFT / UNCONFIRMED until JH CONFIRM)**
+
+- Console up via **START.bat**. Campaign `#Test_Database/Logic/RS1GT34/...`. Owner note: Chun Tak / Core AE OK.
+- n=1. Y=A. Not Schmitt. `oe: none` -- do **not** tick ioz.
+- Stimulus **PSU_MSO** -- hide Freq/Amp. PSU CH1=VCC, PSU CH3=A, DMM/SCOPE Y. Do not invent PSU CH2 or AWG nets.
+- Tick Path B DC: `input_threshold`, `icc`, `delta_icc`, `ii`, `voh`, `vol`. `delta_icc` FAIL-closes until `recipe.delta_offset_v` is signed (do not invent 0.6). VOH/VOL unloaded -- no invented IOH/IOL.
+- `vcc_grid` DRAFT: fixed 2.0 (VIH>=1.0 VIL<=0.3), 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Preview merged `vcc_list` before START. Numbers not greenable until JH CONFIRM.
+- ICC corners = 2 (A). START.bat first. No Verify PASS.

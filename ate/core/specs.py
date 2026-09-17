@@ -353,6 +353,15 @@ def measurements_from_result(
                                 m["result"] = "unspec"
                                 m["greenable"] = False
                                 m.setdefault("note", "dc_limits PROVISIONAL; not greenable")
+                if model is not None and tid in {"input_threshold", "vth"}:
+                    from ate.tests.logic.product_model import vcc_grid_unconfirmed
+
+                    if vcc_grid_unconfirmed(model):
+                        for m in out:
+                            if m.get("result") == "pass":
+                                m["result"] = "unspec"
+                                m["greenable"] = False
+                                m.setdefault("note", "vcc_grid UNCONFIRMED; not greenable")
         except Exception:
             pass
     return [m for m in out if m.get("id")]

@@ -37,6 +37,12 @@ product_model:
   oe: none                # none | {pin: OE, active: high|low}
   logic_inputs: [A, B]    # corners = 2^n (OE extra for ICC when present)
   vcc_list: [1.65, 5.0]   # alias: vcc_sweep_list
+  vcc_grid:               # Customise Parameters (overlay or YAML). Merges to vcc_list.
+    stimulus: PSU_MSO     # PSU_MSO hides Freq/Amp; AWG keeps them
+    pass_mode: {VIH: min_only, VIL: max_only}
+    fixed_points: [{vcc: 2.0, VIH_min_V: 1.0, VIL_max_V: 0.3}]
+    ranges: [{start: 4.5, stop: 5.5, step: 0.1, VIH_min_V: 2.0, VIL_max_V: 0.8, label: optional}]
+    status: UNCONFIRMED   # numbers not greenable until JH CONFIRM
   pins:
     - {name: A, role: input}
     - {name: Y, role: output}
@@ -65,7 +71,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 ### What the shared runner derives
 
 - **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4.
-- **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`.
+- **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`. Per-VCC VIH min / VIL max come from `vcc_grid` (owning fixed point or range band). Range steps inherit band limits -- never a fixed-point row. `vcc_grid.status` UNCONFIRMED is not greenable.
 - **II** -- per input, VI=0 and VI=max.
 - **Delta ICC** -- one input at VCC-offset.
 - **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`.

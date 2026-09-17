@@ -562,18 +562,22 @@ function benchValues() {
   if (activeFamily !== "opamp") {
     const out = {
       vcc: condNum("vcc", d.vcc),
-      freq_hz: d.freq_hz,
-      amp_vpp: d.amp_vpp,
       n_repeats: d.n_repeats,
       ...extra,
     };
-    const vccb = extra.vccb != null ? extra.vccb : condNum("vccb", d.vccb);
-    if (vccb != null && Number.isFinite(Number(vccb))) out.vccb = Number(vccb);
-    if (isManualMode() && $("freq")) {
-      out.freq_hz = Number($("freq").value);
-      out.amp_vpp = Number($("amp").value);
+    if (logicStimulus() !== "PSU_MSO") {
+      out.freq_hz = d.freq_hz;
+      out.amp_vpp = d.amp_vpp;
+      if (isManualMode() && $("freq")) {
+        out.freq_hz = Number($("freq").value);
+        out.amp_vpp = Number($("amp").value);
+        out.n_repeats = Number($("repeats").value);
+      }
+    } else if (isManualMode() && $("repeats")) {
       out.n_repeats = Number($("repeats").value);
     }
+    const vccb = extra.vccb != null ? extra.vccb : condNum("vccb", d.vccb);
+    if (vccb != null && Number.isFinite(Number(vccb))) out.vccb = Number(vccb);
     return out;
   }
   if (isManualMode()) {
@@ -1162,6 +1166,228 @@ function passModeSelect(sid, cur, extraClass) {
   return `<select class="${cls}" data-id="${sid}">${opts}</select>`;
 }
 
+function numOrNull(raw) {
+  const t = String(raw == null ? "" : raw).trim();
+  if (!t || t.toLowerCase() === "null" || t.toLowerCase() === "none") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function seedVccGrid(dc) {
+  const g = (dc && dc.vcc_grid) || {};
+  const fixed = Array.isArray(g.fixed_points) ? g.fixed_points.map((p) => ({ ...p })) : [];
+  const ranges = Array.isArray(g.ranges) ? g.ranges.map((r) => ({ ...r })) : [];
+  if (!fixed.length && !ranges.length) {
+    (dc.vcc_list || dc.vcc_sweep_list || []).forEach((v) => {
+      fixed.push({ vcc: v, VIH_min_V: "", VIL_max_V: "" });
+    });
+  }
+  const pinDrive = (dc && dc.pin_drive) || {};
+  const hasAwg = Object.values(pinDrive).some((d) => d && String(d.src || "").toLowerCase() === "awg");
+  const stim = g.stimulus || dc.stimulus || (hasAwg ? "AWG" : "PSU_MSO");
+  return {
+    stimulus: stimToken(stim) || (hasAwg ? "AWG" : "PSU_MSO"),
+    pass_mode: { VIH: "min_only", VIL: "max_only", ...((g.pass_mode) || {}) },
+    fixed_points: fixed,
+    ranges,
+    status: g.status || "UNCONFIRMED",
+  };
+}
+
+function stimToken(raw) {
+  const s = String(raw || "").trim().toUpperCase().replace(/[-\/\s]/g, "_");
+  if (s === "PSU_MSO" || s === "PSUMSO") return "PSU_MSO";
+  if (s === "AWG") return "AWG";
+  return "";
+}
+
+function mergeVccGridJs(grid) {
+  const owned = {};
+  ((grid && grid.ranges) || []).forEach((band) => {
+    const start = Number(band.start);
+    const stop = Number(band.stop);
+    const step = Number(band.step) > 0 ? Number(band.step) : 0.1;
+    if (!Number.isFinite(start) || !Number.isFinite(stop) || step <= 0 || stop + 1e-9 < start) return;
+    const n = Math.round((stop - start) / step);
+    for (let i = 0; i <= n; i += 1) {
+      const v = Math.round((start + i * step) * 1e6) / 1e6;
+      if (v > stop + 1e-8) break;
+      owned[String(v)] = v;
+    }
+  });
+  ((grid && grid.fixed_points) || []).forEach((pt) => {
+    const v = Number(pt.vcc);
+    if (!Number.isFinite(v)) return;
+    const key = String(Math.round(v * 1e6) / 1e6);
+    owned[key] = Number(key);
+  });
+  return Object.keys(owned).map((k) => owned[k]).sort((a, b) => a - b);
+}
+
+function logicStimulus() {
+  const el = document.querySelector('input[name="logic-dc-stimulus"]:checked');
+  if (el && el.value) return stimToken(el.value) || el.value;
+  const dc = paramCatalog.logic_dc || {};
+  return stimToken((dc.vcc_grid && dc.vcc_grid.stimulus) || dc.stimulus) || "AWG";
+}
+
+function applyStimulusHide() {
+  const hide = logicStimulus() === "PSU_MSO";
+  ["freq-label", "amp-label"].forEach((id) => {
+    if ($(id)) $(id).classList.toggle("hidden", hide);
+  });
+  const awgNote = $("logic-dc-awg-note");
+  if (awgNote) awgNote.classList.toggle("hidden", hide);
+}
+
+function collectVccGridFromUi() {
+  const stimEl = document.querySelector('input[name="logic-dc-stimulus"]:checked');
+  const stimulus = stimToken(stimEl && stimEl.value) || "AWG";
+  const fixed = [];
+  document.querySelectorAll("#logic-dc-fixed-points .vcc-chip").forEach((chip) => {
+    const vcc = numOrNull(chip.querySelector(".vcc-fixed-vcc") && chip.querySelector(".vcc-fixed-vcc").value);
+    if (vcc == null) return;
+    fixed.push({
+      vcc,
+      VIH_min_V: numOrNull(chip.querySelector(".vcc-fixed-vih") && chip.querySelector(".vcc-fixed-vih").value),
+      VIL_max_V: numOrNull(chip.querySelector(".vcc-fixed-vil") && chip.querySelector(".vcc-fixed-vil").value),
+    });
+  });
+  const ranges = [];
+  document.querySelectorAll("#logic-dc-ranges .vcc-range-row").forEach((row) => {
+    const start = numOrNull(row.querySelector(".vcc-range-start") && row.querySelector(".vcc-range-start").value);
+    const stop = numOrNull(row.querySelector(".vcc-range-stop") && row.querySelector(".vcc-range-stop").value);
+    if (start == null || stop == null) return;
+    const stepRaw = numOrNull(row.querySelector(".vcc-range-step") && row.querySelector(".vcc-range-step").value);
+    const item = {
+      start,
+      stop,
+      step: stepRaw == null ? 0.1 : stepRaw,
+      VIH_min_V: numOrNull(row.querySelector(".vcc-range-vih") && row.querySelector(".vcc-range-vih").value),
+      VIL_max_V: numOrNull(row.querySelector(".vcc-range-vil") && row.querySelector(".vcc-range-vil").value),
+    };
+    const label = String((row.querySelector(".vcc-range-label") && row.querySelector(".vcc-range-label").value) || "").trim();
+    if (label) item.label = label;
+    ranges.push(item);
+  });
+  return {
+    stimulus,
+    pass_mode: { VIH: "min_only", VIL: "max_only" },
+    fixed_points: fixed,
+    ranges,
+    status: "UNCONFIRMED",
+  };
+}
+
+function refreshVccPreview() {
+  const preview = $("logic-dc-vcc-preview");
+  const vccInput = $("logic-dc-vcc");
+  const merged = mergeVccGridJs(collectVccGridFromUi());
+  const txt = merged.length ? merged.join(", ") : "--";
+  if (preview) preview.textContent = `Preview merged vcc_list: ${txt}`;
+  if (vccInput) vccInput.value = merged.join(", ");
+}
+
+function fixedChipHtml(pt) {
+  const v = pt && pt.vcc != null ? pt.vcc : "";
+  const vih = pt && pt.VIH_min_V != null && pt.VIH_min_V !== "" ? pt.VIH_min_V : "";
+  const vil = pt && pt.VIL_max_V != null && pt.VIL_max_V !== "" ? pt.VIL_max_V : "";
+  return `<div class="vcc-chip">
+    <label>VCC <input class="vcc-fixed-vcc" type="number" step="0.01" value="${v}" /></label>
+    <label>VIH min <input class="vcc-fixed-vih" type="number" step="0.01" value="${vih}" /></label>
+    <label>VIL max <input class="vcc-fixed-vil" type="number" step="0.01" value="${vil}" /></label>
+    <button type="button" class="btn ghost vcc-remove-fixed">remove</button>
+  </div>`;
+}
+
+function rangeRowHtml(band) {
+  const b = band || {};
+  const step = b.step != null && b.step !== "" ? b.step : 0.1;
+  const lab = b.label || "";
+  const vih = b.VIH_min_V != null && b.VIH_min_V !== "" ? b.VIH_min_V : "";
+  const vil = b.VIL_max_V != null && b.VIL_max_V !== "" ? b.VIL_max_V : "";
+  return `<div class="vcc-range-row">
+    <label>start <input class="vcc-range-start" type="number" step="0.01" value="${b.start != null ? b.start : ""}" /></label>
+    <label>stop <input class="vcc-range-stop" type="number" step="0.01" value="${b.stop != null ? b.stop : ""}" /></label>
+    <label>step <input class="vcc-range-step" type="number" step="0.01" value="${step}" /></label>
+    <label>VIH min <input class="vcc-range-vih" type="number" step="0.01" value="${vih}" /></label>
+    <label>VIL max <input class="vcc-range-vil" type="number" step="0.01" value="${vil}" /></label>
+    <label>label <input class="vcc-range-label" type="text" value="${lab}" /></label>
+    <button type="button" class="btn ghost vcc-remove-range">remove</button>
+  </div>`;
+}
+
+function renderCustomiseParameters(dc) {
+  const grid = seedVccGrid(dc);
+  const n = (dc && dc.sample_size) || paramCatalog.sample_size || 1;
+  const stimPsu = grid.stimulus === "PSU_MSO" ? "checked" : "";
+  const stimAwg = grid.stimulus !== "PSU_MSO" ? "checked" : "";
+  const chips = (grid.fixed_points || []).map(fixedChipHtml).join("") || "<p class=\"hint\">No fixed points. Add VCC.</p>";
+  const ranges = (grid.ranges || []).map(rangeRowHtml).join("") || "<p class=\"hint\">No range sweeps. Add range.</p>";
+  const preview = mergeVccGridJs(grid);
+  return (
+    "<h3 class=\"subhead\">Customise Parameters</h3>" +
+    "<p class=\"hint\">FIXED POINTS chips + RANGE SWEEPS. Same VIH min / VIL max for every stepped VCC in a band. Range steps are not a fixed-point row. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> only. Numbers UNCONFIRMED until JH CONFIRM -- not greenable. No xyflow.</p>" +
+    `<div class="logic-dc-stim">
+      <label class="check"><input type="radio" name="logic-dc-stimulus" value="PSU_MSO" ${stimPsu} /> PSU_MSO</label>
+      <label class="check"><input type="radio" name="logic-dc-stimulus" value="AWG" ${stimAwg} /> AWG</label>
+    </div>` +
+    "<p class=\"hint\" id=\"logic-dc-awg-note\">AWG: Freq/Amp stay on Advanced bench. PSU_MSO hides Freq/Amp (omit -- do not invent Hz/V).</p>" +
+    `<label>n (sample_size)<input id="logic-dc-n" type="number" min="1" step="1" value="${n}" /></label>` +
+    "<p class=\"hint\">pass_mode: VIH=min_only / VIL=max_only</p>" +
+    "<h3 class=\"subhead\">FIXED POINTS</h3>" +
+    `<div id="logic-dc-fixed-points">${chips}</div>` +
+    "<button type=\"button\" class=\"btn ghost\" id=\"logic-dc-add-fixed\">Add VCC</button>" +
+    "<h3 class=\"subhead\">RANGE SWEEPS</h3>" +
+    `<div id="logic-dc-ranges">${ranges}</div>` +
+    "<button type=\"button\" class=\"btn ghost\" id=\"logic-dc-add-range\">Add range</button>" +
+    `<p class="hint" id="logic-dc-vcc-preview">Preview merged vcc_list: ${preview.length ? preview.join(", ") : "--"}</p>`
+  );
+}
+
+function wireCustomiseParams() {
+  const boxF = $("logic-dc-fixed-points");
+  const boxR = $("logic-dc-ranges");
+  if ($("logic-dc-add-fixed") && boxF) {
+    $("logic-dc-add-fixed").onclick = () => {
+      boxF.insertAdjacentHTML("beforeend", fixedChipHtml({ vcc: "", VIH_min_V: "", VIL_max_V: "" }));
+      refreshVccPreview();
+    };
+  }
+  if ($("logic-dc-add-range") && boxR) {
+    $("logic-dc-add-range").onclick = () => {
+      boxR.insertAdjacentHTML("beforeend", rangeRowHtml({ start: "", stop: "", step: 0.1 }));
+      refreshVccPreview();
+    };
+  }
+  const panel = $("logic-dc-body");
+  if (panel) {
+    panel.onclick = (ev) => {
+      const t = ev.target;
+      if (t && t.classList && t.classList.contains("vcc-remove-fixed")) {
+        const chip = t.closest(".vcc-chip");
+        if (chip) chip.remove();
+        refreshVccPreview();
+      }
+      if (t && t.classList && t.classList.contains("vcc-remove-range")) {
+        const row = t.closest(".vcc-range-row");
+        if (row) row.remove();
+        refreshVccPreview();
+      }
+    };
+    panel.oninput = (ev) => {
+      if (ev.target && ev.target.closest && (ev.target.closest(".vcc-chip") || ev.target.closest(".vcc-range-row"))) {
+        refreshVccPreview();
+      }
+    };
+  }
+  document.querySelectorAll('input[name="logic-dc-stimulus"]').forEach((el) => {
+    el.onchange = () => applyStimulusHide();
+  });
+  applyStimulusHide();
+  refreshVccPreview();
+}
+
 function renderLogicDc() {
   const panel = $("panel-logic-dc");
   const body = $("logic-dc-body");
@@ -1193,11 +1419,12 @@ function renderLogicDc() {
   const vcc = (dc.vcc_list || dc.vcc_sweep_list || []).join(", ");
   const epsA = dc.stable_eps_A;
   const epsAShow = (epsA === null || epsA === undefined || epsA === "") ? "" : String(epsA);
+  const customiseHtml = renderCustomiseParameters(dc);
   const recipeHtml =
     "<h3 class=\"subhead\">Recipe</h3>" +
     `<p class="hint">logic_inputs: ${inputs.join(", ") || "--"} · vcc_list: ${vcc || "--"} · ICC pins: ${(dc.icc_pins || []).join(",") || "--"}</p>` +
     `<p class="hint">Voltage settle uses stable_eps_V. Current uses stable_eps_A (amps) only; never reuse volts as amps. Blank/null = NON_TIGHT (wait settle_s once; not greenable as tight-settle). Set a grounded amp number for eps/N hard-FAIL. Tight claim without eps FAIL-closes. Do not invent a uA default.</p>` +
-    `<label>vcc_list (comma)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>` +
+    `<label>vcc_list (comma; filled from preview)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>` +
     `<label>stable_eps_A overlay (amps; blank = null / NON_TIGHT)<input id="logic-dc-stable-eps-a" type="text" value="${epsAShow}" placeholder="null" /></label>`;
   const cardHtml = renderCardFields(dc.card_fields || []);
   const tt = dc.truth_table || [];
@@ -1265,12 +1492,13 @@ function renderLogicDc() {
   specHtml += "</tbody></table>";
   const gaps = (dc.gaps || []).map((g) => `<li>${g}</li>`).join("");
   const gapHtml = gaps ? `<h3 class="subhead">Gaps</h3><ul class="hint">${gaps}</ul>` : "";
-  body.innerHTML = enHtml + recipeHtml + cardHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
+  body.innerHTML = enHtml + customiseHtml + recipeHtml + cardHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
   if (hint && !hint.textContent) {
-    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (pass_mode + vcc_list + stable_eps_A). Save product_model writes card_fields.schema.yaml keys. Ctrl+F5 after worker restart if RPC is new.";
+    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml only (vcc_grid + merged vcc_list + pass_mode + n + stable_eps_A). Save product_model writes card_fields.schema.yaml keys. Ctrl+F5 after worker restart if RPC is new.";
   }
   wirePassModeSync();
   wireCardFieldDeletes();
+  wireCustomiseParams();
 }
 
 function kindLabel(kind) {
@@ -2799,6 +3027,19 @@ async function saveTestParamsOverlay() {
         throw new Error("stable_eps_A must be a number in amps, or blank for null (NON_TIGHT)");
       }
       blob.stable_eps_A = n;
+    }
+  }
+  if (logicOpen && $("logic-dc-fixed-points")) {
+    const grid = collectVccGridFromUi();
+    blob.vcc_grid = grid;
+    blob.vcc_list = mergeVccGridJs(grid);
+    blob.pass_mode = blob.pass_mode || {};
+    blob.pass_mode.VIH = "min_only";
+    blob.pass_mode.VIL = "max_only";
+    const nEl = $("logic-dc-n");
+    if (nEl) {
+      const n = Number(nEl.value);
+      if (Number.isFinite(n) && n >= 1) blob.sample_size = Math.trunc(n);
     }
   }
   const res = await rpc("save_test_params", { test_params: blob });

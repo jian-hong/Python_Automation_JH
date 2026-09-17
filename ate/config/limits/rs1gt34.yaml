@@ -4,14 +4,18 @@ datasheet:
   source: local-reference
   file: C:\Users\OoiJianHong\Downloads\Reference\Reference\RS1GT34_(RevA.1.1).pdf
   extract: C:\Users\OoiJianHong\Eugene's Repo\PythonAutomation\ate\config\datasheets\text\rs1gt34.txt
+# Path B DRAFT. VIH/VIL live in product_model.vcc_grid (UNCONFIRMED until JH CONFIRM).
+# Do not invent VOH/VOL/II/dICC numbers here. ICC 1.0 is the existing extract.
 specs:
 - id: ICC_uA
   unit: uA
   max: 1.0
-  test: supply_current
+  pass_mode: max-only
+  test: icc
   source: local:RS1GT34_(RevA.1.1).pdf
 - id: VCC_V
   unit: V
   min: 2.0
   max: 5.5
+  pass_mode: range
   source: local:RS1GT34_(RevA.1.1).pdf

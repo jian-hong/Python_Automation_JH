@@ -184,6 +184,8 @@ class ProductModel:
     wire_map: dict[str, Any] = field(default_factory=dict)
     settle_prompt: dict[str, Any] = field(default_factory=dict)
     data_paths: dict[str, Any] = field(default_factory=dict)
+    vcc_grid: dict[str, Any] = field(default_factory=dict)
+    sample_size: Optional[int] = None
     raw: dict[str, Any] = field(default_factory=dict)
 
     def has_oe(self) -> bool:
@@ -336,7 +338,10 @@ def _floats(raw: Any) -> list[float]:
 
 
 def _vcc_list(blob: dict[str, Any], part_yaml: dict[str, Any]) -> list[float]:
-    """Sweep corners from YAML lists only. Never expand vcc_op_min/max."""
+    """Sweep corners from vcc_grid merge, else YAML lists. Never expand vcc_op_min/max."""
+    merged = merge_vcc_grid(blob.get("vcc_grid"))
+    if merged:
+        return merged
     for key in ("vcc_list", "vcc_sweep_list", "vcc_sweep"):
         nums = _floats(blob.get(key))
         if nums:
@@ -584,6 +589,10 @@ def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, 
         out["limit_mode"] = lm
     if overlay.get("gaps") is not None:
         out["gaps"] = overlay["gaps"]
+    if isinstance(overlay.get("vcc_grid"), dict):
+        out["vcc_grid"] = overlay["vcc_grid"]
+    if overlay.get("sample_size") is not None:
+        out["sample_size"] = overlay["sample_size"]
     return out
 
 
@@ -615,6 +624,185 @@ def _coerce_pass_mode(raw: Any) -> str:
     return ""
 
 
+def _vcc_key(v: float) -> float:
+    return round(float(v), 6)
+
+
+def _grid_limit_pair(row: dict[str, Any]) -> tuple[Optional[float], Optional[float]]:
+    vih = _opt_float(row.get("VIH_min_V", row.get("vih_min_v")))
+    vil = _opt_float(row.get("VIL_max_V", row.get("vil_max_v")))
+    return vih, vil
+
+
+def _step_band(start: float, stop: float, step: float) -> list[float]:
+    """Inclusive start..stop. Range steps inherit band limits -- not stored as fixed rows."""
+    try:
+        a = float(start)
+        b = float(stop)
+        s = float(step)
+    except (TypeError, ValueError):
+        return []
+    if s <= 0:
+        return []
+    if b + 1e-9 < a:
+        return []
+    n = int(round((b - a) / s))
+    if n < 0:
+        return []
+    out: list[float] = []
+    for i in range(n + 1):
+        v = _vcc_key(a + i * s)
+        if v > b + 1e-8:
+            break
+        out.append(v)
+    if out and abs(out[-1] - _vcc_key(b)) > 1e-6 and out[-1] < b:
+        out.append(_vcc_key(b))
+    return out
+
+
+def _stimulus_token(raw: Any) -> str:
+    s = str(raw or "").strip().upper().replace("-", "_").replace("/", "_").replace(" ", "_")
+    if s in ("PSU_MSO", "PSUMSO"):
+        return "PSU_MSO"
+    if s == "AWG":
+        return "AWG"
+    return ""
+
+
+def normalize_vcc_grid(raw: Any) -> dict[str, Any]:
+    """product_model.vcc_grid. Empty mapping if absent. Do not invent VIH/VIL numbers."""
+    if not isinstance(raw, dict) or not raw:
+        return {}
+    stim = _stimulus_token(raw.get("stimulus"))
+    pm: dict[str, str] = {}
+    if isinstance(raw.get("pass_mode"), dict):
+        for key, val in raw["pass_mode"].items():
+            mode = _coerce_pass_mode(val)
+            if mode:
+                pm[str(key).strip()] = mode
+    pm.setdefault("VIH", "min_only")
+    pm.setdefault("VIL", "max_only")
+    fixed: list[dict[str, Any]] = []
+    for row in _as_list(raw.get("fixed_points")):
+        if not isinstance(row, dict):
+            continue
+        vcc = _opt_float(row.get("vcc"))
+        if vcc is None:
+            continue
+        vih, vil = _grid_limit_pair(row)
+        fixed.append({"vcc": _vcc_key(vcc), "VIH_min_V": vih, "VIL_max_V": vil})
+    ranges: list[dict[str, Any]] = []
+    for row in _as_list(raw.get("ranges")):
+        if not isinstance(row, dict):
+            continue
+        start = _opt_float(row.get("start"))
+        stop = _opt_float(row.get("stop"))
+        step = _opt_float(row.get("step"))
+        if step is None:
+            step = 0.1
+        if start is None or stop is None:
+            continue
+        vih, vil = _grid_limit_pair(row)
+        item: dict[str, Any] = {
+            "start": _vcc_key(start),
+            "stop": _vcc_key(stop),
+            "step": float(step),
+            "VIH_min_V": vih,
+            "VIL_max_V": vil,
+        }
+        label = str(row.get("label") or "").strip()
+        if label:
+            item["label"] = label
+        ranges.append(item)
+    out: dict[str, Any] = {
+        "stimulus": stim or str(raw.get("stimulus") or "").strip(),
+        "pass_mode": pm,
+        "fixed_points": fixed,
+        "ranges": ranges,
+        "status": str(raw.get("status") or "UNCONFIRMED").strip() or "UNCONFIRMED",
+    }
+    return out
+
+
+def vcc_grid_owned(grid: Any) -> dict[float, dict[str, Any]]:
+    """Range steps first; exact-VCC fixed_points overwrite ownership."""
+    g = normalize_vcc_grid(grid)
+    owned: dict[float, dict[str, Any]] = {}
+    for band in g.get("ranges") or []:
+        rec_base = {
+            "VIH_min_V": band.get("VIH_min_V"),
+            "VIL_max_V": band.get("VIL_max_V"),
+            "source": "range",
+        }
+        label = band.get("label")
+        if label:
+            rec_base["label"] = label
+        for v in _step_band(band["start"], band["stop"], band["step"]):
+            item = dict(rec_base)
+            item["vcc"] = v
+            owned[_vcc_key(v)] = item
+    for pt in g.get("fixed_points") or []:
+        v = _vcc_key(pt["vcc"])
+        owned[v] = {
+            "vcc": v,
+            "VIH_min_V": pt.get("VIH_min_V"),
+            "VIL_max_V": pt.get("VIL_max_V"),
+            "source": "fixed",
+        }
+    return owned
+
+
+def merge_vcc_grid(grid: Any) -> list[float]:
+    """Unique merged vcc_list (fixed + range steps). Range steps are not fixed-point rows."""
+    owned = vcc_grid_owned(grid)
+    return [owned[k]["vcc"] for k in sorted(owned)]
+
+
+def lookup_vcc_grid_limits(model: Any, vcc: Any) -> Optional[dict[str, Any]]:
+    """Per-VCC VIH_min_V / VIL_max_V from owning fixed point or range band."""
+    grid = getattr(model, "vcc_grid", None)
+    if grid is None and isinstance(model, dict):
+        grid = model.get("vcc_grid", model)
+    try:
+        key = _vcc_key(float(vcc))
+    except (TypeError, ValueError):
+        return None
+    return vcc_grid_owned(grid).get(key)
+
+
+def vcc_grid_stimulus(model: Any) -> str:
+    """PSU_MSO | AWG. Missing grid defaults AWG when any pin_drive is awg (97/126)."""
+    grid: Any = getattr(model, "vcc_grid", None)
+    if isinstance(model, dict):
+        grid = model.get("vcc_grid") if isinstance(model.get("vcc_grid"), dict) else model
+    token = _stimulus_token((grid or {}).get("stimulus") if isinstance(grid, dict) else "")
+    if token:
+        return token
+    drives = getattr(model, "pin_drive", None) or {}
+    if isinstance(model, dict) and not drives:
+        drives = model.get("pin_drive") or {}
+    for dm in drives.values() if isinstance(drives, dict) else []:
+        src = getattr(dm, "src", None) or (dm.get("src") if isinstance(dm, dict) else "")
+        if str(src or "").strip().lower() == "awg":
+            return "AWG"
+    return "AWG"
+
+
+def vcc_grid_unconfirmed(model: Any) -> bool:
+    """Numbers on vcc_grid are not greenable until Datasheet-signed CONFIRMED."""
+    grid = getattr(model, "vcc_grid", None)
+    if isinstance(model, dict):
+        grid = model.get("vcc_grid")
+    if not isinstance(grid, dict) or not grid:
+        return False
+    if grid.get("fixed_points") in (None, []) and grid.get("ranges") in (None, []) and not grid.get("status"):
+        return False
+    st = grid.get("status") or getattr(model, "status", "") or "UNCONFIRMED"
+    if is_datasheet_signed(st):
+        return False
+    return True
+
+
 def _pass_mode(blob: dict[str, Any], schmitt: bool) -> dict[str, str]:
     """pass_mode wins; limit_mode is an alias. Do not collapse plain VIH/VIL to range."""
     out: dict[str, str] = {}
@@ -638,6 +826,12 @@ def _pass_mode(blob: dict[str, Any], schmitt: bool) -> dict[str, str]:
             out.setdefault("VIH", "min_only")
         if "VIL" not in out and "VIL_V" not in out:
             out.setdefault("VIL", "max_only")
+    grid = blob.get("vcc_grid") if isinstance(blob.get("vcc_grid"), dict) else {}
+    if isinstance(grid.get("pass_mode"), dict):
+        for key, val in grid["pass_mode"].items():
+            mode = _coerce_pass_mode(val)
+            if mode:
+                out[str(key).strip()] = mode
     return out
 
 
@@ -714,6 +908,17 @@ def model_gaps(model: ProductModel) -> list[str]:
             f"vcc_op {model.vcc_op_min}..{model.vcc_op_max} is range metadata "
             f"({model.vcc_op_status or 'RANGE_METADATA'}); sweep is vcc_list only"
         )
+    if model.vcc_grid:
+        gst = str((model.vcc_grid or {}).get("status") or "")
+        if vcc_grid_unconfirmed(model):
+            gaps.append(
+                f"vcc_grid.status={gst or 'UNCONFIRMED'} "
+                "(numbers not Datasheet-signed; not greenable)"
+            )
+        gaps.append(
+            f"stimulus={vcc_grid_stimulus(model)}; "
+            "range steps inherit band VIH/VIL (not a fixed-point row)"
+        )
     for name, block in (model.dc_limits or {}).items():
         if isinstance(block, dict) and is_unconfirmed_status(block.get("status")):
             gaps.append(f"{name}: {block.get('status')} ({block.get('note') or 'no invented loads'})")
@@ -768,6 +973,10 @@ def panel_payload(part_key: str) -> dict[str, Any]:
         "vcc_op_min": model.vcc_op_min,
         "vcc_op_max": model.vcc_op_max,
         "vcc_op_status": model.vcc_op_status,
+        "vcc_grid": dict(model.vcc_grid or {}),
+        "vcc_grid_preview": list(model.vcc_list),
+        "stimulus": vcc_grid_stimulus(model),
+        "sample_size": model.sample_size,
         "pass_mode": dict(model.pass_mode),
         "limit_mode": dict(model.limit_mode),
         "truth_table": tt,
@@ -866,6 +1075,8 @@ def _lookup_card_value(blob: dict[str, Any], model: ProductModel, key: str) -> A
         "vcc_op_min": model.vcc_op_min,
         "vcc_op_max": model.vcc_op_max,
         "vcc_op_status": model.vcc_op_status,
+        "vcc_grid": dict(model.vcc_grid or {}),
+        "sample_size": model.sample_size,
         "recipe": dict(model.recipe),
         "gaps": list(model.gaps),
         "dc_limits": dict(model.dc_limits),
@@ -1044,6 +1255,21 @@ def _pin_drive(blob: dict[str, Any], logic_inputs: list[str], oe_pin: str, oe_mo
     names = list(logic_inputs)
     if oe_mode != "none" and oe_pin and oe_pin not in names:
         names.append(oe_pin)
+    stim = ""
+    grid = blob.get("vcc_grid")
+    if isinstance(grid, dict):
+        stim = _stimulus_token(grid.get("stimulus"))
+    if stim == "PSU_MSO":
+        # CH1 is VCC. Do not invent PSU CH2 Y-load. Default leftover inputs at CH3+.
+        psu_ch = 3
+        for name in names:
+            if name in out:
+                continue
+            if psu_ch == 2:
+                psu_ch = 3
+            out[name] = DriveMap(src="psu", ch=psu_ch)
+            psu_ch += 1
+        return out
     awg_ch = 1
     psu_ch = 2
     for name in names:
@@ -1076,6 +1302,15 @@ def load_product_model(
     oe_mode, oe_pin = _oe(blob, pins)
     schmitt = bool(blob.get("schmitt"))
     vcc_list = _vcc_list(blob, part_yaml)
+    vcc_grid = normalize_vcc_grid(blob.get("vcc_grid"))
+    sample_size = None
+    try:
+        if blob.get("sample_size") is not None:
+            sample_size = max(1, int(blob.get("sample_size")))
+        elif part_yaml.get("sample_size") is not None:
+            sample_size = max(1, int(part_yaml.get("sample_size")))
+    except (TypeError, ValueError):
+        sample_size = None
     vcc_op_min = _opt_float(blob.get("vcc_op_min") or blob.get("vcc_min"))
     vcc_op_max = _opt_float(blob.get("vcc_op_max") or blob.get("vcc_max"))
     if vcc_op_min is None:
@@ -1157,12 +1392,14 @@ def load_product_model(
         recipe=recipe,
         output_pin=output_pin,
         status=str(blob.get("status") or tt_status),
-        vcc_list_status=str(blob.get("vcc_list_status") or ""),
+        vcc_list_status=str(blob.get("vcc_list_status") or (vcc_grid.get("status") if vcc_grid else "") or ""),
         vcc_op_status=str(blob.get("vcc_op_status") or "RANGE_METADATA"),
         gaps=_yaml_gaps(blob),
         wire_map=_as_dict(blob.get("wire_map")),
         settle_prompt=_as_dict(blob.get("settle_prompt")),
         data_paths=_as_dict(blob.get("data_paths")),
+        vcc_grid=vcc_grid,
+        sample_size=sample_size,
         raw=blob,
     )
 
@@ -1295,6 +1532,10 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
         "schmitt": bool(model.schmitt),
         "vcc_list": list(model.vcc_list),
         "vcc_sweep_list": list(model.vcc_list),
+        "vcc_grid": dict(model.vcc_grid or {}),
+        "vcc_grid_preview": list(model.vcc_list),
+        "stimulus": vcc_grid_stimulus(model),
+        "sample_size": model.sample_size,
         "truth_table": [dict(r) for r in model.truth_table],
         "truth_table_status": model.truth_table_status,
         "threshold_isolation": threshold_isolation,
@@ -1538,7 +1779,7 @@ def format_stimulus_lines(model: ProductModel, test_id: str) -> list[str]:
         name: f"{dm.src.upper()} CH{dm.ch}" for name, dm in (model.pin_drive or {}).items()
     }
     lines = [
-        f"Stimulus: Vcc={list(model.vcc_list)}",
+        f"Stimulus: {vcc_grid_stimulus(model)} Vcc={list(model.vcc_list)}",
         f"force pin_drive={drive}",
     ]
     if tid == "voh":

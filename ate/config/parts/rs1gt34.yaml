@@ -1,28 +1,176 @@
-# RS1GT34 Logic buffer -- Qualification Main SOT-353. Fill enabled_tests / Wrap as needed.
+# RS1GT34 Logic buffer -- Path B DRAFT / UNCONFIRMED.
+# Numbers UNCONFIRMED until JH CONFIRM -- fail-closed for numbers green.
+# Do not invent beyond DRAFT card. No VOH/VOL/II/dICC loads. No ioz (oe none).
+# Owner: Chun Tak / Core AE OK.
 
 part: RS1GT34
-model: RS1GT34XC5
+model: RS1GT34
 component: Logic
-package: SOT-353
+device: RS1GT34
+package: SOT23-5
 version: Version_1
-sample_size: 4
+sample_size: 1
 year: "2026"
+owner: chun_tak
 part_key: rs1gt34
 product_class: logic
+
 vcc: 5.0
 current_limit: 0.10
 timing:
   timeout_s: 4.0
   settle_s: 0.3
+
+# Path B DC ids. n=1 Y=A. No ioz (oe none). No vth (not Schmitt).
 enabled_tests:
-  - tp
-  - ten
-  - tdis
-  - supply_current
+  - input_threshold
+  - icc
+  - delta_icc
+  - ii
+  - voh
+  - vol
+
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1GT34)"
+    label: "Logic board (RS1GT34 / Path B DRAFT)"
     board_class: general
     checklist:
-      - "RS1GT34 is a single non-inverting buffer."
-    tests: [tp, ten, tdis, supply_current]
+      - "RS1GT34 is a single non-inverting buffer. Path B DRAFT. UNCONFIRMED until JH CONFIRM. Not a bench green."
+      - "PSU_MSO: PSU CH1=VCC; PSU CH3=A; DMM/SCOPE on Y. NC not wired. Do not invent PSU CH2 Y-load or AWG Freq/Amp."
+      - "vcc_grid DRAFT: fixed 2.0 (VIH>=1.0 VIL<=0.3) / 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Numbers not greenable."
+      - "oe none: do not enable ioz. n=1. Owner Chun Tak / Core AE OK."
+    tests:
+      - input_threshold
+      - icc
+      - delta_icc
+      - ii
+      - voh
+      - vol
+
+product_model:
+  part: RS1GT34
+  status: UNCONFIRMED
+  source_card: RS1GT34_card_DRAFT
+  truth_table_status: UNCONFIRMED
+  isolation_status: UNCONFIRMED
+  schmitt: false
+  oe: none
+  output_pin: Y
+  vcc_op_min: 2.0
+  vcc_op_max: 5.5
+  vcc_op_status: RANGE_METADATA
+  vcc_list_status: UNCONFIRMED
+  logic_inputs: [A]
+  # DRAFT card: SOT23-5 1=NC 2=A 3=GND 4=Y 5=VCC
+  pins:
+    - {name: NC, role: nc, number: 1}
+    - {name: A, role: input, number: 2}
+    - {name: GND, role: gnd, number: 3}
+    - {name: Y, role: output, number: 4}
+    - {name: VCC, role: vcc, number: 5}
+  pin_drive:
+    A: {src: psu, ch: 3}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: PSU_MSO
+    pass_mode: {VIH: min_only, VIL: max_only}
+    fixed_points:
+      - {vcc: 2.0, VIH_min_V: 1.0, VIL_max_V: 0.3}
+      - {vcc: 3.3, VIH_min_V: 1.5, VIL_max_V: 0.55}
+    ranges:
+      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min_V: 2.0, VIL_max_V: 0.8}
+  recipe:
+    threshold_step_v: 0.05
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null  # current settle: null = NON_TIGHT; do not invent uA
+    settle_timeout_s: 2.0
+    icc_corners: 2  # 2^1
+    # recipe.delta_offset_v omitted -- DRAFT card has no dICC offset; do not invent 0.6
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  limit_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    icc: {spec_id: ICC_uA, limit_mode: max_only, status: UNCONFIRMED}
+    delta_icc: {status: UNCONFIRMED, note: "recipe.delta_offset_v missing; do not invent"}
+    ii: {status: UNCONFIRMED, note: "no II number on DRAFT card"}
+    voh: {status: UNCONFIRMED, note: "no VOH/IOH on DRAFT card; do not invent loads"}
+    vol: {status: UNCONFIRMED, note: "no VOL/IOL on DRAFT card; do not invent loads"}
+    input_threshold: {status: UNCONFIRMED, note: "VIH/VIL from vcc_grid DRAFT; not Datasheet-signed"}
+  wire_map:
+    source: pins+pin_drive
+    status: UNCONFIRMED
+    note: "From DRAFT pins + pin_drive. PSU CH1=VCC. PSU CH3=A. NC not wired. Do not invent PSU CH2 Y-load or AWG nets."
+    psu:
+      CH1: {pin: VCC, number: 5, role: vcc}
+      CH3: {pin: A, number: 2, role: input}
+    gnd: {pin: GND, number: 3, role: gnd}
+    tests:
+      input_threshold:
+        psu: [CH1, CH3]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      icc:
+        psu: [CH1, CH3]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      delta_icc:
+        psu: [CH1, CH3]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      ii:
+        psu: [CH1, CH3]
+        dmm: A
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      voh:
+        psu: [CH1, CH3]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      vol:
+        psu: [CH1, CH3]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+  settle_prompt:
+    wait: true
+    voltage: "V eps/N: wait settle_s then stable_n within stable_eps_V; timeout hard-FAIL"
+    current_null: "I NON_TIGHT: wait settle_s once then measure (stable_eps_A null; not greenable as tight-settle)"
+    current_tight: "I tight: wait settle_s then stable_n within stable_eps_A; timeout hard-FAIL"
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
+  # DRAFT card: n=1 Y=A (non-inverting buffer). UNCONFIRMED until JH CONFIRM.
+  truth_table:
+    status: UNCONFIRMED
+    source: "DRAFT card n=1 Y=A; not Datasheet-signed"
+    rows:
+      - {A: L, Y: L}
+      - {A: H, Y: H}
+  isolation:
+    status: UNCONFIRMED
+    source: "derived from truth_table (Y=A); UNCONFIRMED"
+    tests:
+      A:
+        - {sweep_pin: A, fix: {}, y_expect: track}
+  gaps:
+    - "DRAFT / UNCONFIRMED until JH CONFIRM -- numbers not greenable"
+    - "No VOH/VOL IOH/IOL on DRAFT card -- do not invent loads"
+    - "delta_icc enabled but recipe.delta_offset_v omitted -- run FAIL-closes; do not invent 0.6"
+    - "oe=none: do not enable ioz/ioff"
+    - "PSU_MSO: hide Freq/Amp; do not invent AWG nets"

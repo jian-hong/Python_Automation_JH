@@ -34,10 +34,15 @@ from ate.tests.logic.product_model import (
     load_part_yaml,
     load_product_model,
     lookup_pass_mode,
+    lookup_vcc_grid_limits,
+    merge_vcc_grid,
     missing_data_path_keys,
     panel_save_keys,
     pins_named_in_wire_map,
     sim_icc_plan,
+    vcc_grid_owned,
+    vcc_grid_stimulus,
+    vcc_grid_unconfirmed,
     vectors_for_output,
     wire_map_for_test,
 )
@@ -656,6 +661,175 @@ def _settle_loop_ok() -> list[str]:
     return errors
 
 
+def _rs1gt34_draft_ok() -> list[str]:
+    """RS1GT34 Path B DRAFT. Numbers UNCONFIRMED until JH CONFIRM -- not greenable.
+
+    Do not call _fail_closed_until_signed (that FAIL-closes check until CONFIRMED).
+    Require UNCONFIRMED. Do not invent beyond DRAFT card.
+    """
+    errors: list[str] = []
+    m = load_product_model("rs1gt34")
+    if m is None:
+        return ["rs1gt34 product_model missing (Path B DRAFT)"]
+    yaml = load_part_yaml("rs1gt34")
+    if str(yaml.get("package") or "") != "SOT23-5":
+        errors.append(f"rs1gt34 package must be SOT23-5, got {yaml.get('package')!r}")
+    if int(yaml.get("sample_size") or 0) != 1:
+        errors.append(f"rs1gt34 sample_size must be 1, got {yaml.get('sample_size')}")
+    if m.sample_size != 1:
+        errors.append(f"rs1gt34 product_model sample_size must be 1, got {m.sample_size}")
+    if m.schmitt:
+        errors.append("rs1gt34 schmitt must be false (not Schmitt; VIH/VIL)")
+    if m.has_oe():
+        errors.append("rs1gt34 oe must be none")
+    if list(m.logic_inputs) != ["A"]:
+        errors.append(f"rs1gt34 logic_inputs must be [A], got {m.logic_inputs}")
+    if m.output_pin != "Y":
+        errors.append("rs1gt34 output_pin must be Y")
+    en = set(enabled_tests_for_part("rs1gt34") or [])
+    for banned in ("ioz", "ioff", "ioff_leakage", "off_current"):
+        if banned in en:
+            errors.append(f"rs1gt34 must not enable {banned}")
+    for need in ("input_threshold", "icc", "delta_icc", "ii", "voh", "vol"):
+        if need not in en:
+            errors.append(f"rs1gt34 enabled_tests missing {need}")
+    pins = {p.name: (p.number, p.role) for p in m.pins}
+    want_pins = {"NC": (1, "nc"), "A": (2, "input"), "GND": (3, "gnd"), "Y": (4, "output"), "VCC": (5, "vcc")}
+    for name, (num, role) in want_pins.items():
+        got = pins.get(name)
+        if got is None or got[0] != num or got[1] != role:
+            errors.append(f"rs1gt34 pin {name} must be number {num} role {role}, got {got}")
+    got_rows = {tuple(sorted((k, v) for k, v in r.items())) for r in m.truth_table}
+    want_rows = {tuple(sorted({"A": "L", "Y": "L"}.items())), tuple(sorted({"A": "H", "Y": "H"}.items()))}
+    if got_rows != want_rows:
+        errors.append(f"rs1gt34 truth_table must be Y=A (A L->L / H->H), got {m.truth_table}")
+    if round(float(m.vcc_op_min or 0), 6) != 2.0 or round(float(m.vcc_op_max or 0), 6) != 5.5:
+        errors.append(f"rs1gt34 VCC op must be 2.0-5.5, got {m.vcc_op_min}..{m.vcc_op_max}")
+    if vcc_grid_stimulus(m) != "PSU_MSO":
+        errors.append(f"rs1gt34 stimulus must be PSU_MSO, got {vcc_grid_stimulus(m)}")
+    grid = m.vcc_grid or {}
+    if str(grid.get("status") or "") != "UNCONFIRMED":
+        errors.append(f"rs1gt34 vcc_grid.status must be UNCONFIRMED, got {grid.get('status')}")
+    if not vcc_grid_unconfirmed(m):
+        errors.append("rs1gt34 vcc_grid must be UNCONFIRMED (not greenable)")
+    for st_name, st in (
+        ("status", m.status),
+        ("truth_table", m.truth_table_status),
+        ("isolation", m.isolation_status),
+        ("wire_map", (m.wire_map or {}).get("status")),
+    ):
+        if is_datasheet_signed(st) or claimed_signed_without_datasheet(st):
+            errors.append(
+                f"rs1gt34 {st_name}={st!r} must stay UNCONFIRMED until JH CONFIRM"
+            )
+        if str(st or "").strip().upper() != "UNCONFIRMED":
+            errors.append(f"rs1gt34 {st_name} must be UNCONFIRMED, got {st!r}")
+    fixed = grid.get("fixed_points") or []
+    fixed_v = sorted(round(float(p.get("vcc")), 6) for p in fixed if isinstance(p, dict) and p.get("vcc") is not None)
+    if fixed_v != [2.0, 3.3]:
+        errors.append(f"rs1gt34 fixed_points vcc must be [2.0, 3.3], got {fixed_v}")
+    if any(round(float(p.get("vcc")), 6) == 4.5 for p in fixed if isinstance(p, dict)):
+        errors.append("rs1gt34 4.5 must be a range step, not a fixed-point row")
+    want_fixed = {
+        2.0: (1.0, 0.3),
+        3.3: (1.5, 0.55),
+    }
+    for pt in fixed:
+        if not isinstance(pt, dict):
+            continue
+        v = round(float(pt.get("vcc")), 6)
+        if v not in want_fixed:
+            continue
+        vih, vil = want_fixed[v]
+        if round(float(pt.get("VIH_min_V")), 6) != vih or round(float(pt.get("VIL_max_V")), 6) != vil:
+            errors.append(f"rs1gt34 fixed {v} VIH/VIL must be {vih}/{vil}, got {pt}")
+    bands = grid.get("ranges") or []
+    if len(bands) != 1:
+        errors.append(f"rs1gt34 must have one range 4.5-5.5 step 0.1, got {bands}")
+    else:
+        band = bands[0]
+        if (
+            round(float(band.get("start")), 6) != 4.5
+            or round(float(band.get("stop")), 6) != 5.5
+            or round(float(band.get("step")), 6) != 0.1
+            or round(float(band.get("VIH_min_V")), 6) != 2.0
+            or round(float(band.get("VIL_max_V")), 6) != 0.8
+        ):
+            errors.append(f"rs1gt34 range must be 4.5-5.5 step 0.1 VIH>=2.0 VIL<=0.8, got {band}")
+    merged = [round(float(x), 6) for x in merge_vcc_grid(grid)]
+    want_merged = [2.0, 3.3] + [round(4.5 + i * 0.1, 6) for i in range(11)]
+    if merged != want_merged:
+        errors.append(f"rs1gt34 merged vcc_list must be {want_merged}, got {merged}")
+    got_vcc = [round(float(x), 6) for x in m.vcc_list]
+    if got_vcc != want_merged:
+        errors.append(f"rs1gt34 model.vcc_list must be merged grid, got {m.vcc_list}")
+    lim50 = lookup_vcc_grid_limits(m, 5.0) or {}
+    if lim50.get("source") != "range":
+        errors.append(f"rs1gt34 VCC=5.0 must own the range band, got {lim50}")
+    if round(float(lim50.get("VIH_min_V") or 0), 6) != 2.0 or round(float(lim50.get("VIL_max_V") or 0), 6) != 0.8:
+        errors.append(f"rs1gt34 VCC=5.0 limits must be VIH>=2.0 VIL<=0.8, got {lim50}")
+    lim20 = lookup_vcc_grid_limits(m, 2.0) or {}
+    if lim20.get("source") != "fixed":
+        errors.append(f"rs1gt34 VCC=2.0 must own the fixed point, got {lim20}")
+    owned = vcc_grid_owned(grid)
+    if owned.get(4.5, {}).get("source") != "range":
+        errors.append("rs1gt34 4.5 must inherit range-band limits (not a fixed-point row)")
+    a_drive = m.pin_drive.get("A")
+    if a_drive is None or a_drive.src != "psu" or a_drive.ch != 3:
+        errors.append("rs1gt34 pin_drive A must be PSU CH3 (PSU_MSO; do not steal AWG CH1)")
+    wm = m.wire_map if isinstance(m.wire_map, dict) else {}
+    psu = wm.get("psu") if isinstance(wm.get("psu"), dict) else {}
+    if "CH2" in psu:
+        errors.append("rs1gt34 wire_map must not invent PSU CH2 Y-load")
+    extra = pins_named_in_wire_map(m) - known_pin_names(m)
+    if extra:
+        errors.append(f"rs1gt34 wire_map invents nets {sorted(extra)}")
+    if yaml.get("voh_table") or yaml.get("vol_table"):
+        errors.append("rs1gt34 must not invent voh_table/vol_table")
+    if (m.recipe or {}).get("delta_offset_v") is not None:
+        errors.append("rs1gt34 must not invent recipe.delta_offset_v")
+    if lookup_pass_mode(m, "VIH", "input_threshold") != "min_only":
+        errors.append("rs1gt34 pass_mode VIH must be min_only")
+    if lookup_pass_mode(m, "VIL", "input_threshold") != "max_only":
+        errors.append("rs1gt34 pass_mode VIL must be max_only")
+    plan = sim_icc_plan(m)
+    if plan["n"] != 2:
+        errors.append(f"rs1gt34 ICC corners must be 2^1=2, got {plan}")
+    from ate.core.specs import enrich_measurement
+
+    judged = enrich_measurement(
+        {
+            "id": "VIH_2p0V",
+            "value": 1.5,
+            "min": 1.0,
+            "pass_mode": "min_only",
+            "greenable": False,
+        },
+        test_id="input_threshold",
+        part_key="rs1gt34",
+    )
+    if judged.get("result") == "pass":
+        errors.append("rs1gt34 UNCONFIRMED VIH must not green as PASS (fail-closed)")
+    if claimed_signed_without_datasheet("UNCONFIRMED"):
+        errors.append("UNCONFIRMED must not look signed")
+    owners = Path(__file__).resolve().parents[1] / "config" / "owners.yaml"
+    inv = Path(__file__).resolve().parents[1] / "config" / "inventory.yaml"
+    if "chun_tak" not in owners.read_text(encoding="utf-8"):
+        errors.append("owners.yaml must name chun_tak for RS1GT34")
+    inv_txt = inv.read_text(encoding="utf-8")
+    if "Chun Tak" not in inv_txt or "Core AE OK" not in inv_txt:
+        errors.append("inventory.yaml must note Chun Tak / Core AE OK")
+    src = _LOGIC_DC.read_text(encoding="utf-8")
+    if "lookup_vcc_grid_limits" not in src:
+        errors.append("logic_dc.py input_threshold must apply per-VCC limits from vcc_grid")
+    if "PSU_MSO" not in src:
+        errors.append("logic_dc.py must keep YAML pin_drive on PSU_MSO (do not steal AWG CH1)")
+    model_src = _MODEL.read_text(encoding="utf-8")
+    if "merge_vcc_grid" not in model_src or "lookup_vcc_grid_limits" not in model_src:
+        errors.append("product_model must merge vcc_grid fixed+ranges and lookup per-VCC limits")
+    return errors
+
+
 def _operator_doc_ok() -> list[str]:
     """Operator bench doc exists. DEMO/SIM is not a reproduce claim. No invented cells."""
     errors: list[str] = []
@@ -716,6 +890,14 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must forbid inventing a uA current-settle epsilon")
     if "wire_map" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must document wire_map Continue prompts")
+    if "vcc_grid" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must document vcc_grid / Customise Parameters")
+    if "PSU_MSO" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must document PSU_MSO (hide Freq/Amp)")
+    if "RS1GT34" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must checklist RS1GT34 DRAFT")
+    if "UNCONFIRMED until JH CONFIRM" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must say RS1GT34 numbers are UNCONFIRMED until JH CONFIRM")
     if "data_paths" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must document data_paths")
     if "invent nets" not in text.lower() and "invent a net" not in text.lower():
@@ -840,6 +1022,22 @@ def _panel_ok() -> list[str]:
         errors.append("app.js must visualise enabled tests, ICC corners, fail-open")
     if "logic-dc-stable-eps-a" not in js or "stable_eps_A" not in js:
         errors.append("Logic DC panel must edit stable_eps_A (overlay; null = NON_TIGHT)")
+    if "Customise Parameters" not in js:
+        errors.append("Logic DC panel must show Customise Parameters (not xyflow)")
+    if "FIXED POINTS" not in js or "RANGE SWEEPS" not in js:
+        errors.append("Customise Parameters must have FIXED POINTS chips and RANGE SWEEPS")
+    if "PSU_MSO" not in js or "logic-dc-vcc-preview" not in js:
+        errors.append("Customise Parameters must preview merged vcc_list and stimulus PSU_MSO vs AWG")
+    if "vcc_grid" not in js:
+        errors.append("app.js must save vcc_grid to Version overlay")
+    if "xyflow" in js.lower() and "no xyflow" not in js.lower():
+        errors.append("Customise Parameters must not introduce xyflow")
+    if "freq-label" not in html:
+        errors.append("PSU_MSO must be able to hide Freq/Amp labels")
+    db = Path(__file__).resolve().parents[1] / "core" / "database.py"
+    db_txt = db.read_text(encoding="utf-8")
+    if '"vcc_grid"' not in db_txt or '"sample_size"' not in db_txt:
+        errors.append("save_test_params must allow vcc_grid and sample_size")
     if "data-card-field" not in js or "deleted_fields" not in js:
         errors.append("Logic DC panel must bind per-field assign/edit/delete to card_fields")
     if "card_fields" not in js:
@@ -867,7 +1065,7 @@ def _panel_ok() -> list[str]:
         if str(schema.get("ocr", {}).get("engine") or "").lower() != "paddleocr":
             errors.append("card_fields.schema.yaml ocr.engine must be paddleocr")
         keys = panel_save_keys()
-        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths"):
+        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid"):
             if need not in keys:
                 errors.append(f"panel_save_keys missing {need}")
     except Exception as exc:
@@ -1112,6 +1310,7 @@ def check_logic_dc() -> list[str]:
     errors += _status_tokens_ok()
     errors += _rs1g97_holds()
     errors += _buf126_ok()
+    errors += _rs1gt34_draft_ok()
     errors += _scale_and_overlay_ok()
     errors += _seelim_wrap_ok()
     errors += _registry_ok()

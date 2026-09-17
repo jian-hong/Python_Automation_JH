@@ -24,7 +24,7 @@ parts:
   - {part: RS0204, sheet_class: "Level Shifters", category: level, ate_suite: logic, package: TSSOP14, model: RS0204YQ, pic: changthong, status: Ongoing, priority: 1, date: "20/3/2026", remark: "in Wuxi; campaign under Level/; dual-rail suite still logic", report: RS0204/RS0204 Data Report.xlsx}
 
   # --- Wave 1 TBD ---
-  - {part: RS1GT34, sheet_class: "Logic Series", category: logic, package: SOT-353, model: RS1GT34XC5, lot: CQ3H21.3, qty: 30, status: TBD, priority: 1}
+  - {part: RS1GT34, sheet_class: "Logic Series", category: logic, package: SOT-353, model: RS1GT34XC5, lot: CQ3H21.3, qty: 30, status: TBD, priority: 1, pic: chun_tak, remark: "Chun Tak / Core AE OK; Path B DRAFT SOT23-5 UNCONFIRMED until JH CONFIRM"}
   - {part: RS1G125, sheet_class: "Logic Series", category: logic, package: SC70-5, model: RS1G125XC5, status: TBD, priority: 1, remark: "Wait Sample", report: RS1G125/RS1G125XC5_Lab_Report.xlsx}
   - {part: RS1G07, sheet_class: "Logic Series", category: logic, package: SC70-5, model: RS1G07XC5, lot: CQ694T.3, qty: 30, status: TBD, priority: 1, report: RS1G07/RS1G07XC5_Lab_Report.xlsx}
   - {part: RS1G08, sheet_class: "Logic Series", category: logic, package: SC70-5, model: RS1G08XC5, lot: CR5R94.1, qty: 30, status: TBD, priority: 1, report: RS1G08/RS1G08_Lab_Report.xlsx, remark: "Also Wong Chun Wei RS1G08 template 27 Aug 2026 (loose xlsx)"}

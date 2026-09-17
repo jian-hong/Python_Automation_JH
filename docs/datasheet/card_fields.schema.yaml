@@ -191,6 +191,16 @@ fields:
     type: text
     editable: true
     deletable: true
+  - key: vcc_grid
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+    label: "vcc_grid (Customise Parameters)"
+    note: >
+      fixed_points + ranges merge to vcc_list. Range steps inherit band
+      VIH_min_V / VIL_max_V (never stored as a fixed-point row).
+      stimulus PSU_MSO hides Freq/Amp. Numbers UNCONFIRMED until JH CONFIRM.
   - key: recipe
     oop: Recipe
     type: json

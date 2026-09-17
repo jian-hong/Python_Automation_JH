@@ -518,6 +518,13 @@ def _logic_dc_for_catalog(part_key: str) -> dict[str, Any] | None:
         ui["enabled_tests"] = list(enabled_tests_for_part(part_key) or [])
     except Exception:
         ui["enabled_tests"] = []
+    if overlay.get("sample_size") is not None:
+        try:
+            ui["sample_size"] = max(1, int(overlay["sample_size"]))
+        except (TypeError, ValueError):
+            pass
+    elif model.sample_size:
+        ui["sample_size"] = int(model.sample_size)
     return ui
 
 
@@ -532,6 +539,11 @@ def catalog_for_ui(part: str = "rs622", family: str | None = None) -> dict[str, 
         logic_dc = _logic_dc_for_catalog(str(part or ""))
         if logic_dc:
             cat["logic_dc"] = logic_dc
+            if logic_dc.get("sample_size"):
+                try:
+                    cat["sample_size"] = max(1, int(logic_dc["sample_size"]))
+                except (TypeError, ValueError):
+                    pass
         return cat
     if fam == "switch":
         return _yaml_family_catalog(str(part or "rs2323"), LIM_TEST_DEFAULTS)

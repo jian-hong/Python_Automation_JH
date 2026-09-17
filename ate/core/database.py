@@ -298,6 +298,8 @@ class DbContext:
         allowed = (
             "vcc_list",
             "vcc_sweep_list",
+            "vcc_grid",
+            "sample_size",
             "levels",
             "rails",
             "pass_mode",
@@ -315,11 +317,16 @@ class DbContext:
         for key in allowed:
             if key in incoming:
                 existing[key] = incoming[key]
+        if existing.get("sample_size") is not None:
+            try:
+                self.sample_size = max(1, int(existing["sample_size"]))
+            except (TypeError, ValueError):
+                pass
         self.manifest_dir().mkdir(parents=True, exist_ok=True)
         path = self.test_params_path()
         text = (
             "# Version overlay (PRD-004 / EPIC-A28). Does not change part yaml or limits yaml.\n"
-            "# Keys: vcc_list, levels, rails, pass_mode, logic_inputs, isolation, stable_eps_A.\n"
+            "# Keys: vcc_list, vcc_grid, sample_size, levels, rails, pass_mode, logic_inputs, isolation, stable_eps_A.\n"
             + yaml.safe_dump(existing, sort_keys=False, allow_unicode=True)
         )
         path.write_text(text, encoding="utf-8")
@@ -745,6 +752,12 @@ def set_context(
             ctx.version = str(sm.get("version") or ctx.version)
             if sm.get("sample_size"):
                 ctx.sample_size = int(sm["sample_size"])
+        tp = ctx.load_test_params()
+        if isinstance(tp, dict) and tp.get("sample_size") is not None:
+            try:
+                ctx.sample_size = max(1, int(tp["sample_size"]))
+            except (TypeError, ValueError):
+                pass
         ctx.ensure_tree()
         _active = ctx
         return ctx
