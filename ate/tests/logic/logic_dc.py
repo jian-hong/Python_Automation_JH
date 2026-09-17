@@ -32,7 +32,7 @@ from ate.tests.logic.product_model import (
     ProductModel,
     has_product_model,
     icc_pins,
-    isolation_for,
+    isolation_for_run,
     iter_logic_corners,
     is_datasheet_signed,
     is_unconfirmed_status,
@@ -62,9 +62,23 @@ def _pause(params: Any, title: str) -> bool:
     return bool(hook(title))
 
 
+def _campaign_overlay() -> dict[str, Any]:
+    """Version overlay from _manifest/test_params.yaml. Empty if no campaign."""
+    try:
+        from ate.core.database import get_context
+
+        blob = get_context().load_test_params()
+        return blob if isinstance(blob, dict) else {}
+    except Exception:
+        return {}
+
+
 def _model(params: Any) -> ProductModel:
     key = str(getattr(params, "part", None) or "").strip().lower()
-    model = load_product_model(key)
+    overlay = getattr(params, "test_params", None)
+    if not isinstance(overlay, dict):
+        overlay = _campaign_overlay()
+    model = load_product_model(key, overlay=overlay or None)
     if model is None:
         raise RuntimeError(
             f"Path B Logic DC: part {key!r} has no product_model "
@@ -397,7 +411,7 @@ def _run_input_threshold(instr, params: Any) -> dict[str, Any]:
         for vcc in vccs:
             _power_vcc(instr, vcc, ilim)
             for pin in model.logic_inputs:
-                pats = isolation_for(model, pin)
+                pats = isolation_for_run(model, pin)
                 if not pats:
                     rows.append(
                         {

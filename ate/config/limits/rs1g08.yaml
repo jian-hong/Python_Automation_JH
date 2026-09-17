@@ -8,70 +8,84 @@ specs:
 - id: VOH_2p0V
   unit: V
   min: 1.6
+  pass_mode: min-only
   test: voh_load
   source: parts/rs1g08.yaml voh_table
 - id: VOH_3p3V
   unit: V
   min: 2.5
+  pass_mode: min-only
   test: voh_load
   source: parts/rs1g08.yaml voh_table
 - id: VOH_4p5V
   unit: V
   min: 3.8
+  pass_mode: min-only
   test: voh_load
   source: parts/rs1g08.yaml voh_table
 - id: VOH_5p0V
   unit: V
   min: 4.2
+  pass_mode: min-only
   test: voh_load
   source: parts/rs1g08.yaml voh_table
 - id: VOH_5p5V
   unit: V
   min: 4.8
+  pass_mode: min-only
   test: voh_load
   source: parts/rs1g08.yaml voh_table
 - id: VOL_2p0V
   unit: V
   max: 0.45
+  pass_mode: max-only
   test: vol_load
   source: parts/rs1g08.yaml vol_table
 - id: VOL_3p3V
   unit: V
   max: 0.55
+  pass_mode: max-only
   test: vol_load
   source: parts/rs1g08.yaml vol_table
 - id: VOL_4p5V
   unit: V
   max: 0.55
+  pass_mode: max-only
   test: vol_load
   source: parts/rs1g08.yaml vol_table
 - id: VOL_5p0V
   unit: V
   max: 0.5
+  pass_mode: max-only
   test: vol_load
   source: parts/rs1g08.yaml vol_table
 - id: VOL_5p5V
   unit: V
   max: 0.45
+  pass_mode: max-only
   test: vol_load
   source: parts/rs1g08.yaml vol_table
 - id: ICC_uA
   unit: uA
   max: 1.0
+  pass_mode: max-only
   test: supply_current
   source: local:RS1G08_(RevA.7).pdf
 - id: DELTA_ICC_uA
   unit: uA
   max: 500.0
+  pass_mode: max-only
   test: delta_icc
   source: local:RS1G08_(RevA.7).pdf dICC 3V to 5.5V
 - id: II_uA
   unit: uA
   max: 1.0
+  pass_mode: max-only
   test: ii
   source: local:RS1G08_(RevA.7).pdf II +25C
 - id: VCC_V
   unit: V
   min: 1.65
   max: 5.5
+  pass_mode: range
   source: local:RS1G08_(RevA.7).pdf

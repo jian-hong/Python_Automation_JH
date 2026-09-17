@@ -176,7 +176,7 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
 
     if method == "list_tests":
         from ate.core.timeline import short_test_tag
-        from ate.core.specs import load_part_specs, test_info_map
+        from ate.core.specs import load_part_specs, specs_for_test, test_info_map
 
         specs = list(all_tests())
         from ate.core.database import get_context
@@ -208,7 +208,8 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
                         allow2 = set(enabled2)
                         specs = [t for t in specs if t.id in allow2]
         info_map = test_info_map(pk)
-        part_specs = load_part_specs(pk)
+        overlay = ctx.load_test_params() if pk else {}
+        part_specs = load_part_specs(pk, overlay=overlay)
         return [
             {
                 "id": t.id,
@@ -220,12 +221,7 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
                 "notes": t.notes,
                 "fixed_steps": list(t.fixed_steps) if t.fixed_steps else [],
                 "dual_channel": bool(getattr(t, "dual_channel", True)),
-                "specs": [
-                    s
-                    for s in part_specs
-                    if str(s.get("test") or "").lower() == t.id.lower()
-                    or str(s.get("id") or "").lower() == t.id.lower()
-                ],
+                "specs": specs_for_test(part_specs, t.id),
                 "info": info_map.get(t.id) or {},
             }
             for t in specs
@@ -500,6 +496,13 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
         part = str(params.get("part") or ctx.part_key or "").strip().lower()
         patch = params.get("patch") if isinstance(params.get("patch"), dict) else {}
         return save_product_model_fields(part, patch)
+
+    if method == "save_test_params":
+        from ate.core.database import get_context
+
+        ctx = get_context()
+        blob = params.get("test_params") if isinstance(params.get("test_params"), dict) else params
+        return ctx.save_test_params(blob if isinstance(blob, dict) else {})
 
     if method == "run_sequence":
         ids = list(params.get("test_ids") or [])
@@ -808,11 +811,13 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
 
         ctx = get_context()
         pk = str(params.get("part_key") or ctx.part_key or "")
+        overlay = ctx.load_test_params()
         return {
             "part_key": pk,
-            "specs": load_part_specs(pk),
+            "specs": load_part_specs(pk, overlay=overlay),
             "test_info": test_info_map(pk),
             "datasheet": load_part_datasheet(pk),
+            "test_params": overlay,
         }
 
     if method == "paste_session_photos":

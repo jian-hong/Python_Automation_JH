@@ -123,6 +123,8 @@ product_model:
       - {A: L, B: H, C: H, Y: L}
       - {A: H, B: H, C: H, Y: H}
   # Isolation from this table only (unused ties). Same UNCONFIRMED status.
+  # C invert A:L B:H is the See Lim fallback and is what isolation_for_run uses.
+  # C track A:H B:L is the MUX guess -- PROPOSED / HOLD CONFIRM, skipped at run.
   isolation:
     status: UNCONFIRMED
     source: "derived from truth_table (Datasheet §4); not Datasheet-signed"
@@ -133,5 +135,13 @@ product_model:
       B:
         - {sweep_pin: B, fix: {A: L, C: L}, y_expect: track}
       C:
-        - {sweep_pin: C, fix: {A: H, B: L}, y_expect: track}
         - {sweep_pin: C, fix: {A: L, B: H}, y_expect: invert, vil_sweep: reverse}
+        - {sweep_pin: C, fix: {A: H, B: L}, y_expect: track, status: "PROPOSED HOLD CONFIRM"}
+  threshold_isolation:
+    - {sweep: C, hold: {A: L, B: H}, y_tracks: false, vil_sweep: reverse}
+    - {sweep: C, hold: {A: H, B: L}, y_tracks: true, status: "PROPOSED HOLD CONFIRM"}
+  gaps:
+    - "truth_table.status=UNCONFIRMED (Datasheet §4; not Datasheet-signed; not greenable)"
+    - "C-track A:H B:L is PROPOSED HOLD CONFIRM (MUX guess). Run uses invert A:L B:H until Datasheet-signed CONFIRM."
+    - "VOH/VOL unloaded PROVISIONAL -- no invented IOH/IOL loads."
+    - "oe=none: do not enable ioz/ioff"

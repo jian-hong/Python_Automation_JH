@@ -126,3 +126,7 @@ product_model:
     tests:
       A:
         - {sweep_pin: A, fix: {OE: H}, y_expect: track, status: UNCONFIRMED}
+  gaps:
+    - "Unused data ties N/A (single data pin). Do not invent extra ties."
+    - "truth_table.status=UNCONFIRMED (not Datasheet-signed; not greenable)"
+    - "VOH/VOL PROVISIONAL -- no VOH/VOL rows in existing limits yaml."

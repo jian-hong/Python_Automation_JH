@@ -925,7 +925,27 @@ h3.subhead {
   font-weight: 600;
   color: var(--text);
 }
-#panel-run-conditions.hidden { display: none; }
+.panel-run-conditions.hidden,
+#panel-run-conditions.hidden,
+#panel-logic-dc.hidden { display: none; }
+
+.logic-dc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  margin: 6px 0 12px;
+}
+.logic-dc-table th,
+.logic-dc-table td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.logic-dc-table select {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
 
 .test-plan { margin-bottom: 10px; }
 .test-plan.hidden { display: none; }

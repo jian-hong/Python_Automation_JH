@@ -85,6 +85,8 @@ def main() -> int:
         errors.append("Logic DC vcc_list/gaps fields missing")
     if 'id="btn-save-logic-dc"' not in html:
         errors.append("Logic DC save control missing")
+    if 'id="btn-save-test-params"' not in html or 'id="logic-dc-body"' not in html:
+        errors.append("Logic DC recipe panel / Save Version overlay missing")
 
     js_path = WEB / "app.js"
     if not js_path.is_file():
@@ -99,6 +101,10 @@ def main() -> int:
             errors.append("Logic DC panel must load get_product_model")
         if "save_product_model" not in js or "saveLogicDcPanel" not in js:
             errors.append("Logic DC panel must save product_model")
+        if "renderLogicDc" not in js or "save_test_params" not in js or "pass_mode" not in js:
+            errors.append("Logic DC recipe panel / pass_mode visualisation missing")
+        if "!(inventoryRows || []).length" not in js:
+            errors.append("family rail click must retry loadInventory when tracking rows are empty")
         combo = re.search(
             r'\["db-component", "db-part", "db-package", "db-operator", "db-version"\]\.forEach[\s\S]*?\$\("btn-apply-db"\)',
             js,

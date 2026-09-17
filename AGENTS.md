@@ -15,7 +15,7 @@ Paste the SharePoint *https* link into `ate/config/sharepoint.url` when you have
 
 Daily clone update: `python -m ate.core.sync_repo` (Cursor folder-open + `run_ate_app.bat`). `git pull --ff-only` only when the tree is clean. Dirty tree = fetch only. Never `reset --hard`.
 
-Longer plug-in detail: `docs/ATE_PLUGIN.md`. UI chrome: `ate/ui/web/UI_CONTRACT.md`. Human landing: `README.md`.
+Longer plug-in detail: `docs/ATE_PLUGIN.md`. Logic DC SKUs: `docs/LOGIC_DC.md`. UI chrome: `ate/ui/web/UI_CONTRACT.md`. Human landing: `README.md`.
 
 ## Mental model (do not invent a fourth axis)
 
@@ -50,6 +50,7 @@ Each person gets their own `_manifest/`, `workbook/`, `sessions/`. Do not overwr
 | Add a **Version** | Setup Version box (pick or type, same as labels). Apply campaign runs `ensure_version`. Copies `_manifest` stubs from the current version if missing; does not clone xlsx | Excel merge tools; a second campaign root |
 | Add a SKU we are testing | One row in `ate/config/inventory.yaml` (part + model + package + lot). RS0204 stays `category: level` + `ate_suite: logic`. Do not scrape en.run-ic.com | `run_ic.yaml` homepage SKUs (RS724-Q1 ...) |
 | New part defaults / enabled tests | `ate/config/parts/<key>.yaml` | `runner.py` import lists |
+| Logic DC SKU (2/3/N input) | `docs/LOGIC_DC.md` + part `product_model` + `ate/config/limits/<key>.yaml`. Isolation derives from truth_table. Version overlay `_manifest/test_params.yaml` | Fork `logic_dc.py`; per-chip Python; wizard / xyflow |
 | New **test** in an existing family | `register(TestSpec)` in `ate/tests/<family>/` + add id to that part's `enabled_tests`. Restart worker | `main.py`, `runner.py`, `input()`, `import Lim.*` / `import Ariff.*` |
 | Wrap a golden `test_*` | Setup Detected tests -> Wrap (AST only). Blocked if the golden calls `input()` | Pasting vendor trees into `ate/` |
 | Copy tests to another part | Setup Copy tests -- **same family only** | RS0204 dual-rail ids onto RS1G07 |
@@ -114,7 +115,9 @@ register(TestSpec(
 ))
 ```
 
-Add `my_slot` to `ate/config/parts/<key>.yaml` `enabled_tests`. Return `data` numbers (or `measurements: [{id, value, unit}]`). Limits live in `ate/config/limits/<key>.yaml` (`min`/`max`/`typ`) -- the runner stamps PASS/FAIL into `sessions/report.json` and writes STS `datalog.md|.html|.pdf`. Idle-restart worker. Map `excel_sheet` in that campaign's `sheet_map.yaml` when a workbook sheet exists.
+Add `my_slot` to `ate/config/parts/<key>.yaml` `enabled_tests`. Return `data` numbers (or `measurements: [{id, value, unit}]`). Limits live in `ate/config/limits/<key>.yaml` (`min`/`max`/`typ` + `pass_mode`: range / min-only / max-only) -- the runner stamps PASS/FAIL into `sessions/report.json` and writes STS `datalog.md|.html|.pdf`. Idle-restart worker. Map `excel_sheet` in that campaign's `sheet_map.yaml` when a workbook sheet exists.
+
+Logic DC (Path B): same shared ids (`input_threshold`, `icc`, ...). Add a SKU with truth table + pin roles + limits only -- see `docs/LOGIC_DC.md`. Do not fork `logic_dc.py`.
 
 Copy-paste prompts: `docs/PROMPT_GUIDE.md`.
 
@@ -161,6 +164,8 @@ python -m ate.core.check_sync_repo
 python -m ate.core.check_campaign_outline
 python -m ate.core.check_session_values
 python -m ate.core.check_specs_datalog
+python -m ate.core.check_logic_dc
+python -m ate.core.check_add_test
 ```
 
 A green check that never could fail is not a check. Do not claim PASS without running it.

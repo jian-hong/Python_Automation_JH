@@ -15,6 +15,12 @@ def main() -> int:
         errors.append("in-window pass")
     if judge_value(9, None, 1) != "fail":
         errors.append("over max fail")
+    if judge_value(4.9, 4.8, 9, pass_mode="min-only") != "pass":
+        errors.append("min-only must ignore max")
+    if judge_value(0.2, 1, 0.5, pass_mode="max-only") != "pass":
+        errors.append("max-only must ignore min")
+    if judge_value(0.4, 1, 2, pass_mode="range") != "fail":
+        errors.append("range below min must fail")
     specs = load_part_specs("rs622")
     row = enrich_measurement({"id": "VOS_mV", "value": 0.7}, specs=specs, test_id="vos_sweep")
     if row.get("result") != "pass" or row.get("max") != 3.0:

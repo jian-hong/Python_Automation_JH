@@ -11,18 +11,21 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from ate.core.registry import all_tests, get, load_family
-from ate.core.specs import load_part_specs
+from ate.core.specs import infer_pass_mode, judge_value, load_part_specs
 from ate.fixture.modes import enabled_tests_for_part
 from ate.tests.logic.product_model import (
+    claimed_signed_without_datasheet,
     derive_isolation,
     has_product_model,
     isolation_for,
+    isolation_for_run,
     is_datasheet_signed,
     is_unconfirmed_status,
-    claimed_signed_without_datasheet,
+    iter_logic_corners,
     load_part_yaml,
     load_product_model,
     lookup_pass_mode,
+    sim_icc_plan,
     vectors_for_output,
 )
 
@@ -95,7 +98,6 @@ def _and_isolation_ok() -> list[str]:
     if lookup_pass_mode(m, "VIL_V", "input_threshold") != "max_only":
         errors.append("rs1g08 pass_mode VIL must be max_only")
     return errors
-
 
 
 # Datasheet §4 FUNCTION TABLE rows (A B C -> Y). Not a signed confirm.
@@ -206,6 +208,34 @@ def _rs1g97_holds() -> list[str]:
         der_sigs = {(tuple(sorted(p.fix.items())), p.y_expect) for p in a}
         if not yaml_sigs.issubset(der_sigs):
             errors.append("rs1g97 YAML isolation must match derive_isolation(truth_table)")
+    yaml_c = isolation_for(m, "C")
+    proposed = [
+        p
+        for p in yaml_c
+        if p.fix.get("A") == "H" and p.fix.get("B") == "L" and p.y_expect == "track"
+    ]
+    if not proposed:
+        errors.append("rs1g97 C-track A:H B:L must exist as YAML data (PROPOSED HOLD CONFIRM)")
+    elif not any("PROPOSED" in str(p.status or "").upper() for p in proposed):
+        errors.append("rs1g97 C-track A:H B:L must be marked PROPOSED HOLD CONFIRM")
+    invert_c = [
+        p
+        for p in yaml_c
+        if p.fix.get("A") == "L" and p.fix.get("B") == "H" and p.y_expect == "invert"
+    ]
+    if not invert_c:
+        errors.append("rs1g97 C invert A:L B:H must stay (See Lim fallback)")
+    c_run = isolation_for_run(m, "C")
+    if not c_run or c_run[0].y_expect != "invert":
+        errors.append("rs1g97 run isolation C must skip PROPOSED track and use invert A:L B:H")
+    elif c_run[0].fix.get("A") != "L" or c_run[0].fix.get("B") != "H":
+        errors.append(f"rs1g97 run isolation C invert hold must be A:L B:H, got {c_run[0].fix}")
+    a_run = isolation_for_run(m, "A")
+    if not a_run or a_run[0].y_expect != "track":
+        errors.append("rs1g97 run isolation A must prefer first track")
+    c_drive = m.pin_drive.get("C")
+    if c_drive is None or c_drive.src != "psu" or c_drive.ch != 3:
+        errors.append("rs1g97 pin_drive C must be PSU CH3 (CH2 is Y-load/vref)")
     errors += _fail_closed_until_signed("rs1g97", m)
     if lookup_pass_mode(m, "VTPLUS_V", "input_threshold") != "range":
         errors.append("rs1g97 pass_mode VT+ must be range")
@@ -259,6 +289,9 @@ def _buf126_ok() -> list[str]:
     else:
         if any(p.fix.get("OE") != "H" for p in a):
             errors.append("rs1g126 A isolation must hold OE active; do not invent unused data ties")
+    run_a = isolation_for_run(m, "A")
+    if not run_a or run_a[0].y_expect != "track":
+        errors.append("rs1g126 run isolation A must track while OE active")
     if str(m.pass_mode.get("input_threshold") or "").lower() == "range":
         errors.append("rs1g126 must not collapse VIH/VIL into input_threshold: range")
     if lookup_pass_mode(m, "VIH_V", "input_threshold") != "min_only":
@@ -296,7 +329,6 @@ def _registry_ok() -> list[str]:
     icc = get("icc")
     if icc is None or icc.dual_channel:
         errors.append("icc must be registered dual_channel=False")
-    # Same runner for AND and 3-input: one TestSpec, data in YAML
     from ate.tests.logic import logic_dc as ldc
 
     if th.run is not ldc._run_input_threshold:
@@ -323,11 +355,9 @@ def _registry_ok() -> list[str]:
         errors.append("icc on part without product_model / dual-rail must raise")
     except RuntimeError:
         pass
-    # Dual-rail still dispatched (no Path B model on rs0204)
     if has_product_model("rs0204"):
         errors.append("rs0204 must not grow a Path B product_model (dual-rail stays rs0204.py)")
     return errors
-
 
 
 def _seelim_wrap_ok() -> list[str]:
@@ -367,6 +397,8 @@ def _panel_ok() -> list[str]:
         'id="logic-dc-vcc-list"',
         'id="logic-dc-gaps"',
         'id="btn-save-logic-dc"',
+        'id="btn-save-test-params"',
+        'id="logic-dc-body"',
     ):
         if need not in html:
             errors.append(f"Logic DC panel missing {need}")
@@ -374,10 +406,63 @@ def _panel_ok() -> list[str]:
         errors.append("app.js must load Logic DC product_model")
     if "saveLogicDcPanel" not in js:
         errors.append("app.js must save Logic DC product_model")
+    if "renderLogicDc" not in js or "save_test_params" not in js:
+        errors.append("app.js must visualise recipe + save Version overlay")
     srv = Path(__file__).resolve().parents[1] / "worker" / "server.py"
     text = srv.read_text(encoding="utf-8")
     if 'method == "get_product_model"' not in text or 'method == "save_product_model"' not in text:
         errors.append("worker must expose get_product_model / save_product_model")
+    if 'method == "save_test_params"' not in text:
+        errors.append("worker must expose save_test_params")
+    return errors
+
+
+def _scale_and_overlay_ok() -> list[str]:
+    """2-input vs 3-input corners on the same Path B ids. Visa-free SIM."""
+    errors: list[str] = []
+    m08 = load_product_model("rs1g08")
+    m97 = load_product_model("rs1g97")
+    m126 = load_product_model("rs1g126")
+    if m08 is None or m97 is None or m126 is None:
+        return ["scale check needs rs1g08/rs1g97/rs1g126 product_model"]
+    p08 = sim_icc_plan(m08)
+    p97 = sim_icc_plan(m97)
+    p126 = sim_icc_plan(m126)
+    if p08["n"] != 4:
+        errors.append(f"rs1g08 ICC corners must be 2^2=4, got {p08}")
+    if p97["n"] != 8:
+        errors.append(f"rs1g97 ICC corners must be 2^3=8, got {p97}")
+    if p126["n"] != 4:
+        errors.append(f"rs1g126 ICC corners must be 2^(A+OE)=4, got {p126}")
+    over = load_product_model("rs1g08", overlay={"vcc_list": [3.3], "pass_mode": {"ICC_uA": "max-only"}})
+    if over is None or over.vcc_list != [3.3]:
+        errors.append(f"test_params overlay must replace vcc_list, got {None if over is None else over.vcc_list}")
+    if m08.vcc_list == [3.3] and len(m08.vcc_list) == 1:
+        errors.append("part yaml vcc_list must stay the default without overlay")
+    pins = ["A", "B", "C"]
+    rows = []
+    for vec in iter_logic_corners(pins):
+        y = "H" if all(vec[p] == "H" for p in pins) else "L"
+        rows.append({**vec, "Y": y})
+    derived = derive_isolation(logic_inputs=pins, truth_table=rows)
+    a = derived.get("A") or []
+    if not any(p.fix.get("B") == "H" and p.fix.get("C") == "H" and p.y_expect == "track" for p in a):
+        errors.append(f"3-input AND derive A must track with B=H C=H, got {a}")
+    if len(iter_logic_corners(pins)) != 8:
+        errors.append("3-input AND corners must be 8")
+    specs = {s.get("id"): s for s in load_part_specs("rs1g08")}
+    voh_mode = str(specs.get("VOH_2p0V", {}).get("pass_mode") or "").replace("_", "-")
+    if voh_mode != "min-only":
+        errors.append("rs1g08 VOH pass_mode must be min-only")
+    icc_mode = str(specs.get("ICC_uA", {}).get("pass_mode") or "").replace("_", "-")
+    if icc_mode != "max-only":
+        errors.append("rs1g08 ICC_uA pass_mode must be max-only")
+    if judge_value(4.9, 4.8, 9, pass_mode="min-only") != "pass":
+        errors.append("min-only must ignore max")
+    if judge_value(0.2, 1, 0.5, pass_mode="max-only") != "pass":
+        errors.append("max-only must ignore min")
+    if infer_pass_mode({"id": "VIH_V", "min": 2.0}) != "min-only":
+        errors.append("VIH default pass_mode min-only")
     return errors
 
 
@@ -391,6 +476,7 @@ def check_logic_dc() -> list[str]:
     errors += _status_tokens_ok()
     errors += _rs1g97_holds()
     errors += _buf126_ok()
+    errors += _scale_and_overlay_ok()
     errors += _seelim_wrap_ok()
     errors += _registry_ok()
     errors += _panel_ok()

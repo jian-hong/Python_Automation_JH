@@ -143,6 +143,7 @@ class IsolationPattern:
     y_expect: str  # track | invert
     vil_sweep: str = "rising_then_falling"  # reverse = falling-first for VIL
     status: str = ""
+    source: str = ""  # derived_track | derived_invert | explicit
 
 
 @dataclass
@@ -169,6 +170,7 @@ class ProductModel:
     status: str = ""
     vcc_list_status: str = ""
     vcc_op_status: str = ""
+    gaps: list[str] = field(default_factory=list)
     raw: dict[str, Any] = field(default_factory=dict)
 
     def has_oe(self) -> bool:
@@ -383,7 +385,12 @@ def derive_isolation(
     oe_pin: str = "",
     oe_active: str = "",
 ) -> dict[str, list[IsolationPattern]]:
-    """Unused ties so Y tracks or inverts the swept pin. No part-name branches."""
+    """Unused ties so Y tracks (preferred) or inverts the swept pin.
+
+    See Lim RS1G97 goldens are the reference algorithm: Y must follow the
+    swept pin non-inverting when a combo exists. Invert is recorded only
+    when no track combo exists. No part-name branches.
+    """
     if not logic_inputs or not truth_table:
         return {}
     out: dict[str, list[IsolationPattern]] = {}
@@ -412,6 +419,7 @@ def derive_isolation(
                         sweep_pin=sweep,
                         fix=dict(fix),
                         y_expect="track",
+                        source="derived_track",
                     )
                 )
             elif y_l == "H" and y_h == "L":
@@ -421,10 +429,52 @@ def derive_isolation(
                         fix=dict(fix),
                         y_expect="invert",
                         vil_sweep="reverse",
+                        source="derived_invert",
                     )
                 )
         out[sweep] = patterns
     return out
+
+
+def _y_expect_from_row(row: dict[str, Any], default: str = "track") -> str:
+    if "y_tracks" in row:
+        return "track" if bool(row.get("y_tracks")) else "invert"
+    raw = str(row.get("y_expect") or row.get("expect") or row.get("polarity") or default)
+    s = raw.strip().lower().replace(" ", "_")
+    if s in ("track", "tracks", "noninv", "non_inverting", "follow"):
+        return "track"
+    if s in ("invert", "inverted", "not", "not_c", "inverting"):
+        return "invert"
+    return default if default in ("track", "invert") else "track"
+
+
+def _fix_from_row(row: dict[str, Any]) -> dict[str, str]:
+    fix_raw = row.get("hold") if isinstance(row.get("hold"), dict) else None
+    if fix_raw is None:
+        fix_raw = row.get("fix") if isinstance(row.get("fix"), dict) else {}
+    return {str(k).strip().upper(): _norm_level(v) for k, v in fix_raw.items()}
+
+
+def _pattern_from_row(row: dict[str, Any], default_pin: str, status: str = "") -> Optional[IsolationPattern]:
+    if not isinstance(row, dict):
+        return None
+    sweep = str(row.get("sweep") or row.get("sweep_pin") or default_pin).strip().upper()
+    if not sweep:
+        return None
+    expect = _y_expect_from_row(row)
+    vil = str(row.get("vil_sweep") or "").strip().lower()
+    if expect == "invert" and not vil:
+        vil = "reverse"
+    if not vil:
+        vil = "rising_then_falling"
+    return IsolationPattern(
+        sweep_pin=sweep,
+        fix=_fix_from_row(row),
+        y_expect=expect,
+        vil_sweep=vil,
+        status=str(row.get("status") or status),
+        source="explicit",
+    )
 
 
 def _parse_isolation_block(raw: Any) -> tuple[dict[str, list[IsolationPattern]], str]:
@@ -434,37 +484,92 @@ def _parse_isolation_block(raw: Any) -> tuple[dict[str, list[IsolationPattern]],
     tests = raw.get("tests") if isinstance(raw.get("tests"), dict) else raw
     out: dict[str, list[IsolationPattern]] = {}
     for key, val in tests.items() if isinstance(tests, dict) else []:
-        if str(key).strip().lower() in ("status", "note", "notes"):
+        if str(key).strip().lower() in ("status", "note", "notes", "source"):
             continue
         pin = str(key).strip().upper()
         rows = val if isinstance(val, list) else [val]
         pats: list[IsolationPattern] = []
         for row in rows:
-            if not isinstance(row, dict):
-                continue
-            sweep = str(row.get("sweep_pin") or pin).strip().upper()
-            fix_raw = row.get("fix") if isinstance(row.get("fix"), dict) else {}
-            fix = {str(k).strip().upper(): _norm_level(v) for k, v in fix_raw.items()}
-            expect = str(row.get("y_expect") or row.get("expect") or "track").strip().lower()
-            if expect not in ("track", "invert"):
-                expect = "track"
-            vil = str(row.get("vil_sweep") or "").strip().lower()
-            if expect == "invert" and not vil:
-                vil = "reverse"
-            if not vil:
-                vil = "rising_then_falling"
-            pats.append(
-                IsolationPattern(
-                    sweep_pin=sweep,
-                    fix=fix,
-                    y_expect=expect,
-                    vil_sweep=vil,
-                    status=str(row.get("status") or status),
-                )
-            )
+            pat = _pattern_from_row(row, pin, status) if isinstance(row, dict) else None
+            if pat:
+                pats.append(pat)
         if pats:
             out[pin] = pats
     return out, status
+
+
+def _parse_isolation_list(raw: Any, status: str = "") -> dict[str, list[IsolationPattern]]:
+    """Product-model import shape: threshold_isolation: [{sweep, hold, y_tracks}]."""
+    out: dict[str, list[IsolationPattern]] = {}
+    for row in _as_list(raw):
+        if not isinstance(row, dict):
+            continue
+        pin = str(row.get("sweep") or row.get("sweep_pin") or "").strip().upper()
+        pat = _pattern_from_row(row, pin, status)
+        if pat is None:
+            continue
+        out.setdefault(pat.sweep_pin, []).append(pat)
+    return out
+
+
+def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, Any]]) -> dict[str, Any]:
+    """Version overlay from _manifest/test_params.yaml (PRD-004 keys)."""
+    if not isinstance(overlay, dict) or not overlay:
+        return blob
+    out = dict(blob)
+    for key in ("vcc_list", "vcc_sweep_list", "vcc_sweep"):
+        nums = _floats(overlay.get(key))
+        if nums:
+            out["vcc_list"] = nums
+            break
+    if overlay.get("logic_inputs"):
+        out["logic_inputs"] = overlay["logic_inputs"]
+    recipe = dict(_as_dict(out.get("recipe")))
+    if overlay.get("levels") is not None:
+        recipe["levels"] = overlay["levels"]
+    if overlay.get("rails") is not None:
+        recipe["rails"] = overlay["rails"]
+    if recipe != _as_dict(out.get("recipe")):
+        out["recipe"] = recipe
+    if overlay.get("oe") is not None:
+        out["oe"] = overlay["oe"]
+    if overlay.get("schmitt") is not None:
+        out["schmitt"] = overlay["schmitt"]
+    for iso_key in ("isolation", "threshold_isolation"):
+        if overlay.get(iso_key) is not None:
+            out[iso_key] = overlay[iso_key]
+    if isinstance(overlay.get("pass_mode"), dict):
+        pm = dict(_as_dict(out.get("pass_mode")))
+        lm = dict(_as_dict(out.get("limit_mode")))
+        for k, v in overlay["pass_mode"].items():
+            pm[str(k)] = str(v)
+            lm[str(k)] = str(v)
+        out["pass_mode"] = pm
+        out["limit_mode"] = lm
+    if overlay.get("gaps") is not None:
+        out["gaps"] = overlay["gaps"]
+    return out
+
+
+def _yaml_gaps(blob: dict[str, Any]) -> list[str]:
+    raw = blob.get("gaps")
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, str) and raw.strip():
+        return [raw.strip()]
+    return []
+
+
+def _merge_isolation(
+    derived: dict[str, list[IsolationPattern]],
+    explicit: dict[str, list[IsolationPattern]],
+) -> dict[str, list[IsolationPattern]]:
+    """Derived from truth_table is the algorithm. Explicit YAML overlays per pin."""
+    out = {k: list(v) for k, v in derived.items()}
+    for pin, pats in explicit.items():
+        if pats:
+            out[pin] = list(pats)
+    return out
 
 
 def _coerce_pass_mode(raw: Any) -> str:
@@ -575,6 +680,9 @@ def model_gaps(model: ProductModel) -> list[str]:
             gaps.append(f"{name}: {block.get('status')} ({block.get('note') or 'no invented loads'})")
     if not model.has_oe():
         gaps.append("oe=none: IOZ not applicable (do not enable ioz/ioff)")
+    for g in model.gaps:
+        if g not in gaps:
+            gaps.append(g)
     return gaps
 
 
@@ -605,6 +713,7 @@ def panel_payload(part_key: str) -> dict[str, Any]:
             for pin, pats in model.isolation.items()
         },
     }
+    ui = model_to_ui(model)
     return {
         "present": True,
         "part": model.part,
@@ -624,6 +733,11 @@ def panel_payload(part_key: str) -> dict[str, Any]:
         "limit_mode": dict(model.limit_mode),
         "truth_table": tt,
         "isolation": iso,
+        "isolation_run": ui.get("isolation"),
+        "threshold_isolation": ui.get("threshold_isolation"),
+        "icc_corners": ui.get("icc_corners"),
+        "icc_pins": ui.get("icc_pins"),
+        "logic_inputs": list(model.logic_inputs),
         "gaps": model_gaps(model),
         "pins": [{"name": p.name, "role": p.role, "number": p.number} for p in model.pins],
     }
@@ -632,12 +746,14 @@ def panel_payload(part_key: str) -> dict[str, Any]:
 _PANEL_SAVE_KEYS = (
     "truth_table",
     "isolation",
+    "threshold_isolation",
     "pass_mode",
     "limit_mode",
     "vcc_list",
     "vcc_list_status",
     "truth_table_status",
     "isolation_status",
+    "gaps",
 )
 
 
@@ -753,11 +869,16 @@ def _pin_drive(blob: dict[str, Any], logic_inputs: list[str], oe_pin: str, oe_mo
     return out
 
 
-def load_product_model(part_key: str) -> Optional[ProductModel]:
+def load_product_model(
+    part_key: str,
+    overlay: Optional[dict[str, Any]] = None,
+) -> Optional[ProductModel]:
+    """Load Path B model. overlay is campaign _manifest/test_params.yaml (optional)."""
     key = str(part_key or "").strip().lower()
     blob = load_product_model_dict(key)
     if not blob:
         return None
+    blob = apply_test_params_overlay(blob, overlay)
     part_yaml = load_part_yaml(key)
     pins = _pins(blob)
     logic_inputs = _logic_inputs(blob, pins)
@@ -779,6 +900,17 @@ def load_product_model(part_key: str) -> Optional[ProductModel]:
             output_pin = p.name
             break
     explicit, iso_status = _parse_isolation_block(blob.get("isolation"))
+    listed = _parse_isolation_list(blob.get("threshold_isolation"), iso_status)
+    for pin, pats in listed.items():
+        if pin not in explicit and pats:
+            explicit[pin] = pats
+        elif pin in explicit and pats:
+            # Import-format rows overlay the same pin when YAML listed both.
+            have = {(tuple(sorted(p.fix.items())), p.y_expect) for p in explicit[pin]}
+            for pat in pats:
+                sig = (tuple(sorted(pat.fix.items())), pat.y_expect)
+                if sig not in have:
+                    explicit[pin].append(pat)
     derived = derive_isolation(
         logic_inputs=logic_inputs,
         truth_table=truth_table,
@@ -786,7 +918,7 @@ def load_product_model(part_key: str) -> Optional[ProductModel]:
         oe_pin=oe_pin if oe_mode != "none" else "",
         oe_active=oe_active_level(oe_mode) if oe_mode != "none" else "",
     )
-    isolation = explicit if explicit else derived
+    isolation = _merge_isolation(derived, explicit)
     dc_limits = _as_dict(blob.get("dc_limits"))
     limit_mode_raw = blob.get("limit_mode")
     limit_mode = (
@@ -831,6 +963,7 @@ def load_product_model(part_key: str) -> Optional[ProductModel]:
         status=str(blob.get("status") or tt_status),
         vcc_list_status=str(blob.get("vcc_list_status") or ""),
         vcc_op_status=str(blob.get("vcc_op_status") or "RANGE_METADATA"),
+        gaps=_yaml_gaps(blob),
         raw=blob,
     )
 
@@ -889,3 +1022,92 @@ def vectors_for_output(
 def isolation_for(model: ProductModel, sweep_pin: str) -> list[IsolationPattern]:
     key = str(sweep_pin).strip().upper()
     return list(model.isolation.get(key) or [])
+
+
+def _skip_isolation_status(status: str) -> bool:
+    """Skip PROPOSED / HOLD CONFIRM rows so a MUX guess cannot silently run."""
+    s = str(status or "").strip().upper().replace("_", " ").replace("-", " ")
+    if not s:
+        return False
+    tokens = set(s.split())
+    if "PROPOSED" in tokens:
+        return True
+    if "HOLD" in tokens and "CONFIRM" in tokens:
+        return True
+    if s in ("HOLD", "HOLD CONFIRM"):
+        return True
+    return False
+
+
+def isolation_for_run(model: ProductModel, sweep_pin: str) -> list[IsolationPattern]:
+    """One combo per pin: first non-inverting track, else first invert.
+
+    Skips PROPOSED / HOLD CONFIRM rows. UNCONFIRMED table status is not skipped
+    here -- check_logic_dc stays fail-closed until Datasheet-signed.
+    """
+    pats = [p for p in isolation_for(model, sweep_pin) if not _skip_isolation_status(p.status)]
+    tracks = [p for p in pats if p.y_expect == "track"]
+    if tracks:
+        return [tracks[0]]
+    inverts = [p for p in pats if p.y_expect == "invert"]
+    if inverts:
+        return [inverts[0]]
+    return []
+
+
+def sim_icc_plan(model: ProductModel) -> dict[str, Any]:
+    pins = icc_pins(model)
+    corners = iter_logic_corners(pins)
+    return {"pins": pins, "n": len(corners), "corners": corners}
+
+
+def _pat_ui(pat: IsolationPattern) -> dict[str, Any]:
+    return {
+        "sweep": pat.sweep_pin,
+        "sweep_pin": pat.sweep_pin,
+        "hold": dict(pat.fix),
+        "fix": dict(pat.fix),
+        "y_tracks": pat.y_expect == "track",
+        "y_expect": pat.y_expect,
+        "vil_sweep": pat.vil_sweep,
+        "status": pat.status,
+        "source": pat.source,
+    }
+
+
+def model_to_ui(model: ProductModel) -> dict[str, Any]:
+    """Panel payload: recipe + derived corners. Not a second runner."""
+    plan = sim_icc_plan(model)
+    iso: dict[str, Any] = {}
+    threshold_isolation: list[dict[str, Any]] = []
+    for pin in model.logic_inputs:
+        run = isolation_for_run(model, pin)
+        all_p = isolation_for(model, pin)
+        iso[pin] = {"run": [_pat_ui(p) for p in run], "all": [_pat_ui(p) for p in all_p]}
+        threshold_isolation.extend(_pat_ui(p) for p in run)
+    oe: Any = None
+    if model.has_oe():
+        oe = {"pin": model.oe_pin, "active": model.oe_mode}
+    return {
+        "part": model.part,
+        "logic_inputs": list(model.logic_inputs),
+        "oe": oe,
+        "schmitt": bool(model.schmitt),
+        "vcc_list": list(model.vcc_list),
+        "vcc_sweep_list": list(model.vcc_list),
+        "truth_table": [dict(r) for r in model.truth_table],
+        "truth_table_status": model.truth_table_status,
+        "threshold_isolation": threshold_isolation,
+        "isolation": iso,
+        "isolation_status": model.isolation_status,
+        "icc_pins": list(plan["pins"]),
+        "icc_corners": int(plan["n"]),
+        "gaps": list(model_gaps(model)),
+        "has_oe": model.has_oe(),
+        "limit_mode": dict(model.limit_mode),
+        "pass_mode": dict(model.pass_mode),
+        "levels": model.recipe.get("levels"),
+        "rails": model.recipe.get("rails"),
+        "status": model.status,
+        "output_pin": model.output_pin,
+    }

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917logicdc1" />
+  <link rel="stylesheet" href="styles.css?v=20260917logicdc2" />
 </head>
 <body>
   <div class="bg"></div>
@@ -279,10 +279,12 @@
           </div>
 
           <div class="glass panel wide hidden" id="panel-logic-dc">
-            <h2>Logic DC product model</h2>
-            <p class="hint">Path B fields from part YAML. UNCONFIRMED / PROVISIONAL is not Datasheet-signed and not greenable. Do not invent truth rows or IOH/IOL loads. Isolation is unused ties from the table.</p>
+            <h2>Logic DC recipe</h2>
+            <p class="hint">Path B: same TestSpec ids; SKU differs by truth table + pin roles + limits. UNCONFIRMED / PROVISIONAL is not Datasheet-signed and not greenable. Isolation is unused ties from the table (Y tracks the swept pin). See docs/LOGIC_DC.md.</p>
             <p class="hint" id="logic-dc-status">Apply a Logic campaign with product_model to edit.</p>
+            <p class="hint" id="logic-dc-meta"></p>
             <div id="logic-dc-gaps" class="hint"></div>
+            <div id="logic-dc-body"></div>
             <div class="param-grid">
               <label>vcc_list
                 <input id="logic-dc-vcc-list" type="text" />
@@ -297,10 +299,11 @@
             <label class="logic-dc-block">isolation
               <textarea id="logic-dc-isolation" class="mono-edit" rows="8"></textarea>
             </label>
-            <div class="row" style="margin-top:8px">
+            <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px">
               <button type="button" id="btn-save-logic-dc" class="btn">Save product_model</button>
+              <button type="button" id="btn-save-test-params" class="btn accent">Save Version overlay</button>
             </div>
-            <p class="hint" id="logic-dc-hint"></p>
+            <p class="hint" id="logic-dc-hint">Save product_model writes part yaml. Save Version overlay writes this campaign <code>_manifest/test_params.yaml</code> only.</p>
           </div>
 
           <div class="glass panel" id="panel-gain-boards">
@@ -369,7 +372,7 @@
         </div>
         <div class="glass panel wide">
           <h2>Last results</h2>
-          <table id="results-table"><thead><tr><th>DUT</th><th>Test</th><th>Param</th><th>Min</th><th>Max</th><th>Typ</th><th>Value</th><th>Result</th><th>Summary</th></tr></thead><tbody></tbody></table>
+          <table id="results-table"><thead><tr><th>DUT</th><th>Test</th><th>Param</th><th>Mode</th><th>Min</th><th>Max</th><th>Typ</th><th>Value</th><th>Result</th><th>Summary</th></tr></thead><tbody></tbody></table>
           <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px">
             <button type="button" id="btn-export-datalog" class="btn accent">Export STS datalog</button>
             <button type="button" id="btn-fill-excel" class="btn">Fill Excel numbers</button>
@@ -473,6 +476,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260917logicdc1"></script>
+  <script src="app.js?v=20260917logicdc2"></script>
 </body>
 </html>

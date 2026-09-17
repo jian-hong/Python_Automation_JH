@@ -840,11 +840,13 @@ async function loadParamDefaults() {
     }
     renderConditions();
     renderDutPicks();
+    renderLogicDc();
     applyTestDefaults(false);
     await loadLogicDcPanel();
   } catch (_) {
     paramCatalog = { tests: {}, gain_profiles: {}, psu_golden: { current_limit_a: 0.1 }, gbw_steps: [], gbw_run_labels: {}, controls: [], sample_size: 4 };
     renderConditions();
+    renderLogicDc();
     try { await loadLogicDcPanel(); } catch (_) { /* ignore */ }
   }
 }
@@ -981,6 +983,80 @@ function renderDutPicks() {
     html += `<label class="check"><input type="checkbox" class="dut-cb" value="${i}" ${checked} /> ${i}</label>`;
   }
   box.innerHTML = html;
+}
+
+function renderLogicDc() {
+  const panel = $("panel-logic-dc");
+  const body = $("logic-dc-body");
+  const meta = $("logic-dc-meta");
+  const hint = $("logic-dc-hint");
+  if (!panel || !body) return;
+  const dc = paramCatalog.logic_dc;
+  const show = activeFamily === "logic" && dc && (dc.logic_inputs || []).length;
+  panel.classList.toggle("hidden", !show);
+  if (!show) {
+    body.innerHTML = "";
+    if (meta) meta.textContent = "";
+    return;
+  }
+  const inputs = dc.logic_inputs || [];
+  const oe = dc.oe;
+  const oeTxt = oe ? `${oe.pin} active ${oe.active}` : "none";
+  if (meta) {
+    meta.textContent =
+      `${dc.part || ""} · inputs ${inputs.join(",")} · OE ${oeTxt}` +
+      ` · schmitt ${dc.schmitt ? "yes" : "no"} · ICC ${dc.icc_corners || 0} corners (2^n)` +
+      (dc.isolation_status ? ` · isolation ${dc.isolation_status}` : "");
+  }
+  const tt = dc.truth_table || [];
+  const pins = tt.length ? Object.keys(tt[0]) : inputs.concat([dc.output_pin || "Y"]);
+  let ttHtml = "<h3 class=\"subhead\">Truth table</h3>";
+  if (!tt.length) {
+    ttHtml += "<p class=\"hint\">No truth_table in product_model.</p>";
+  } else {
+    ttHtml += "<table class=\"logic-dc-table\"><thead><tr>" +
+      pins.map((p) => `<th>${p}</th>`).join("") +
+      "</tr></thead><tbody>" +
+      tt.map((row) => "<tr>" + pins.map((p) => `<td>${row[p] ?? ""}</td>`).join("") + "</tr>").join("") +
+      "</tbody></table>";
+  }
+  const iso = dc.isolation || {};
+  let isoHtml = "<h3 class=\"subhead\">Isolation (run = first track, else invert)</h3>";
+  isoHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Sweep</th><th>Hold</th><th>Y</th><th>Source</th></tr></thead><tbody>";
+  inputs.forEach((pin) => {
+    const run = ((iso[pin] || {}).run) || [];
+    if (!run.length) {
+      isoHtml += `<tr><td>${pin}</td><td colspan="3">UNSURE -- no derivable combo</td></tr>`;
+      return;
+    }
+    run.forEach((p) => {
+      const hold = p.hold || p.fix || {};
+      const holdTxt = Object.keys(hold).map((k) => `${k}=${hold[k]}`).join(" ") || "--";
+      isoHtml += `<tr><td>${p.sweep || pin}</td><td>${holdTxt}</td><td>${p.y_expect || ""}</td><td>${p.source || ""}</td></tr>`;
+    });
+  });
+  isoHtml += "</tbody></table>";
+  const vcc = (dc.vcc_list || dc.vcc_sweep_list || []).join(", ");
+  const specs = dc.specs || [];
+  const modes = ["range", "min-only", "max-only"];
+  let specHtml = "<h3 class=\"subhead\">Limits + pass_mode</h3>";
+  specHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Id</th><th>Mode</th><th>Min</th><th>Max</th><th>Test</th></tr></thead><tbody>";
+  specs.forEach((s) => {
+    const sid = s.id || "";
+    const cur = String(s.pass_mode || "");
+    const opts = modes.map((m) => `<option value="${m}" ${m === cur ? "selected" : ""}>${m}</option>`).join("");
+    specHtml += `<tr><td>${sid}</td><td><select class="logic-dc-mode" data-id="${sid}">${opts}</select></td>` +
+      `<td>${s.min != null ? s.min : ""}</td><td>${s.max != null ? s.max : ""}</td><td>${s.test || ""}</td></tr>`;
+  });
+  specHtml += "</tbody></table>";
+  const gaps = (dc.gaps || []).map((g) => `<li>${g}</li>`).join("");
+  const gapHtml = gaps ? `<h3 class="subhead">Gaps</h3><ul class="hint">${gaps}</ul>` : "";
+  body.innerHTML =
+    `<label>vcc_list (comma)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>` +
+    ttHtml + isoHtml + specHtml + gapHtml;
+  if (hint) {
+    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (pass_mode + vcc_list). Ctrl+F5 after worker restart if RPC is new.";
+  }
 }
 
 function kindLabel(kind) {
@@ -2261,6 +2337,7 @@ async function loadTests() {
       const instr = (t.required_instruments || []).join("+") || "MSO+PSU+AWG";
       const specBits = (t.specs || []).map((s) => {
         const bits = [s.id || ""];
+        if (s.pass_mode) bits.push(String(s.pass_mode));
         if (s.min != null) bits.push(`min ${s.min}`);
         if (s.max != null) bits.push(`max ${s.max}`);
         if (s.typ != null) bits.push(`typ ${s.typ} ${s.unit || ""}`.trim());
@@ -2465,6 +2542,33 @@ if ($("btn-forget-person")) {
         $("person-hint").textContent = `Forgot ${label} in yaml. Folders under ${label} were not deleted.`;
       }
       log(`Forgot person ${label} (yaml only)\n`);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+if ($("btn-save-test-params")) {
+  $("btn-save-test-params").onclick = async () => {
+    try {
+      const vccRaw = (
+        (($("logic-dc-vcc") && $("logic-dc-vcc").value) || "")
+        || (($("logic-dc-vcc-list") && $("logic-dc-vcc-list").value) || "")
+      ).trim();
+      const vcc_list = vccRaw
+        ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
+        : [];
+      const pass_mode = {};
+      document.querySelectorAll(".logic-dc-mode").forEach((sel) => {
+        const id = sel.getAttribute("data-id");
+        if (id && sel.value) pass_mode[id] = sel.value;
+      });
+      const res = await rpc("save_test_params", { test_params: { vcc_list, pass_mode } });
+      const hint = $("logic-dc-hint");
+      if (hint) hint.textContent = `Saved ${res.path || "_manifest/test_params.yaml"}`;
+      log(`Saved Version overlay test_params.yaml\n`);
+      await loadParamDefaults();
+      await loadTests();
     } catch (e) {
       alert(e.message);
     }
@@ -3115,11 +3219,11 @@ async function paintSessionReport() {
     for (const m of meas) {
       n += 1;
       const res = String((m && m.result) || (s.success ? "pass" : "fail"));
-      tb.innerHTML += `<tr><td>${s.dut ?? ""}</td><td>${s.test_id || ""}</td><td>${(m && m.id) || ""}</td><td>${fmtSpec(m && m.min)}</td><td>${fmtSpec(m && m.max)}</td><td>${fmtSpec(m && m.typ)}</td><td>${fmtSpec(m && m.value)}</td><td>${res}</td><td>${s.summary || s.error || ""}</td></tr>`;
+      tb.innerHTML += `<tr><td>${s.dut ?? ""}</td><td>${s.test_id || ""}</td><td>${(m && m.id) || ""}</td><td>${fmtSpec(m && m.pass_mode)}</td><td>${fmtSpec(m && m.min)}</td><td>${fmtSpec(m && m.max)}</td><td>${fmtSpec(m && m.typ)}</td><td>${fmtSpec(m && m.value)}</td><td>${res}</td><td>${s.summary || s.error || ""}</td></tr>`;
     }
   }
   if (!n) {
-    tb.innerHTML = `<tr><td colspan="9">No session measurements yet -- START or DEMO</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="10">No session measurements yet -- START or DEMO</td></tr>`;
   }
   if ($("results-db-hint") && doc.identity) {
     const fail = (doc.header && doc.header.fail) || 0;

@@ -172,6 +172,9 @@ class DbContext:
     def test_catalog_path(self) -> Path:
         return self.manifest_dir() / "test_catalog.yaml"
 
+    def test_params_path(self) -> Path:
+        return self.manifest_dir() / "test_params.yaml"
+
     def lab_report_path(self) -> Path:
         # Prefer sheet_map workbook path; else first xlsx in workbook/; else part yaml.
         sm = self.load_sheet_map()
@@ -279,6 +282,46 @@ class DbContext:
         with path.open(encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
         return data if isinstance(data, dict) else {}
+
+    def load_test_params(self) -> dict[str, Any]:
+        """Version overlay (PRD-004): vcc_list, levels, rails, pass_mode."""
+        path = self.test_params_path()
+        if not path.is_file():
+            return {}
+        with path.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        return data if isinstance(data, dict) else {}
+
+    def save_test_params(self, blob: dict[str, Any] | None) -> dict[str, Any]:
+        """Write campaign _manifest/test_params.yaml. Does not edit part yaml."""
+        require_write_operator(self.operator)
+        allowed = (
+            "vcc_list",
+            "vcc_sweep_list",
+            "levels",
+            "rails",
+            "pass_mode",
+            "logic_inputs",
+            "isolation",
+            "threshold_isolation",
+            "gaps",
+            "oe",
+            "schmitt",
+        )
+        incoming = blob if isinstance(blob, dict) else {}
+        existing = self.load_test_params()
+        for key in allowed:
+            if key in incoming:
+                existing[key] = incoming[key]
+        self.manifest_dir().mkdir(parents=True, exist_ok=True)
+        path = self.test_params_path()
+        text = (
+            "# Version overlay (PRD-004 / EPIC-A28). Does not change part yaml or limits yaml.\n"
+            "# Keys: vcc_list, levels, rails, pass_mode, logic_inputs, isolation.\n"
+            + yaml.safe_dump(existing, sort_keys=False, allow_unicode=True)
+        )
+        path.write_text(text, encoding="utf-8")
+        return {"ok": True, "path": str(path), "test_params": existing}
 
     def test_entry(self, test_key: str) -> dict[str, Any]:
         sm = self.load_sheet_map()
@@ -873,7 +916,8 @@ def record_step(
         from ate.core.specs import any_fail, enrich_measurement, load_part_specs
 
         pk = str(get_context().part_key or "")
-        specs = load_part_specs(pk)
+        overlay = get_context().load_test_params()
+        specs = load_part_specs(pk, overlay=overlay)
         stamped = [
             enrich_measurement(dict(m), specs=specs, test_id=test_id)
             for m in measurements
