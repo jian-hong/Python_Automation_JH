@@ -1,13 +1,18 @@
-"""Thin TestSpec wraps for repo-root logic_tests.py (A02-T01)."""
+"""Thin TestSpec wraps for repo-root logic_tests.py (A02-T01).
+
+Do not import logic_tests at family load -- that module pulls scope_setup -> pyvisa.
+Look up the golden body only when START actually runs the wrap.
+"""
 from __future__ import annotations
 
 import inspect
 from typing import Any, Callable
 
 from ate.core.registry import TestSpec, register
-from ate.core.runner import RunParams
+from ate.core.run_params import RunParams
 
 _LOGIC_FIXTURE = "LOGIC"
+_LEGACY: dict[str, Callable[..., dict[str, Any]]] | None = None
 
 
 def _invoke_legacy(fn: Callable[..., dict[str, Any]], instr, params: RunParams):
@@ -34,16 +39,43 @@ def _invoke_legacy(fn: Callable[..., dict[str, Any]], instr, params: RunParams):
     return fn(instr, params.vcc)
 
 
+def _load_legacy() -> dict[str, Callable[..., dict[str, Any]]]:
+    from logic_tests import (
+        test_output_voltage,
+        test_supply_current,
+        test_tdis,
+        test_ten,
+        test_tidle,
+        test_tp,
+    )
+
+    return {
+        "tp": test_tp,
+        "tidle": test_tidle,
+        "tdis": test_tdis,
+        "ten": test_ten,
+        "supply_current": test_supply_current,
+        "output_voltage": test_output_voltage,
+    }
+
+
+def _legacy_fn(key: str) -> Callable[..., dict[str, Any]]:
+    global _LEGACY
+    if _LEGACY is None:
+        _LEGACY = _load_legacy()
+    return _LEGACY[key]
+
+
 def _register_vcc_test(
     *,
     test_id: str,
     label: str,
     lab_sheet: str,
     required: frozenset[str],
-    legacy_fn: Callable[..., dict[str, Any]],
+    legacy_key: str,
 ) -> None:
     def _run(instr, params: RunParams):
-        data = _invoke_legacy(legacy_fn, instr, params)
+        data = _invoke_legacy(_legacy_fn(legacy_key), instr, params)
         keys = [k for k in data if k not in ("VCC", "VCCA", "VCCB")]
         summary = " ".join(f"{k}={data[k]}" for k in keys) if keys else f"VCC={data.get('VCC', params.vcc)}"
         return {"summary": summary, "data": data}
@@ -84,68 +116,46 @@ def _register_cap_load() -> None:
     )
 
 
-def _load_legacy():
-    from logic_tests import (
-        test_output_voltage,
-        test_supply_current,
-        test_tdis,
-        test_ten,
-        test_tidle,
-        test_tp,
-    )
-
-    return {
-        "tp": test_tp,
-        "tidle": test_tidle,
-        "tdis": test_tdis,
-        "ten": test_ten,
-        "supply_current": test_supply_current,
-        "output_voltage": test_output_voltage,
-    }
-
-
-_legacy = _load_legacy()
-
 _register_vcc_test(
     test_id="tp",
     label="Propagation Delay (TP)",
     lab_sheet="TP",
     required=frozenset({"MSO", "PSU", "AWG"}),
-    legacy_fn=_legacy["tp"],
+    legacy_key="tp",
 )
 _register_vcc_test(
     test_id="tidle",
     label="Idle Propagation Delay (TIDLE)",
     lab_sheet="TIDLE",
     required=frozenset({"MSO", "PSU", "AWG"}),
-    legacy_fn=_legacy["tidle"],
+    legacy_key="tidle",
 )
 _register_vcc_test(
     test_id="tdis",
     label="Output Disable Time (TDIS)",
     lab_sheet="TDIS",
     required=frozenset({"MSO", "PSU", "AWG"}),
-    legacy_fn=_legacy["tdis"],
+    legacy_key="tdis",
 )
 _register_vcc_test(
     test_id="ten",
     label="Output Enable Time (TEN)",
     lab_sheet="TEN",
     required=frozenset({"MSO", "PSU", "AWG"}),
-    legacy_fn=_legacy["ten"],
+    legacy_key="ten",
 )
 _register_vcc_test(
     test_id="supply_current",
     label="Supply Current (IDD)",
     lab_sheet="IDD",
     required=frozenset({"PSU", "DMM"}),
-    legacy_fn=_legacy["supply_current"],
+    legacy_key="supply_current",
 )
 _register_vcc_test(
     test_id="output_voltage",
     label="Output Voltage",
     lab_sheet="VOUT",
     required=frozenset({"PSU", "DMM"}),
-    legacy_fn=_legacy["output_voltage"],
+    legacy_key="output_voltage",
 )
 _register_cap_load()

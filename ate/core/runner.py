@@ -14,10 +14,9 @@ from ate.core.database import (
     get_context,
     record_step,
 )
-from ate.core.paths import RESEARCH_EXCEL_PATH
 from ate.core.registry import TestSpec, group_by_fixture, load_family
+from ate.core.run_params import RunParams
 from ate.core.timeline import Timeline, build_plan, short_batch_tag, short_test_tag
-from ate.drivers.mso5072 import capture_jpeg, is_visa_poison
 from ate.fixture.modes import mode_gain, mode_checklist
 from ate.fixture.operator import OperatorGate
 from ate.fixture.stm_bridge import StmBridge
@@ -33,48 +32,16 @@ def ensure_screenshot_dir(test_folder: str = "ORT", dut_index: int | None = None
     return _ens(test_folder, dut_index)
 
 
-@dataclass
-class RunParams:
-    vcc: float = 5.0
-    gain: float = 1.0  # general board default (buffer); overwritten per fixture batch
-    freq_hz: float = 500.0
-    amp_vpp: float = 0.004
-    n_repeats: int = 3
-    lab_report: str = ""
-    research_excel: str = str(RESEARCH_EXCEL_PATH)
-    reset_before_run: bool = False
-    unit_index: int = 1
-    dut_indices: list[int] = field(default_factory=list)  # empty → [unit_index]
-    part: str = "rs622"
-    channel: str = "CHA"
-    channels: list[str] = field(default_factory=list)
-    run_batch_id: str = ""  # shared across CHA/CHB for one DUT run → one JSON
-    run_label: str = ""  # operator name for this run (e.g. G11_1k_10k)
-    gain_profile: str = "default"  # ate/config/parts gain_profiles key
-    rf: str = ""  # RF network label (10k, 1k, …)
-    ri: str = ""  # RI network label
-    current_limit_a: float = 0.10
-    vccb: Optional[float] = None  # dual-rail Logic; None = part yaml
-    progress_hook: Optional[Callable[..., None]] = field(default=None, repr=False)
-    pause_hook: Optional[Callable[[str], bool]] = field(default=None, repr=False)
+def _capture_jpeg(scope, path):
+    from ate.drivers.mso5072 import capture_jpeg
 
-    def resolved_duts(self) -> list[int]:
-        if self.dut_indices:
-            return [int(d) for d in self.dut_indices]
-        return [int(self.unit_index)]
+    return capture_jpeg(scope, path)
 
-    def resolved_channels(self) -> list[str]:
-        order = ("CHA", "CHB")
-        if self.channels:
-            picked = {str(c).upper() for c in self.channels}
-            return [c for c in order if c in picked] or ["CHA"]
-        ch = (self.channel or "CHA").upper()
-        return [ch if ch in order else "CHA"]
 
-    def resolved_lab_report(self) -> str:
-        if self.lab_report:
-            return self.lab_report
-        return str(get_context().lab_report_path())
+def _is_visa_poison(exc: BaseException | str) -> bool:
+    from ate.drivers.mso5072 import is_visa_poison
+
+    return is_visa_poison(exc)
 
 
 @dataclass
@@ -197,7 +164,7 @@ class ATECore:
         path = out / f"{prefix}_{ts}.jpg"
         self._log(f"MSO5072 JPEG → {path}")
         self._log(f"DB context: {ctx.component}/{ctx.part}/{ctx.package}/{ctx.version}")
-        return capture_jpeg(self._instr.scope, path)
+        return _capture_jpeg(self._instr.scope, path)
 
     def operator_respond(self, data: dict) -> None:
         self.gate.respond(data)
@@ -750,7 +717,7 @@ class ATECore:
                                 self._log(
                                     f"FAIL DUT_{dut} {use_ch} {spec.id}: {err}"
                                 )
-                                if is_visa_poison(err):
+                                if _is_visa_poison(err):
                                     self._log(
                                         "VISA SYSTEM_ERROR after retry — "
                                         "auto-continue next unit (no Continue popup)"
@@ -898,7 +865,7 @@ class ATECore:
             except Exception as exc:
                 last_exc = exc
                 self._log(f"FAIL {spec.id}: {exc}")
-                if not is_visa_poison(exc) or attempt == 1:
+                if not _is_visa_poison(exc) or attempt == 1:
                     break
                 self._log(
                     f"VISA poison on {spec.id} — recover MSO and retry once "

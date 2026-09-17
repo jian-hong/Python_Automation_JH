@@ -193,9 +193,24 @@ def _check_family_conditions() -> None:
         raise AssertionError("demo_ingest + rs622 must not inherit OpAmp vcc controls")
 
 
+def _assert_logic_load_visa_free() -> None:
+    """Logic family load must not pull the USB stack. OpAmp still needs pyvisa."""
+    visa_before = "pyvisa" in sys.modules
+    legacy_before = "logic_tests" in sys.modules
+    load_family("logic")
+    if not visa_before and "pyvisa" in sys.modules:
+        raise AssertionError(
+            "load_family(logic) imported pyvisa -- Logic tests must not import "
+            "runner/scope_setup/logic_tests at family load"
+        )
+    if not legacy_before and "logic_tests" in sys.modules:
+        raise AssertionError("load_family(logic) imported logic_tests -- wraps must stay lazy")
+
+
 def main() -> int:
     _runner_uses_family_loader()
     _check_family_conditions()
+    _assert_logic_load_visa_free()
 
     load_family("opamp")
     opa_ids = {t.id for t in all_tests()}

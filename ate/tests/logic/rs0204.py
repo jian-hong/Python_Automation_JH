@@ -16,7 +16,7 @@ import yaml
 
 from ate.core.paths import PARTS_DIR
 from ate.core.registry import TestSpec, register
-from ate.core.runner import RunParams
+from ate.core.run_params import RunParams
 
 _FIXTURE = "LOGIC"
 _PART = "rs0204"

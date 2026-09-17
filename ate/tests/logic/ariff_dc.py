@@ -16,7 +16,7 @@ import yaml
 
 from ate.core.paths import PARTS_DIR
 from ate.core.registry import TestSpec, register
-from ate.core.runner import RunParams
+from ate.core.run_params import RunParams
 
 _LOGIC_FIXTURE = "LOGIC"
 _NOTE = "Ariff Logic DC (A12) — params from part YAML; no import Ariff.*"

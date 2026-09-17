@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ate.core.logic_model import isolation_errors, load_logic_model, rail_combos
 from ate.core.registry import all_tests, load_family
-from ate.core.runner import RunParams
+from ate.core.run_params import RunParams
 from ate.core.specs import enrich_measurement, load_part_specs
 from ate.fixture.modes import enabled_tests_for_part
 from ate.tests.logic.dc import make_sim_instr
@@ -55,18 +55,32 @@ def _run_sim(part: str, test_id: str, vcc: float) -> dict:
     return spec.run(instr, params)
 
 
+def _logic_src_must_not_import_runner() -> list[str]:
+    logic_dir = Path(__file__).resolve().parents[1] / "tests" / "logic"
+    out: list[str] = []
+    for name in ("wraps.py", "ariff_dc.py", "dc.py", "rs0204.py"):
+        text = (logic_dir / name).read_text(encoding="utf-8")
+        if re.search(r"from\s+ate\.core\.runner\s+import", text):
+            out.append(f"{name} must import RunParams from ate.core.run_params, not runner")
+    wraps = (logic_dir / "wraps.py").read_text(encoding="utf-8")
+    if re.search(r"(?m)^_legacy\s*=\s*_load_legacy\(\)", wraps):
+        out.append("wraps.py must lazy-import logic_tests (no _legacy = _load_legacy() at import)")
+    return out
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
 
-    import configurations
     import generator_setup
 
     if not hasattr(generator_setup, "setup_dc"):
         errors.append("generator_setup.setup_dc missing -- every Logic DC body ImportErrors")
     if not hasattr(generator_setup, "park_generator_idle"):
         errors.append("generator_setup.park_generator_idle missing -- START safe-idle breaks")
-    if not hasattr(configurations, "ScopeDevice"):
+    cfg = Path(__file__).resolve().parents[2] / "configurations.py"
+    if "class ScopeDevice" not in cfg.read_text(encoding="utf-8"):
         errors.append("configurations.ScopeDevice missing")
+    errors += _logic_src_must_not_import_runner()
 
     class _Gen:
         def __init__(self) -> None:
@@ -91,11 +105,20 @@ def check_logic_dc() -> list[str]:
     errors += _errors_src(dc_py)
     errors += _errors_src(model_py)
 
+    visa_before = "pyvisa" in sys.modules
+    legacy_before = "logic_tests" in sys.modules
     try:
         load_family("logic")
     except Exception as exc:
         errors.append(f"load_family(logic) failed: {type(exc).__name__}: {exc}")
         return errors
+    if not visa_before and "pyvisa" in sys.modules:
+        errors.append(
+            "load_family(logic) imported pyvisa -- Logic tests must not import "
+            "runner/scope_setup/logic_tests at family load"
+        )
+    if not legacy_before and "logic_tests" in sys.modules:
+        errors.append("load_family(logic) imported logic_tests -- wraps must stay lazy")
 
     ids = {t.id for t in all_tests()}
     for need in ("ioz", "input_thresholds", "supply_current_sweep", "delta_supply_current"):
@@ -259,7 +282,6 @@ def check_logic_dc() -> list[str]:
     except Exception as exc:
         errors.append(f"rs1g97 ioz SIM unexpected {type(exc).__name__}: {exc}")
 
-    load_family("opamp")
     return errors
 
 
@@ -272,7 +294,7 @@ def main() -> int:
         return 1
     print(
         "OK logic-dc: RS1G97/RS1G126 YAML model + isolation + SIM DC "
-        "(setup_dc present, no vih_vil on 97, ioz on 126)"
+        "(setup_dc present, no vih_vil on 97, ioz on 126, load_family visa-free)"
     )
     return 0
 

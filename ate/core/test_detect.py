@@ -71,6 +71,8 @@ def load_golden_roots() -> list[dict[str, Any]]:
         if not raw:
             continue
         path = Path(raw).expanduser()
+        if not path.is_absolute():
+            path = REPO_ROOT / path
         out.append(
             {
                 "path": str(path),
@@ -135,7 +137,22 @@ def guess_family_from_path(path: Path) -> str:
                 return pkg
         except ValueError:
             pass
-    if any(x in joined for x in ("/ariff/", "\\ariff\\", "/soo/", "\\soo\\", "/logic/", "\\logic\\", "rs1g")):
+    if any(
+        x in joined
+        for x in (
+            "/ariff/",
+            "\\ariff\\",
+            "/soo/",
+            "\\soo\\",
+            "/logic/",
+            "\\logic\\",
+            "rs1g",
+            "see_lin",
+            "seelim",
+            "see lim",
+            "see-lim",
+        )
+    ):
         return "logic"
     if any(x in joined for x in ("/lim/", "\\lim\\", "rs2323", "analogswitch", "analog_switch")):
         return "switch"
@@ -410,7 +427,7 @@ from __future__ import annotations
 from typing import Any
 
 from ate.core.registry import TestSpec, register
-from ate.core.runner import RunParams
+from ate.core.run_params import RunParams
 
 _FIXTURE = {fixture!r}
 _NOTE = "Imported from golden; fill measurement body. Source: {src_disp}"

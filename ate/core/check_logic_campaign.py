@@ -99,7 +99,12 @@ def _check_part(
             if unmapped:
                 errors.append(f"{part_key}: workbook sheets not in sheet_map: {unmapped}")
 
-    # Restore OpAmp default so other checks stay stable
+    _restore_opamp_context()
+    return errors
+
+
+def _restore_opamp_context() -> None:
+    """OpAmp USB stack needs pyvisa. Logic campaign already checked."""
     set_context(
         component="OpAmp",
         part="RS622",
@@ -108,8 +113,11 @@ def _check_part(
         version="Version_1",
         part_key="rs622",
     )
-    load_family("opamp")
-    return errors
+    try:
+        load_family("opamp")
+    except ModuleNotFoundError as exc:
+        if "pyvisa" not in str(exc).lower():
+            raise
 
 
 def check_logic_campaign() -> list[str]:
@@ -122,7 +130,11 @@ def check_logic_campaign() -> list[str]:
     for component, part, package, version, operator in need:
         root = find_campaign_root(component, part, package, version, operator=operator)
         if root is None:
-            errors.append(f"campaign missing: {component}/{part}/{package}/[{operator}|legacy]/{version}")
+            errors.append(
+                f"campaign missing under TEST_DB_ROOT={TEST_DB_ROOT}: "
+                f"{component}/{part}/{package}/[{operator}|legacy]/{version} "
+                "(OneDrive #Test_Database sync -- not RS1G97/RS1G126 DC)"
+            )
     if errors:
         return errors
 
@@ -182,7 +194,7 @@ def check_logic_campaign() -> list[str]:
         errors.append("ariff_dc.py must not import Ariff.*")
 
     from ate.tests.logic.wraps import _invoke_legacy
-    from ate.core.runner import RunParams as _RP
+    from ate.core.run_params import RunParams as _RP
 
     class _I:
         pass
@@ -205,7 +217,7 @@ def check_logic_campaign() -> list[str]:
     if two_rs.get("VCCB") != 3.3:
         errors.append(f"wraps dual-rail IDD rs0204 yaml vccb got {two_rs}")
     from ate.core.registry import get as _get
-    from ate.core.runner import RunParams
+    from ate.core.run_params import RunParams
     from ate.tests.logic.rs0204 import rails_from_params
     from pathlib import Path as _P
 
@@ -231,7 +243,7 @@ def check_logic_campaign() -> list[str]:
                 errors.append(f"rs0204 vih should say missing instruments, got {exc!r}")
         except Exception as exc:
             errors.append(f"rs0204 vih unexpected {type(exc).__name__}: {exc}")
-    load_family("opamp")
+    _restore_opamp_context()
     return errors
 
 

@@ -19,7 +19,7 @@ from ate.core.logic_model import (
     vcc_tag,
 )
 from ate.core.registry import TestSpec, register
-from ate.core.runner import RunParams
+from ate.core.run_params import RunParams
 from ate.core.specs import load_part_specs
 
 _LOGIC_FIXTURE = "LOGIC"
