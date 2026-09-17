@@ -307,3 +307,43 @@ def export_sts(doc: dict[str, Any], dest_dir: Path) -> dict[str, str]:
         "html": str(html_path),
         "pdf": str(pdf_path),
     }
+
+
+def export_latest_report(
+    doc: dict[str, Any],
+    *,
+    sessions_dir: Path,
+    version_dir: Path | None = None,
+) -> dict[str, str]:
+    """STS latest: sessions/datalog.* plus Version-root report.pdf overwrite.
+
+    Copies measured rows + min/max/result from the living session doc.
+    Never invents pass numbers.
+    """
+    paths = dict(export_sts(doc, sessions_dir))
+    src_pdf = Path(paths.get("pdf") or "")
+    blob = src_pdf.read_bytes() if src_pdf.is_file() else b""
+    if blob:
+        sessions_latest = Path(sessions_dir) / "report.pdf"
+        sessions_latest.write_bytes(blob)
+        paths["sessions_report_pdf"] = str(sessions_latest)
+    if version_dir is None:
+        return paths
+    version_dir = Path(version_dir)
+    version_dir.mkdir(parents=True, exist_ok=True)
+    latest = version_dir / "report.pdf"
+    if blob:
+        latest.write_bytes(blob)
+    else:
+        ident = doc.get("identity") or {}
+        hdr = doc.get("header") or {}
+        title = f"{ident.get('part') or 'ATE'} STS Datalog"
+        meta = [
+            f"STS Datalog  {ident.get('part') or ''} {ident.get('model') or ''} {ident.get('package') or ''}",
+            f"Operator {ident.get('operator') or ''}  Version {ident.get('version') or ''}  Session {hdr.get('session_id') or ''}",
+            f"Time {hdr.get('time') or ''}  Begin {hdr.get('beginning_time') or ''}  End {hdr.get('ending_time') or ''}",
+        ]
+        write_table_pdf(latest, rows=_iter_rows(doc), meta=meta, title=title)
+    paths["latest"] = str(latest)
+    paths["version_pdf"] = str(latest)
+    return paths

@@ -4,7 +4,7 @@ Live console only (`ate/` + worker **8766** + UI **5174**). Vibe-coder map: `AGE
 
 New RS1Gxx (2-input, 3-input, N-input, with/without OE) should not need a forked `logic_dc.py`.
 
-Operator bench (DEMO/SIM vs HUMAN+instruments, Excel/log paths, 97/126 checklist): `docs/LOGIC_DC_OPERATOR.md`. DEMO/SIM and `check_logic_dc` are **not** a reproduce claim.
+Operator bench (DEMO/SIM vs HUMAN+instruments, Excel/log paths, 97/126 checklist): `docs/LOGIC_DC_OPERATOR.md`. Dual-channel Continue (future 2Gxx): `docs/LOGIC_DC_DUAL_CHANNEL.md`. DEMO/SIM and `check_logic_dc` are **not** a reproduce claim.
 
 ## Which path (labels match Setup)
 
@@ -53,12 +53,14 @@ product_model:
       - {A: L, B: H, Y: L}
   # isolation / threshold_isolation optional -- omitted = derive from truth_table
   # threshold_isolation: [{sweep, hold, y_tracks, status}]
-  recipe:
+    recipe:
     threshold_step_v: 0.05
     settle_s: 0.3
     stable_eps_V: 0.005
     stable_eps_A: null  # current: null = NON_TIGHT (wait settle_s once); set amps for eps/N; do not invent uA
     delta_offset_v: 0.6   # dICC; omit if datasheet has ICCT one_input_V instead (do not invent 0.6)
+    dual_channel_continue: false  # future 2Gxx CHA then CHB Continue; see docs/LOGIC_DC_DUAL_CHANNEL.md
+    # channels: [CHA, CHB]  # only with dual_channel_continue; no fake 2G YAML without Datasheet card
     search:               # optional; missing keeps threshold_step_v walk
       vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
       vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
@@ -89,11 +91,13 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`. Per-VCC VIH min / VIL max come from `vcc_grid` (owning fixed point or range band). Range steps inherit band limits -- never a fixed-point row. `vcc_grid.status` UNCONFIRMED is not greenable. When `recipe.search` is present, `threshold_search.py` walks VIH up / VIL down: limit-scaled first step, on-hit skip rest, no reverse. Missing search keeps `threshold_step_v`.
 - **II** -- per input, VI=0 and VI=max.
 - **Delta ICC** -- one input at VCC-offset, or at `dc_limits.ICCT_uA.one_input_V` when ICCT is mapped. RS1GT34 enables `delta_icc` from ICCT (500uA @5.5V one_in@3.4). Do not invent `delta_offset_v=0.6`. CMOS cards may map `ICCT_uA.offset_v` (on the card, not invented).
-- **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`. Open-drain Y=Z is not IOZ.
-- **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126/RS1GT34 use CONFIRMED tables (34: 100uA expanded onto merged `vcc_list`; high-load only at card-named VCC). No invented extra loads. `check_logic_dc` FAIL-closes if `voh`/`vol` is enabled but the table has no rows. Open-drain skips VOH. Unloaded only when the table is absent and the id is not enabled.
+- **IOZ** -- only when OE/3-state exists. Force OE **inactive** only (`ioz_force_vector` / `recipe.ioz_when: oe_inactive`). Do not enable `ioz` / `ioff` on parts with `oe: none`. Open-drain Y=Z is not IOZ.
+- **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126/RS1GT34 use CONFIRMED tables (34: 100uA expanded onto merged `vcc_list`; high-load only at card-named VCC). No invented extra loads. `check_logic_dc` FAIL-closes if `voh`/`vol` is enabled but the table has no rows. Open-drain skips VOH (open_drain + voh enabled -> FAIL). Unloaded only when the table is absent and the id is not enabled.
 - **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default. If `stable_eps_A` is set (panel / overlay), eps/N + hard timeout FAIL (never last-reading). If null: tight-settle claims stay FAIL-closed; honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle). Not a DC limit.
 - **AE/FAE Continue** -- every enabled Path B id surfaces `wire_map` (CONFIRMED pins + `pin_drive` only; never invent nets), stimulus, `settle_prompt` (show wait), measure + `pass_mode`, FAIL attach, then `data_paths` save folders. `check_logic_dc` FAIL-closes empty `wire_map` / missing `data_paths` on 97/126/34.
-- **Excel lock** -- `workbook_policy.auto` / `golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. CSV sidecar `sessions/csv/{sheet}.csv` + fill log `sessions/path_b_write.json` overwrite with the same auto dest. `workbook_policy.pretty` / `ultimate_manual: never_auto_write` -- pretty never auto (xlsx or CSV). The jot/pretty book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == pretty/ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` is CONFIRMED. RS1G08 / RS1G07 Path B stubs stay sheet_map (`excel_lock` OFF) until a signed card.
+- **Excel lock** -- `workbook_policy.auto` / `golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. CSV sidecar `sessions/csv/{sheet}.csv` + fill log `sessions/path_b_write.json` overwrite with the same auto dest. Full datapoints CSV (`*_datapoints.csv`) is also written beside the golden_auto xlsx. `workbook_policy.pretty` / `ultimate_manual: never_auto_write` -- pretty never auto (xlsx or CSV). The jot/pretty book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == pretty/ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` is CONFIRMED. RS1G08 / RS1G07 Path B stubs stay sheet_map (`excel_lock` OFF) until a signed card.
+- **STS latest PDF** -- after a Version run, `export_latest_report` overwrites `{Version_N}/report.pdf` from session measurements (pass/fail vs limits). Existing `sessions/datalog.md|.html|.pdf` stay. Never invent pass numbers.
+- **Dual-channel Continue** -- future 2Gxx: `recipe.dual_channel_continue` + `recipe.channels` (CHA then CHB operator Continue). OpAmp dual pattern reused as DATA. See `docs/LOGIC_DC_DUAL_CHANNEL.md`. No fake 2G YAML without a Datasheet card. Schmitt must not collapse to a single VIH.
 
 ### TestSpec <-> OOP (Part / Pin / TruthTable / Isolation / Limit / Recipe)
 
@@ -174,4 +178,5 @@ A green check that never could fail is not a check. Do not claim bench PASS from
 - Invent a uA `stable_eps_A` default, or reuse `stable_eps_V` as amps
 - Touch `family_ingest` / `FAMILY_PACKAGES` for a new RS1Gxx
 - Invent Excel cells / plot series / a second Version xlsx, or auto-write the pretty / ultimate_manual jot book
+- Invent a 2G part YAML without a Datasheet card
 - Claim Verify PASS / Datasheet-signed from an UNCONFIRMED table

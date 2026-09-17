@@ -77,6 +77,31 @@ class RunParams:
         return str(get_context().lab_report_path())
 
 
+def _apply_part_dual_channel(part: str, batches, channels: list[str]):
+    """recipe.dual_channel_continue: CHA then CHB Continue. Do not wrap TestSpec.run."""
+    try:
+        from ate.tests.logic.product_model import (
+            apply_dual_channel_continue,
+            has_product_model,
+            load_product_model,
+            merge_recipe_channels,
+        )
+
+        key = str(part or "").strip().lower()
+        if not key or not has_product_model(key):
+            return batches, channels
+        model = load_product_model(key)
+        if model is None:
+            return batches, channels
+        new_batches = [
+            (mode, apply_dual_channel_continue(list(specs), model))
+            for mode, specs in batches
+        ]
+        return new_batches, merge_recipe_channels(model, channels)
+    except Exception:
+        return batches, channels
+
+
 @dataclass
 class StepResult:
     test_id: str
@@ -290,6 +315,9 @@ class ATECore:
             duts = params.resolved_duts()
             channels = params.resolved_channels()
             batches = group_by_fixture(test_ids)
+            batches, channels = _apply_part_dual_channel(
+                params.part, batches, channels
+            )
             gains = {m: mode_gain(m, params.part) for m, _ in batches}
             plan = [
                 {"mode": m, "tests": [s.id for s in specs], "gain": gains[m]}

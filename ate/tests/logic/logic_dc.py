@@ -44,6 +44,7 @@ from ate.tests.logic.product_model import (
     icc_pins,
     isolation_for_run,
     iter_logic_corners,
+    ioz_force_vector,
     is_datasheet_signed,
     is_open_drain,
     is_sequential,
@@ -1185,10 +1186,7 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
             for vcc in vccs:
                 _power_vcc(instr, vcc, ilim)
                 _wait_settled_current_ua(instr.dmm, model)
-                inactive = {model.oe_pin: model.oe_inactive_level()}
-                # data don't-care: one data vector is enough; do not invent extra
-                for p in model.logic_inputs:
-                    inactive.setdefault(p, "L")
+                inactive = ioz_force_vector(model)
                 _apply_levels(instr, model, inactive, vcc, ilim)
                 _wait_settled_current_ua(instr.dmm, model, setup=False)
                 if isinstance(vouts_raw, list) and vouts_raw:
@@ -1202,7 +1200,7 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
                     rows.append(
                         {
                             "VCC": vcc,
-                            "OE": model.oe_inactive_level(),
+                            "OE": inactive.get(model.oe_pin) or model.oe_inactive_level(),
                             "VOUT": vo,
                             "IOZ_uA": i_ua,
                         }

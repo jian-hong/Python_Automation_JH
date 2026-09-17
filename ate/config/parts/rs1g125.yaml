@@ -117,6 +117,7 @@ product_model:
     stable_eps_A: null
     settle_timeout_s: 2.0
     icc_corners: "data x OE"
+    ioz_when: oe_inactive
     search:
       status: PROPOSED_FROM_LIVE
       vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}

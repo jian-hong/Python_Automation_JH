@@ -275,6 +275,26 @@ fields:
     type: text
     editable: true
     deletable: true
+    note: IOZ when OE inactive only. Never force OE active.
+  - key: recipe.dual_channel_continue
+    oop: Recipe
+    type: bool
+    editable: true
+    deletable: true
+    label: recipe.dual_channel_continue
+    note: >
+      Future 2Gxx: CHA then CHB with operator Continue (OpAmp dual
+      pattern reused as DATA). Default false. Do not invent a 2G
+      part YAML without a Datasheet card.
+  - key: recipe.channels
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+    label: recipe.channels
+    note: >
+      Channel list for dual_channel_continue (CHA, CHB). Empty on
+      1Gxx. Do not hardcode OpAmp.
   - key: recipe.ioz_vcc_list
     oop: Recipe
     type: json
@@ -333,6 +353,7 @@ fields:
       Folder templates only. Never invent Excel cells.
       excel / report / datalog / records required.
       csv: sessions/csv/ -- auto overwrite with golden_auto; pretty never auto.
+      report_pdf: report.pdf -- Version latest STS overwrite.
   - key: workbook_policy
     oop: Part
     type: json

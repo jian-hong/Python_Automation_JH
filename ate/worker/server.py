@@ -790,11 +790,18 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
     if method == "export_datalog":
         from ate.core.datalog import load_report, report_path
         from ate.core.database import get_context
-        from ate.reporting.sts_datalog import export_sts
+        from ate.reporting.sts_datalog import export_latest_report
 
         doc = load_report()
         c = get_context()
-        paths = export_sts(doc, c.sessions_dir())
+        version_dir = None
+        try:
+            version_dir = c.root() if hasattr(c, "root") else None
+        except Exception:
+            version_dir = None
+        paths = export_latest_report(
+            doc, sessions_dir=c.sessions_dir(), version_dir=version_dir
+        )
         return {"ok": True, **paths, "report": str(report_path(c))}
 
     if method == "fetch_datasheet":

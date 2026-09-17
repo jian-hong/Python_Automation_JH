@@ -264,6 +264,9 @@ def main() -> int:
                 errors.append("datalog.md missing fail param demo_hi")
         if not pdf.is_file() or not pdf.read_bytes().startswith(b"%PDF"):
             errors.append("sessions/datalog.pdf missing or not PDF")
+        latest = ctx.root() / "report.pdf"
+        if not latest.is_file() or not latest.read_bytes().startswith(b"%PDF"):
+            errors.append("Version-root report.pdf missing after record_step")
 
         end_session("completed")
         arch = archive_dir(ctx)

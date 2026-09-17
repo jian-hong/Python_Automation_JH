@@ -655,6 +655,59 @@ def _steps_rows(report: dict[str, Any] | None, test_ids: list[str]) -> list[dict
     return rows
 
 
+def datapoints_csv_path(dest: Path) -> Path:
+    return Path(dest).with_name(f"{Path(dest).stem}_datapoints.csv")
+
+
+def write_datapoints_csv(
+    dest: Path,
+    *,
+    report: dict[str, Any] | None,
+    enabled: list[str],
+) -> Path:
+    """Full session datapoints beside golden_auto. pretty / ultimate never auto."""
+    dest = Path(dest)
+    if is_ultimate_path(dest):
+        raise UltimateWorkbook(
+            f"auto csv path == ultimate_manual (never_auto_write): {dest}"
+        )
+    csv_path = datapoints_csv_path(dest)
+    if is_ultimate_path(csv_path):
+        raise UltimateWorkbook(
+            f"auto csv path == pretty/ultimate (never_auto_write): {csv_path}"
+        )
+    ids = [str(t).strip().lower() for t in (enabled or []) if str(t).strip()]
+    rows_out: list[dict[str, Any]] = []
+    for tid in ids:
+        if tid not in _PATH_B_DC:
+            continue
+        for rec in _steps_rows(report, [tid]):
+            item = dict(rec)
+            item.setdefault("test_id", tid)
+            rows_out.append(item)
+    keys: list[str] = []
+    seen: set[str] = set()
+    for name in ("test_id", "DUT"):
+        keys.append(name)
+        seen.add(name)
+    for rec in rows_out:
+        for key in rec:
+            name = str(key)
+            if name not in seen:
+                seen.add(name)
+                keys.append(name)
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = keys or ["test_id", "DUT"]
+    with csv_path.open("w", encoding="utf-8", newline="") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for rec in rows_out:
+            writer.writerow(
+                {k: ("" if rec.get(k) is None else _cell_dump(rec.get(k))) for k in fieldnames}
+            )
+    return csv_path
+
+
 def _cell_dump(val: Any) -> Any:
     if val is None:
         return None
@@ -1002,11 +1055,15 @@ def write_path_b_workbook(
             policy=policy,
             created=created,
         )
+        datapoints = write_datapoints_csv(
+            dest, report=report, enabled=enabled or []
+        )
         return {
             "filled": 1,
             "status": "ok",
             "excel": str(dest),
             "csv": csv_paths,
+            "datapoints_csv": str(datapoints),
             "session_log": log_path,
             "created": created,
             "target": "golden_auto",

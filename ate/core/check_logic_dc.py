@@ -23,8 +23,10 @@ from ate.fixture.modes import enabled_tests_for_part
 from ate.tests.logic.product_model import (
     CARD_FIELDS_SCHEMA_PATH,
     DATA_PATH_TEMPLATES,
+    apply_dual_channel_continue,
     claimed_signed_without_datasheet,
     derive_isolation,
+    dual_channel_continue,
     format_handoff_begin,
     has_product_model,
     isolation_for,
@@ -34,16 +36,19 @@ from ate.tests.logic.product_model import (
     is_sequential,
     is_unconfirmed_status,
     iter_logic_corners,
+    ioz_force_vector,
     known_pin_names,
     load_card_fields_schema,
     load_part_yaml,
     load_product_model,
     lookup_pass_mode,
     lookup_vcc_grid_limits,
+    merge_recipe_channels,
     merge_vcc_grid,
     missing_data_path_keys,
     panel_save_keys,
     pins_named_in_wire_map,
+    recipe_channels,
     sim_icc_plan,
     vcc_grid_owned,
     vcc_grid_stimulus,
@@ -1267,6 +1272,16 @@ def _operator_doc_ok() -> list[str]:
             errors.append("LOGIC_DC_OPERATOR.md must name sessions/report.json")
     if "datalog.md" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name STS datalog.md")
+    if "report.pdf" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name Version-root report.pdf")
+    if "dual_channel_continue" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name recipe.dual_channel_continue")
+    if "CHA then CHB" not in text and "CHA then Channel B" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name CHA then CHB Continue")
+    if "datapoints.csv" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name golden_auto datapoints.csv sidecar")
+    if "LOGIC_DC_DUAL_CHANNEL.md" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must point at docs/LOGIC_DC_DUAL_CHANNEL.md")
     if "records/" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name {test}/DUT_n/records/")
     if "START.bat" not in text or "127.0.0.1:5174" not in text or "8766" not in text:
@@ -1508,7 +1523,7 @@ def _panel_ok() -> list[str]:
         if str(schema.get("ocr", {}).get("engine") or "").lower() != "paddleocr":
             errors.append("card_fields.schema.yaml ocr.engine must be paddleocr")
         keys = panel_save_keys()
-        for need in ("pins", "recipe", "recipe.stable_eps_A", "recipe.search", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid", "excel_plots", "workbook_policy"):
+        for need in ("pins", "recipe", "recipe.stable_eps_A", "recipe.search", "recipe.dual_channel_continue", "recipe.channels", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid", "excel_plots", "workbook_policy"):
             if need not in keys:
                 errors.append(f"panel_save_keys missing {need}")
     except Exception as exc:
@@ -1763,6 +1778,8 @@ def _excel_lock_ok() -> list[str]:
         errors.append("excel_lock.py must split golden_auto vs ultimate_manual")
     if "never_auto_write" not in src:
         errors.append("excel_lock.py must name never_auto_write")
+    if "datapoints.csv" not in src or "write_datapoints_csv" not in src:
+        errors.append("excel_lock.py must write full datapoints CSV alongside golden_auto")
     if "PRETTY_POLICY" not in src or "pretty" not in src:
         errors.append("excel_lock.py must name pretty never auto")
     if "write_path_b_csv" not in src or "path_b_write.json" not in src:
@@ -1999,6 +2016,17 @@ def _excel_lock_ok() -> list[str]:
                 errors.append("path_b_write.json must bind golden_auto / pretty never auto")
             if el.is_ultimate_path(logp):
                 errors.append("session fill log must not land under pretty/ultimate")
+        csv1 = Path(first.get("datapoints_csv") or "")
+        if not csv1.is_file():
+            errors.append("golden_auto write must sidecar full datapoints CSV")
+        else:
+            body = csv1.read_text(encoding="utf-8")
+            if "VIH" not in body or "ICC_uA" not in body:
+                errors.append("datapoints CSV must keep full session rows (VIH/ICC_uA)")
+            if csv1.resolve() != el.datapoints_csv_path(dest).resolve():
+                errors.append(f"datapoints CSV must sit beside golden_auto, got {csv1}")
+            if el.is_ultimate_path(csv1):
+                errors.append("datapoints CSV must not target pretty/ultimate")
         if int(first.get("plots") or 0) < 1:
             errors.append("Path B SIM must auto-plot when series data exists")
         second = el.write_path_b_workbook(ctx=ctx, model=m, report=report)
@@ -2123,6 +2151,12 @@ def _excel_lock_ok() -> list[str]:
             errors.append(
                 f"pretty CSV dest must raise UltimateWorkbook, got {type(exc).__name__}: {exc}"
             )
+        pretty_csv = el.datapoints_csv_path(pretty)
+        if pretty_csv.is_file():
+            errors.append("pretty book must not get an auto datapoints CSV")
+        fourth_pts = Path(fourth.get("datapoints_csv") or "")
+        if fourth_pts.is_file() and el.is_ultimate_path(fourth_pts):
+            errors.append("datapoints CSV must not target pretty/ultimate")
         class _SheetCtx:
             def __init__(self, inner):
                 self._inner = inner
@@ -2416,6 +2450,25 @@ def _draft_scaffold_ok() -> list[str]:
     zrow = [r for r in m125.truth_table if r.get("OE") == "H" and r.get("Y") == "Z"]
     if not zrow:
         errors.append("rs1g125 truth_table must have OE=H -> Y=Z")
+    if m125.oe_inactive_level() != "H":
+        errors.append("rs1g125 OE inactive must be H (active-L)")
+    when125 = str((m125.recipe or {}).get("ioz_when") or "").lower().replace("-", "_")
+    if "inactive" not in when125:
+        errors.append("rs1g125 recipe.ioz_when must be oe_inactive (IOZ when OE inactive only)")
+    try:
+        vec125 = ioz_force_vector(m125)
+    except Exception as exc:
+        errors.append(f"rs1g125 ioz_force_vector: {exc}")
+        vec125 = {}
+    if vec125.get("OE") != "H":
+        errors.append(f"G125 ioz must force OE inactive H only, got {vec125}")
+    if vec125.get("OE") == "L":
+        errors.append("Verify FAIL bar: G125 ioz must not force OE active L")
+    src_ioz = inspect.getsource(ldc._run_ioz)
+    if "ioz_force_vector" not in src_ioz:
+        errors.append("logic_dc _run_ioz must use ioz_force_vector (OE inactive only)")
+    if "oe_active_level" in src_ioz:
+        errors.append("logic_dc _run_ioz must not force OE active")
 
     # RS164 sequential -- NOT gate 2^n
     if not is_sequential(m164):
@@ -2466,6 +2519,166 @@ def _draft_scaffold_ok() -> list[str]:
     return errors
 
 
+def _schmitt_has_vt_split(m) -> bool:
+    pm = m.pass_mode or {}
+    for key in pm:
+        token = str(key).upper().replace("+", "PLUS").replace("-", "MINUS").replace("_", "")
+        if "VTPLUS" in token or "VTMINUS" in token or token in ("HYST", "HYSTERESIS", "DVT"):
+            return True
+    grid = m.vcc_grid or {}
+    return str(grid.get("kind") or "") == "schmitt_VT"
+
+
+def _physics_fail_bars_ok() -> list[str]:
+    """Generic SIM: OD+voh, sequential 2^n, Schmitt VIH collapse, G125 ioz inactive."""
+    errors: list[str] = []
+    for path in sorted(PARTS_DIR.glob("*.yaml")):
+        part = path.stem.lower()
+        if not has_product_model(part):
+            continue
+        m = load_product_model(part)
+        if m is None:
+            continue
+        en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
+        if is_open_drain(m) and "voh" in en:
+            errors.append(f"{part}: open_drain + voh enabled -> FAIL")
+        if is_sequential(m):
+            if "icc" in en or "delta_icc" in en:
+                errors.append(f"{part}: sequential + icc enabled -> FAIL")
+            plan = sim_icc_plan(m)
+            n = int(plan.get("n") or 0)
+            n_in = len(m.logic_inputs)
+            if n_in and n == (1 << n_in):
+                errors.append(f"{part}: sequential + icc 2^{n_in}={1 << n_in} -> FAIL")
+            if n != 0:
+                errors.append(f"{part}: sequential sim_icc_plan n must be 0 (not 2^n), got {n}")
+        if m.schmitt:
+            it = str((m.pass_mode or {}).get("input_threshold") or "").lower().replace("-", "_")
+            if it in ("range", "min_only", "max_only") and not _schmitt_has_vt_split(m):
+                errors.append(f"{part}: schmitt collapsing to single VIH / input_threshold:{it}")
+            if not _schmitt_has_vt_split(m):
+                errors.append(f"{part}: schmitt must keep VT+/VT- (must not collapse to single VIH)")
+    return errors
+
+
+def _sts_latest_ok() -> list[str]:
+    """Version-root report.pdf overwrite from session rows. Never invent pass numbers."""
+    from ate.reporting.sts_datalog import export_latest_report
+
+    errors: list[str] = []
+    datalog_src = Path(__file__).resolve().parents[1] / "core" / "datalog.py"
+    if "export_latest_report" not in datalog_src.read_text(encoding="utf-8"):
+        errors.append("sync_report_from_session must hook export_latest_report")
+    worker_src = Path(__file__).resolve().parents[1] / "worker" / "server.py"
+    if "export_latest_report" not in worker_src.read_text(encoding="utf-8"):
+        errors.append("export_datalog must hook export_latest_report")
+    tmp = Path(tempfile.mkdtemp(prefix="ate_sts_latest_"))
+    try:
+        version = tmp / "Version_1"
+        sessions = version / "sessions"
+        doc = {
+            "header": {"time": "t", "session_id": "s1"},
+            "identity": {"part": "RS1GT34", "operator": "Eugene", "version": "Version_1"},
+            "steps": [
+                {
+                    "test_id": "input_threshold",
+                    "dut": 1,
+                    "success": False,
+                    "measurements": [
+                        {
+                            "id": "VIH_V",
+                            "unit": "V",
+                            "min": 1.0,
+                            "max": None,
+                            "value": 0.4,
+                            "result": "fail",
+                        }
+                    ],
+                }
+            ],
+        }
+        export_latest_report(doc, sessions_dir=sessions, version_dir=version)
+        latest = version / "report.pdf"
+        if not latest.is_file() or not latest.read_bytes().startswith(b"%PDF"):
+            errors.append("Version folder latest report.pdf missing after STS export")
+        else:
+            blob = latest.read_bytes()
+            if b"VIH_V" not in blob:
+                errors.append("latest report.pdf must copy measured id (never invent)")
+            if b"FAIL" not in blob:
+                errors.append("latest report.pdf must show FAIL vs limits (not invent PASS)")
+            if b"0.4" not in blob:
+                errors.append("latest report.pdf must copy measured value (never invent pass numbers)")
+        if not (sessions / "datalog.pdf").is_file():
+            errors.append("sessions/datalog.pdf must still be written (existing STS path)")
+    except Exception as exc:
+        errors.append(f"STS latest PDF SIM: {type(exc).__name__}: {exc}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return errors
+
+
+def _dual_channel_recipe_ok() -> list[str]:
+    """Future 2Gxx Continue flag. No fake 2G YAML. Path B registry stays dual_channel=False."""
+    errors: list[str] = []
+    fake2g = sorted(PARTS_DIR.glob("rs2g*.yaml"))
+    if fake2g:
+        errors.append(
+            f"must not invent 2G part YAML without Datasheet card, got {[p.name for p in fake2g]}"
+        )
+    schema_txt = CARD_FIELDS_SCHEMA_PATH.read_text(encoding="utf-8")
+    if "recipe.dual_channel_continue" not in schema_txt or "recipe.channels" not in schema_txt:
+        errors.append("card_fields.schema.yaml must name recipe.dual_channel_continue / recipe.channels")
+    model_src = _MODEL.read_text(encoding="utf-8")
+    if "dual_channel_continue" not in model_src or "apply_dual_channel_continue" not in model_src:
+        errors.append("product_model must expose dual_channel_continue (OpAmp pattern as DATA)")
+    runner_src = Path(__file__).resolve().parents[1] / "core" / "runner.py"
+    rtxt = runner_src.read_text(encoding="utf-8")
+    if "_apply_part_dual_channel" not in rtxt:
+        errors.append("runner must honor recipe.dual_channel_continue (not hardcode OpAmp)")
+    for part in ("rs1g97", "rs1g126", "rs1gt34") + _DRAFT_SCAFFOLD_SKUS:
+        m = load_product_model(part)
+        if m is None:
+            continue
+        if dual_channel_continue(m):
+            errors.append(f"{part} must not set dual_channel_continue without a 2G Datasheet card")
+    load_family("logic")
+    icc = get("icc")
+    if icc is None or icc.dual_channel:
+        errors.append("icc must stay registered dual_channel=False")
+    fake = SimpleNamespace(recipe={"dual_channel_continue": True, "channels": ["CHA", "CHB"]})
+    if not dual_channel_continue(fake):
+        errors.append("dual_channel_continue True must enable CHA then CHB")
+    if recipe_channels(fake) != ["CHA", "CHB"]:
+        errors.append(f"recipe.channels must be CHA then CHB, got {recipe_channels(fake)}")
+    if icc is not None:
+        over = apply_dual_channel_continue([icc], fake)
+        if not over or not getattr(over[0], "dual_channel", False):
+            errors.append("apply_dual_channel_continue must OR flag onto Path B spec at run")
+        if icc.dual_channel:
+            errors.append("apply_dual_channel_continue must not mutate registered spec")
+        if over and over[0].run is not icc.run:
+            errors.append("apply_dual_channel_continue must not wrap TestSpec.run")
+    merged = merge_recipe_channels(fake, ["CHA"])
+    if merged != ["CHA", "CHB"]:
+        errors.append(f"merge_recipe_channels must expand CHA-only to CHA then CHB, got {merged}")
+    off = SimpleNamespace(recipe={})
+    if dual_channel_continue(off):
+        errors.append("missing dual_channel_continue must stay false")
+    doc = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC_DUAL_CHANNEL.md"
+    if not doc.is_file():
+        errors.append("docs/LOGIC_DC_DUAL_CHANNEL.md missing")
+    else:
+        txt = doc.read_text(encoding="utf-8")
+        if "CHA" not in txt or "CHB" not in txt or "Continue" not in txt:
+            errors.append("dual-channel doc must name CHA then CHB Continue")
+        if "OpAmp" not in txt:
+            errors.append("dual-channel doc must say OpAmp pattern reused as DATA")
+        if "Datasheet" not in txt:
+            errors.append("dual-channel doc must forbid fake 2G YAML without Datasheet card")
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -2499,6 +2712,9 @@ def check_logic_dc() -> list[str]:
     errors += _panel_ok()
     errors += _excel_lock_ok()
     errors += _draft_scaffold_ok()
+    errors += _physics_fail_bars_ok()
+    errors += _sts_latest_ok()
+    errors += _dual_channel_recipe_ok()
     load_family("opamp")
     return errors
 

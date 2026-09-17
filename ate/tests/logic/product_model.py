@@ -349,6 +349,93 @@ def is_sequential(model: Any) -> bool:
     return False
 
 
+def _recipe_blob(model: Any) -> dict[str, Any]:
+    recipe = getattr(model, "recipe", None)
+    if isinstance(recipe, dict):
+        return recipe
+    raw = _raw_blob(model)
+    rec = raw.get("recipe")
+    return rec if isinstance(rec, dict) else {}
+
+
+def dual_channel_continue(model: Any) -> bool:
+    """recipe.dual_channel_continue: CHA then CHB with operator Continue.
+
+    Reuses the OpAmp dual Continue pattern as DATA. Default false (1Gxx CHA-only).
+    Do not invent a 2G part YAML without a Datasheet card.
+    """
+    raw = _recipe_blob(model).get("dual_channel_continue")
+    if raw is True:
+        return True
+    if raw is False or raw is None or raw == "":
+        return False
+    s = str(raw).strip().lower().replace("-", "_").replace(" ", "_")
+    return s in ("true", "yes", "1", "on", "cha_then_chb", "dual")
+
+
+def recipe_channels(model: Any) -> list[str]:
+    """recipe.channels DATA (CHA / CHB). Empty unless listed or dual_channel_continue."""
+    raw = _recipe_blob(model).get("channels")
+    order = ("CHA", "CHB")
+    picked: list[str] = []
+    if isinstance(raw, list):
+        for item in raw:
+            s = str(item).strip().upper().replace("CHANNEL", "CH").replace(" ", "")
+            if s in ("A", "CHA", "CH1"):
+                picked.append("CHA")
+            elif s in ("B", "CHB", "CH2"):
+                picked.append("CHB")
+    out = [c for c in order if c in picked]
+    if out:
+        return out
+    if dual_channel_continue(model):
+        return ["CHA", "CHB"]
+    return []
+
+
+def apply_dual_channel_continue(specs: list[Any], model: Any) -> list[Any]:
+    """OR recipe.dual_channel_continue onto Path B specs at run. Do not wrap TestSpec.run."""
+    if not dual_channel_continue(model):
+        return list(specs)
+    from dataclasses import replace as _replace
+
+    out: list[Any] = []
+    for spec in specs:
+        if getattr(spec, "dual_channel", True):
+            out.append(spec)
+            continue
+        try:
+            out.append(_replace(spec, dual_channel=True))
+        except TypeError:
+            out.append(spec)
+    return out
+
+
+def merge_recipe_channels(model: Any, selected: list[str] | None) -> list[str]:
+    """Keep operator pick; expand CHA-only to recipe CHA then CHB when the flag is on."""
+    chans = [str(c).upper() for c in (selected or []) if str(c).strip()]
+    if not dual_channel_continue(model):
+        return chans or ["CHA"]
+    want = recipe_channels(model) or ["CHA", "CHB"]
+    picked = set(chans)
+    if not chans or picked <= {"CHA"} and "CHB" in want:
+        return list(want)
+    return chans
+
+
+def ioz_force_vector(model: ProductModel) -> dict[str, str]:
+    """IOZ only when OE inactive. Data don't-care. Never force OE active."""
+    if not model.has_oe():
+        raise RuntimeError(
+            f"ioz: oe is none on {model.part} -- IOZ is not applicable. "
+            "Remove ioz from enabled_tests."
+        )
+    vec = {model.oe_pin: model.oe_inactive_level()}
+    for pin in model.logic_inputs:
+        vec.setdefault(pin, "L")
+    return vec
+
+
 def _pins(blob: dict[str, Any]) -> list[Pin]:
     out: list[Pin] = []
     for row in _as_list(blob.get("pins")):
@@ -1713,6 +1800,7 @@ DATA_PATH_TEMPLATES = {
     "report": "sessions/report.json",
     "datalog": "sessions/datalog.md",
     "csv": "sessions/csv/",
+    "report_pdf": "report.pdf",
     "records": "{test}/DUT_n/records/",
     "attach": "{test}/DUT_n/",
 }
@@ -1999,6 +2087,7 @@ def format_save_lines(
         f"report: {paths.get('report')}",
         f"STS datalog: {paths.get('datalog')}",
         f"CSV auto overwrite (pretty never auto): {paths.get('csv')}",
+        f"STS latest PDF: {paths.get('report_pdf') or 'report.pdf'}",
         f"records: {paths.get('records')}",
     ]
 
