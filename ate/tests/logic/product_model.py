@@ -1,8 +1,11 @@
 """Path B Logic product-model loader (schema in YAML, not per-chip Python).
 
 Isolation is derived from truth_table unless the part YAML supplies an
-explicit isolation block. Do not branch on part name. RS1G97 table is the
-datasheet extract (not a C-select MUX). See Lim goldens are not loaded here.
+explicit isolation block. Do not branch on part name.
+
+truth_table.status UNCONFIRMED / HOLD_CONFIRM / PROVISIONAL is not
+Datasheet-signed. Runtime must not report those tables as confirmed or green.
+See Lim goldens are not loaded here.
 """
 from __future__ import annotations
 
@@ -17,6 +20,69 @@ _H = frozenset({"H", "1", "TRUE", "HIGH"})
 _L = frozenset({"L", "0", "FALSE", "LOW"})
 _Z = frozenset({"Z", "HZ", "HIZ", "HI-Z"})
 _X = frozenset({"X", "DC", "DONTCARE", "DON'T-CARE"})
+
+# Datasheet-signed is the only greenable token. CONFIRM alone is not signed.
+_SIGNED_STATUSES = frozenset(
+    {
+        "DATASHEET-SIGNED",
+        "DATASHEET_SIGNED",
+        "DATASHEET-SIGNED CONFIRM",
+        "DATASHEET_SIGNED_CONFIRM",
+        "DATASHEET-SIGNED-CONFIRM",
+    }
+)
+_UNCONFIRMED_STATUSES = frozenset(
+    {
+        "UNCONFIRMED",
+        "HOLD_CONFIRM",
+        "HOLD-CONFIRM",
+        "PROVISIONAL",
+        "UNSURE",
+        "OCR",
+        "OCR-FIT",
+        "REVERSE-ENGINEERED",
+    }
+)
+_PASS_MODES = frozenset({"range", "min_only", "max_only"})
+
+
+def _norm_status(raw: Any) -> str:
+    return " ".join(str(raw or "").strip().upper().replace("_", "-").split())
+
+
+def is_datasheet_signed(status: Any) -> bool:
+    s = _norm_status(status)
+    compact = s.replace(" ", "-")
+    return s in _SIGNED_STATUSES or compact in _SIGNED_STATUSES
+
+
+def is_unconfirmed_status(status: Any) -> bool:
+    """Not greenable. Empty counts as UNCONFIRMED (fail-closed)."""
+    if is_datasheet_signed(status):
+        return False
+    s = _norm_status(status)
+    if not s:
+        return True
+    token = s.replace(" ", "-")
+    if s in _UNCONFIRMED_STATUSES or token in _UNCONFIRMED_STATUSES:
+        return True
+    if "UNCONFIRMED" in s or "PROVISIONAL" in s or "HOLD-CONFIRM" in token:
+        return True
+    return False
+
+
+def claimed_signed_without_datasheet(status: Any) -> bool:
+    """CONFIRM / SIGNED / from_datasheet without the Datasheet-signed token."""
+    if is_datasheet_signed(status):
+        return False
+    s = _norm_status(status)
+    if not s:
+        return False
+    if s in ("CONFIRM", "CONFIRMED", "SIGNED", "DATASHEET"):
+        return True
+    if s.startswith("CONFIRM") or s == "GREEN":
+        return True
+    return False
 
 
 def _norm_level(raw: Any) -> str:
@@ -54,6 +120,7 @@ def _bit(level: str) -> Optional[int]:
 class Pin:
     name: str
     role: str  # input | output | oe | vcc | gnd | nc
+    number: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -88,10 +155,13 @@ class ProductModel:
     isolation_status: str
     dc_limits: dict[str, Any]
     limit_mode: dict[str, str]
+    pass_mode: dict[str, str]
     pin_drive: dict[str, DriveMap]
     recipe: dict[str, Any]
     output_pin: str = "Y"
     status: str = ""
+    vcc_list_status: str = ""
+    vcc_op_status: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
 
     def has_oe(self) -> bool:
@@ -159,8 +229,15 @@ def _pins(blob: dict[str, Any]) -> list[Pin]:
             continue
         name = str(row.get("name") or "").strip().upper()
         role = str(row.get("role") or "").strip().lower()
+        num = row.get("number", row.get("pin", row.get("pkg_pin")))
+        pin_no: Optional[int] = None
+        try:
+            if num is not None and num != "":
+                pin_no = int(num)
+        except (TypeError, ValueError):
+            pin_no = None
         if name:
-            out.append(Pin(name=name, role=role or "input"))
+            out.append(Pin(name=name, role=role or "input", number=pin_no))
     return out
 
 
@@ -220,6 +297,7 @@ def _floats(raw: Any) -> list[float]:
 
 
 def _vcc_list(blob: dict[str, Any], part_yaml: dict[str, Any]) -> list[float]:
+    """Sweep corners from YAML lists only. Never expand vcc_op_min/max."""
     for key in ("vcc_list", "vcc_sweep_list", "vcc_sweep"):
         nums = _floats(blob.get(key))
         if nums:
@@ -246,13 +324,15 @@ def _opt_float(raw: Any) -> Optional[float]:
 
 def _truth_rows(blob: dict[str, Any]) -> tuple[list[dict[str, str]], str]:
     raw = blob.get("truth_table")
-    status = ""
+    status = str(blob.get("truth_table_status") or "")
     rows_in: list[Any]
     if isinstance(raw, dict):
-        status = str(raw.get("status") or "")
+        status = str(raw.get("status") or status)
         rows_in = _as_list(raw.get("rows") or raw.get("table"))
     else:
         rows_in = _as_list(raw)
+    if not status:
+        status = "UNCONFIRMED"
     rows: list[dict[str, str]] = []
     for row in rows_in:
         if not isinstance(row, dict):
@@ -380,6 +460,257 @@ def _parse_isolation_block(raw: Any) -> tuple[dict[str, list[IsolationPattern]],
     return out, status
 
 
+def _coerce_pass_mode(raw: Any) -> str:
+    s = str(raw or "").strip().lower().replace("-", "_")
+    if s in _PASS_MODES:
+        return s
+    return ""
+
+
+def _pass_mode(blob: dict[str, Any], schmitt: bool) -> dict[str, str]:
+    """pass_mode wins; limit_mode is an alias. Do not collapse plain VIH/VIL to range."""
+    out: dict[str, str] = {}
+    for src in (blob.get("limit_mode"), blob.get("pass_mode")):
+        if not isinstance(src, dict):
+            continue
+        for key, val in src.items():
+            mode = _coerce_pass_mode(val)
+            if mode:
+                out[str(key).strip()] = mode
+    # Schmitt VT+/VT- are range. Do not invent a single input_threshold:range for plain parts.
+    if schmitt:
+        if "VT+" not in out and "VTPLUS" not in out and "VTPLUS_V" not in out:
+            if out.get("input_threshold") == "range":
+                out["VT+"] = "range"
+                out["VT-"] = "range"
+    else:
+        # Drop a collapsed input_threshold:range so callers must use VIH/VIL.
+        if "VIH" not in out and "VIH_V" not in out:
+            out.setdefault("VIH", "min_only")
+        if "VIL" not in out and "VIL_V" not in out:
+            out.setdefault("VIL", "max_only")
+    return out
+
+
+def lookup_pass_mode(model: ProductModel, meas_id: str, test_id: str = "") -> str:
+    """Resolve pass_mode for one measurement id. Empty = judge both min and max."""
+    table = dict(model.pass_mode or model.limit_mode or {})
+    if not table:
+        return ""
+    mid = str(meas_id or "").strip()
+    tid = str(test_id or "").strip().lower()
+    keys = [
+        mid,
+        mid.upper(),
+        mid.replace("_", ""),
+        tid,
+    ]
+    if mid.upper() in ("VTPLUS_V", "VT+", "VTPLUS"):
+        keys.extend(["VT+", "VTPLUS", "VTPLUS_V", "input_threshold", "vth"])
+    if mid.upper() in ("VTMINUS_V", "VT-", "VTMINUS"):
+        keys.extend(["VT-", "VTMINUS", "VTMINUS_V", "input_threshold", "vth"])
+    if mid.upper() in ("VIH_V", "VIH"):
+        keys.extend(["VIH", "VIH_V"])
+    if mid.upper() in ("VIL_V", "VIL"):
+        keys.extend(["VIL", "VIL_V"])
+    if mid.upper() in ("ICC_UA", "ICC"):
+        keys.extend(["icc", "ICC"])
+    if mid.upper() in ("DELTA_ICC_UA", "DELTA_ICC"):
+        keys.extend(["delta_icc", "DELTA_ICC"])
+    if mid.upper() in ("II_UA", "II"):
+        keys.extend(["ii", "II"])
+    if mid.upper() in ("IOZ_UA", "IOZ"):
+        keys.extend(["ioz", "IOZ"])
+    if mid.upper().startswith("VOH"):
+        keys.extend(["voh", "VOH"])
+    if mid.upper().startswith("VOL"):
+        keys.extend(["vol", "VOL"])
+    for key in keys:
+        if not key:
+            continue
+        for cand in (key, str(key).lower(), str(key).upper()):
+            mode = _coerce_pass_mode(table.get(cand))
+            if mode:
+                return mode
+    return ""
+
+
+def model_gaps(model: ProductModel) -> list[str]:
+    """Operator-visible PROVISIONAL / UNCONFIRMED holes. Not a green stamp."""
+    gaps: list[str] = []
+    if is_unconfirmed_status(model.truth_table_status):
+        gaps.append(
+            f"truth_table.status={model.truth_table_status or 'UNCONFIRMED'} "
+            "(not Datasheet-signed; not greenable)"
+        )
+    if is_unconfirmed_status(model.isolation_status):
+        gaps.append(
+            f"isolation.status={model.isolation_status or 'UNCONFIRMED'} "
+            "(not Datasheet-signed)"
+        )
+    if claimed_signed_without_datasheet(model.truth_table_status):
+        gaps.append(
+            f"truth_table.status={model.truth_table_status!r} claims confirm without Datasheet-signed"
+        )
+    vcc_st = model.vcc_list_status or ""
+    if is_unconfirmed_status(vcc_st) or _norm_status(vcc_st) in ("PROVISIONAL", "RANGE-METADATA"):
+        gaps.append(
+            f"vcc_list={model.vcc_list} status={vcc_st or 'held'}; "
+            "vcc_op_min/max are range metadata only"
+        )
+    else:
+        gaps.append(
+            f"vcc_op {model.vcc_op_min}..{model.vcc_op_max} is range metadata "
+            f"({model.vcc_op_status or 'RANGE_METADATA'}); sweep is vcc_list only"
+        )
+    for name, block in (model.dc_limits or {}).items():
+        if isinstance(block, dict) and is_unconfirmed_status(block.get("status")):
+            gaps.append(f"{name}: {block.get('status')} ({block.get('note') or 'no invented loads'})")
+    if not model.has_oe():
+        gaps.append("oe=none: IOZ not applicable (do not enable ioz/ioff)")
+    return gaps
+
+
+def panel_payload(part_key: str) -> dict[str, Any]:
+    """Minimal Logic DC editor payload. Empty present=false when no product_model."""
+    key = str(part_key or "").strip().lower()
+    model = load_product_model(key)
+    if model is None:
+        return {"present": False, "part": key, "gaps": []}
+    blob = load_product_model_dict(key)
+    tt = blob.get("truth_table") if isinstance(blob.get("truth_table"), dict) else {
+        "status": model.truth_table_status,
+        "rows": model.truth_table,
+    }
+    iso = blob.get("isolation") if isinstance(blob.get("isolation"), dict) else {
+        "status": model.isolation_status,
+        "tests": {
+            pin: [
+                {
+                    "sweep_pin": p.sweep_pin,
+                    "fix": dict(p.fix),
+                    "y_expect": p.y_expect,
+                    "vil_sweep": p.vil_sweep,
+                    "status": p.status,
+                }
+                for p in pats
+            ]
+            for pin, pats in model.isolation.items()
+        },
+    }
+    return {
+        "present": True,
+        "part": model.part,
+        "part_key": key,
+        "truth_table_status": model.truth_table_status,
+        "isolation_status": model.isolation_status,
+        "greenable": is_datasheet_signed(model.truth_table_status)
+        and not is_unconfirmed_status(model.isolation_status),
+        "schmitt": model.schmitt,
+        "oe": model.oe_mode,
+        "vcc_list": list(model.vcc_list),
+        "vcc_list_status": model.vcc_list_status,
+        "vcc_op_min": model.vcc_op_min,
+        "vcc_op_max": model.vcc_op_max,
+        "vcc_op_status": model.vcc_op_status,
+        "pass_mode": dict(model.pass_mode),
+        "limit_mode": dict(model.limit_mode),
+        "truth_table": tt,
+        "isolation": iso,
+        "gaps": model_gaps(model),
+        "pins": [{"name": p.name, "role": p.role, "number": p.number} for p in model.pins],
+    }
+
+
+_PANEL_SAVE_KEYS = (
+    "truth_table",
+    "isolation",
+    "pass_mode",
+    "limit_mode",
+    "vcc_list",
+    "vcc_list_status",
+    "truth_table_status",
+    "isolation_status",
+)
+
+
+def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str, Any]:
+    """Write editable Path B fields back to part YAML. Cannot promote to Datasheet-signed."""
+    key = str(part_key or "").strip().lower()
+    path = PARTS_DIR / f"{key}.yaml"
+    if not path.is_file():
+        raise RuntimeError(f"part yaml missing: {path}")
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict):
+        raise RuntimeError(f"part yaml is not a mapping: {path}")
+    pm = data.get("product_model")
+    if not isinstance(pm, dict):
+        raise RuntimeError(f"{key}: no product_model block to edit")
+    before = load_product_model(key)
+    if before is None:
+        raise RuntimeError(f"{key}: product_model failed to load")
+    if not isinstance(patch, dict):
+        raise RuntimeError("save_product_model: patch must be a mapping")
+    for field in _PANEL_SAVE_KEYS:
+        if field not in patch:
+            continue
+        val = patch[field]
+        if field == "vcc_list":
+            nums = _floats(val) if not isinstance(val, (int, float)) else [float(val)]
+            if not nums:
+                continue
+            # Do not expand inventively: keep existing length unless operator edits YAML list.
+            pm["vcc_list"] = nums
+            continue
+        if field in ("truth_table_status", "isolation_status"):
+            if is_datasheet_signed(val) and not is_datasheet_signed(
+                before.truth_table_status if field == "truth_table_status" else before.isolation_status
+            ):
+                raise RuntimeError(
+                    "Panel cannot promote status to Datasheet-signed. "
+                    "Hand-edit YAML after a signed datasheet confirm."
+                )
+            pm[field] = val
+            if field == "truth_table_status" and isinstance(pm.get("truth_table"), dict):
+                pm["truth_table"]["status"] = val
+            if field == "isolation_status" and isinstance(pm.get("isolation"), dict):
+                pm["isolation"]["status"] = val
+            continue
+        if field in ("truth_table", "isolation") and isinstance(val, dict):
+            nested = dict(val)
+            st = nested.get("status")
+            if is_datasheet_signed(st) and not is_datasheet_signed(
+                before.truth_table_status if field == "truth_table" else before.isolation_status
+            ):
+                raise RuntimeError(
+                    "Panel cannot promote truth_table/isolation to Datasheet-signed."
+                )
+            if field == "truth_table" and is_unconfirmed_status(before.truth_table_status):
+                nested["status"] = before.truth_table_status or "UNCONFIRMED"
+            if field == "isolation" and is_unconfirmed_status(before.isolation_status):
+                nested["status"] = before.isolation_status or "UNCONFIRMED"
+            pm[field] = nested
+            continue
+        if field in ("pass_mode", "limit_mode") and isinstance(val, dict):
+            cleaned = {
+                str(k): _coerce_pass_mode(v)
+                for k, v in val.items()
+                if _coerce_pass_mode(v)
+            }
+            pm[field] = cleaned
+            continue
+        pm[field] = val
+    # Never invent IOH/IOL via the panel.
+    for banned in ("voh_table", "vol_table", "ioh_a", "iol_a"):
+        pm.pop(banned, None)
+    data["product_model"] = pm
+    path.write_text(
+        yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    return panel_payload(key)
+
+
 def _pin_drive(blob: dict[str, Any], logic_inputs: list[str], oe_pin: str, oe_mode: str) -> dict[str, DriveMap]:
     """Stimulus map from YAML. Default: AWG ch = 1..n in logic_inputs order.
 
@@ -459,6 +790,17 @@ def load_product_model(part_key: str) -> Optional[ProductModel]:
     recipe = _as_dict(blob.get("recipe"))
     pin_drive = _pin_drive(blob, logic_inputs, oe_pin, oe_mode)
     part_name = str(blob.get("part") or part_yaml.get("part") or key).strip()
+    pass_mode = _pass_mode(blob, schmitt)
+    if not limit_mode:
+        limit_mode = dict(pass_mode)
+    tt_top = str(blob.get("truth_table_status") or "").strip()
+    if tt_top:
+        tt_status = tt_top
+    if not tt_status:
+        tt_status = "UNCONFIRMED"
+    iso_status = iso_status or str(blob.get("isolation_status") or "")
+    if not iso_status:
+        iso_status = tt_status
     return ProductModel(
         part=part_name or key,
         pins=pins,
@@ -472,13 +814,16 @@ def load_product_model(part_key: str) -> Optional[ProductModel]:
         truth_table=truth_table,
         truth_table_status=tt_status,
         isolation=isolation,
-        isolation_status=iso_status or str(blob.get("isolation_status") or ""),
+        isolation_status=iso_status,
         dc_limits=dc_limits,
         limit_mode=limit_mode,
+        pass_mode=pass_mode,
         pin_drive=pin_drive,
         recipe=recipe,
         output_pin=output_pin,
-        status=str(blob.get("status") or ""),
+        status=str(blob.get("status") or tt_status),
+        vcc_list_status=str(blob.get("vcc_list_status") or ""),
+        vcc_op_status=str(blob.get("vcc_op_status") or "RANGE_METADATA"),
         raw=blob,
     )
 

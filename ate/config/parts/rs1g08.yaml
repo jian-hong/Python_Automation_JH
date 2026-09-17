@@ -117,8 +117,17 @@ product_model:
     delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
     delta_vcc_min: 3.0
     voh_vol_settle_s: 1.0
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
   limit_mode:
-    input_threshold: range
+    VIH: min_only
+    VIL: max_only
     icc: max_only
     delta_icc: max_only
     ii: max_only

@@ -17,7 +17,11 @@ from ate.tests.logic.product_model import (
     derive_isolation,
     has_product_model,
     isolation_for,
+    is_datasheet_signed,
+    claimed_signed_without_datasheet,
+    load_part_yaml,
     load_product_model,
+    lookup_pass_mode,
     vectors_for_output,
 )
 
@@ -83,10 +87,39 @@ def _and_isolation_ok() -> list[str]:
     highs = vectors_for_output(m, "H")
     if not any(v.get("A") == "H" and v.get("B") == "H" for v in highs):
         errors.append("AND Y=H must include A=H B=H")
+    if str(m.pass_mode.get("input_threshold") or "").lower() == "range":
+        errors.append("rs1g08 must not collapse VIH/VIL into input_threshold: range")
+    if lookup_pass_mode(m, "VIH_V", "input_threshold") != "min_only":
+        errors.append("rs1g08 pass_mode VIH must be min_only")
+    if lookup_pass_mode(m, "VIL_V", "input_threshold") != "max_only":
+        errors.append("rs1g08 pass_mode VIL must be max_only")
     return errors
 
 
-def _97_isolation_ok() -> list[str]:
+
+# Datasheet §4 FUNCTION TABLE rows (A B C -> Y). Not a signed confirm.
+_RS1G97_SEC4 = (
+    ("L", "L", "L", "L"),
+    ("H", "L", "L", "L"),
+    ("L", "H", "L", "H"),
+    ("H", "H", "L", "H"),
+    ("L", "L", "H", "L"),
+    ("H", "L", "H", "H"),
+    ("L", "H", "H", "L"),
+    ("H", "H", "H", "H"),
+)
+
+
+def _row_key(row: dict[str, str]) -> tuple[str, str, str, str]:
+    return (row.get("A", ""), row.get("B", ""), row.get("C", ""), row.get("Y", ""))
+
+
+def _rs1g97_holds() -> list[str]:
+    """Data holds for RS1G97. Does not treat the table as Datasheet-signed.
+
+    Isolation is checked against derive_isolation(truth_table). UNCONFIRMED
+    is fail-closed / not greenable.
+    """
     errors: list[str] = []
     m = load_product_model("rs1g97")
     if m is None:
@@ -96,55 +129,93 @@ def _97_isolation_ok() -> list[str]:
     if not m.schmitt:
         errors.append("rs1g97 schmitt must be true (VT+/VT-)")
     en = set(enabled_tests_for_part("rs1g97") or [])
-    for banned in ("ioz", "ioff", "ioff_leakage"):
+    for banned in ("ioz", "ioff", "ioff_leakage", "off_current"):
         if banned in en:
             errors.append(f"rs1g97 must not enable {banned}")
     for need in ("input_threshold", "icc", "delta_icc", "ii", "voh", "vol"):
         if need not in en:
             errors.append(f"rs1g97 enabled_tests missing {need}")
-    # Datasheet function table (extract page 1): C=L => Y=B; C=H => Y=A AND B.
-    # Mux Y=C?A:B is wrong (A=H B=L C=H is Y=L, not H).
-    want = {
-        ("L", "L", "L", "L"),
-        ("H", "L", "L", "L"),
-        ("L", "H", "L", "H"),
-        ("H", "H", "L", "H"),
-        ("L", "L", "H", "L"),
-        ("H", "L", "H", "L"),
-        ("L", "H", "H", "L"),
-        ("H", "H", "H", "H"),
-    }
-    got = set()
-    for row in m.truth_table:
-        got.add((row.get("A"), row.get("B"), row.get("C"), row.get("Y")))
-    if got != want:
-        errors.append(f"rs1g97 truth_table must match datasheet extract, got {sorted(got)}")
-    if ("H", "L", "H", "H") in got:
-        errors.append("rs1g97 must not use C-select MUX row A=H B=L C=H Y=H")
-    a = isolation_for(m, "A")
-    b = isolation_for(m, "B")
-    c = isolation_for(m, "C")
+    pins = {p.name: p.number for p in m.pins}
+    want_pins = {"A": 3, "B": 1, "C": 6, "Y": 4, "GND": 2, "VCC": 5}
+    for name, num in want_pins.items():
+        if pins.get(name) != num:
+            errors.append(f"rs1g97 pin {name} must be number {num} (datasheet §7), got {pins.get(name)}")
+    got_rows = {_row_key(r) for r in m.truth_table}
+    want_rows = set(_RS1G97_SEC4)
+    if got_rows != want_rows:
+        errors.append(
+            f"rs1g97 truth_table must be Datasheet §4 rows only (got {sorted(got_rows)})"
+        )
+    derived = derive_isolation(
+        logic_inputs=m.logic_inputs,
+        truth_table=m.truth_table,
+        output_pin=m.output_pin,
+    )
+    a = derived.get("A") or []
+    b = derived.get("B") or []
+    c = derived.get("C") or []
+    if not any(p.fix.get("B") == "L" and p.fix.get("C") == "H" and p.y_expect == "track" for p in a):
+        errors.append("rs1g97 isolation from table: A with B:L C:H must track")
     if not any(p.fix.get("B") == "H" and p.fix.get("C") == "H" and p.y_expect == "track" for p in a):
-        errors.append("rs1g97 isolation A: need B=H C=H track (Y=A AND B)")
+        errors.append("rs1g97 isolation from table: A with B:H C:H must track")
     if not any(p.fix.get("A") == "L" and p.fix.get("C") == "L" and p.y_expect == "track" for p in b):
-        errors.append("rs1g97 isolation B: need A=L C=L track (Y=B when C=L)")
-    if not any(
-        p.fix.get("A") == "L" and p.fix.get("B") == "H" and p.y_expect == "invert" for p in c
-    ):
-        errors.append("rs1g97 isolation C: need A=L B=H invert")
-    c_drive = m.pin_drive.get("C")
-    if c_drive is None or c_drive.src != "psu" or c_drive.ch != 3:
-        errors.append("rs1g97 pin_drive C must be PSU CH3 (CH2 is Y-load/vref)")
+        errors.append("rs1g97 isolation from table: B with A:L C:L must track")
+    if not any(p.fix.get("A") == "H" and p.fix.get("B") == "L" and p.y_expect == "track" for p in c):
+        errors.append("rs1g97 isolation from table: C with A:H B:L must track")
+    if not any(p.fix.get("A") == "L" and p.fix.get("B") == "H" and p.y_expect == "invert" for p in c):
+        errors.append("rs1g97 isolation from table: C with A:L B:H must invert")
+    yaml_a = isolation_for(m, "A")
+    if yaml_a:
+        yaml_sigs = {(tuple(sorted(p.fix.items())), p.y_expect) for p in yaml_a}
+        der_sigs = {(tuple(sorted(p.fix.items())), p.y_expect) for p in a}
+        if not yaml_sigs.issubset(der_sigs):
+            errors.append("rs1g97 YAML isolation must match derive_isolation(truth_table)")
+    if claimed_signed_without_datasheet(m.truth_table_status):
+        errors.append(
+            f"rs1g97 truth_table.status={m.truth_table_status!r} must not claim confirm "
+            "without Datasheet-signed"
+        )
+    if claimed_signed_without_datasheet(m.isolation_status):
+        errors.append(
+            f"rs1g97 isolation.status={m.isolation_status!r} must not claim confirm "
+            "without Datasheet-signed"
+        )
+    if is_datasheet_signed(m.truth_table_status) and is_datasheet_signed(m.isolation_status):
+        pass
+    else:
+        errors.append(
+            f"rs1g97 truth_table.status={m.truth_table_status} isolation.status={m.isolation_status} "
+            "UNCONFIRMED (not Datasheet-signed CONFIRM; not greenable)"
+        )
+    if lookup_pass_mode(m, "VTPLUS_V", "input_threshold") != "range":
+        errors.append("rs1g97 pass_mode VT+ must be range")
+    if lookup_pass_mode(m, "VTMINUS_V", "input_threshold") != "range":
+        errors.append("rs1g97 pass_mode VT- must be range")
+    if str(m.pass_mode.get("input_threshold") or "").lower() == "range" and "VT+" not in m.pass_mode:
+        errors.append("rs1g97 must not collapse VT+/VT- into a single input_threshold: range")
+    if [round(float(x), 6) for x in m.vcc_list] != [5.0]:
+        errors.append(f"rs1g97 vcc_list must stay [5.0] (not expanded), got {m.vcc_list}")
+    raw = load_part_yaml("rs1g97")
+    blob = str(raw)
+    if "ioh_a" in blob.lower() or "iol_a" in blob.lower():
+        errors.append("rs1g97 must not invent IOH/IOL load numbers")
     specs = {s.get("id"): s for s in load_part_specs("rs1g97")}
     if specs.get("ICC_uA", {}).get("test") != "icc":
         errors.append("rs1g97 ICC_uA spec test must be icc (Path B id)")
-    if str(specs.get("ICC_uA", {}).get("pass_mode") or "") != "max-only":
-        errors.append("rs1g97 ICC_uA pass_mode must be max-only")
-    if str(specs.get("VTPLUS_V", {}).get("pass_mode") or "") != "range":
-        errors.append("rs1g97 VTPLUS_V pass_mode must be range")
+    icc_mode = str(specs.get("ICC_uA", {}).get("pass_mode") or "").replace("_", "-")
+    if icc_mode and icc_mode not in ("max-only", "max"):
+        errors.append("rs1g97 ICC_uA pass_mode must be max-only when present")
+    vt_mode = str(specs.get("VTPLUS_V", {}).get("pass_mode") or "")
+    if vt_mode and vt_mode.replace("_", "-") != "range":
+        errors.append("rs1g97 VTPLUS_V pass_mode must be range when present")
+    src = _LOGIC_DC.read_text(encoding="utf-8")
+    if "INSTRUMENT_SENSE ICC: DMM-on-VCC" not in src:
+        errors.append("logic_dc.py must document INSTRUMENT_SENSE ICC: DMM-on-VCC")
+    if "INSTRUMENT_SENSE VOH:" not in src or "INSTRUMENT_SENSE IOZ:" not in src:
+        errors.append("logic_dc.py must document VOH/VOL/IOZ force/sense")
+    if "_mux97_isolation_ok" in src or "_mux97_isolation_ok" in _MODEL.read_text(encoding="utf-8"):
+        errors.append("_mux97_isolation_ok must not remain as a green gate")
     return errors
-
-
 def _buf126_ok() -> list[str]:
     errors: list[str] = []
     m = load_product_model("rs1g126")
@@ -166,6 +237,12 @@ def _buf126_ok() -> list[str]:
     else:
         if any(p.fix.get("OE") != "H" for p in a):
             errors.append("rs1g126 A isolation must hold OE active; do not invent unused data ties")
+    if str(m.pass_mode.get("input_threshold") or "").lower() == "range":
+        errors.append("rs1g126 must not collapse VIH/VIL into input_threshold: range")
+    if lookup_pass_mode(m, "VIH_V", "input_threshold") != "min_only":
+        errors.append("rs1g126 pass_mode VIH must be min_only")
+    if lookup_pass_mode(m, "VIL_V", "input_threshold") != "max_only":
+        errors.append("rs1g126 pass_mode VIL must be max_only")
     return errors
 
 
@@ -216,6 +293,7 @@ def _registry_ok() -> list[str]:
     return errors
 
 
+
 def _seelim_wrap_ok() -> list[str]:
     """Locator exists; family load must not execute goldens or scrape limits."""
     errors: list[str] = []
@@ -240,6 +318,33 @@ def _seelim_wrap_ok() -> list[str]:
     return errors
 
 
+def _panel_ok() -> list[str]:
+    errors: list[str] = []
+    web = Path(__file__).resolve().parents[1] / "ui" / "web"
+    html = (web / "index.html").read_text(encoding="utf-8")
+    js = (web / "app.js").read_text(encoding="utf-8")
+    for need in (
+        'id="panel-logic-dc"',
+        'id="logic-dc-truth"',
+        'id="logic-dc-isolation"',
+        'id="logic-dc-pass-mode"',
+        'id="logic-dc-vcc-list"',
+        'id="logic-dc-gaps"',
+        'id="btn-save-logic-dc"',
+    ):
+        if need not in html:
+            errors.append(f"Logic DC panel missing {need}")
+    if "loadLogicDcPanel" not in js or "get_product_model" not in js:
+        errors.append("app.js must load Logic DC product_model")
+    if "saveLogicDcPanel" not in js:
+        errors.append("app.js must save Logic DC product_model")
+    srv = Path(__file__).resolve().parents[1] / "worker" / "server.py"
+    text = srv.read_text(encoding="utf-8")
+    if 'method == "get_product_model"' not in text or 'method == "save_product_model"' not in text:
+        errors.append("worker must expose get_product_model / save_product_model")
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -247,10 +352,11 @@ def check_logic_dc() -> list[str]:
     if not has_product_model("rs1g08") or not has_product_model("rs1g97"):
         errors.append("rs1g08 and rs1g97 must carry product_model schema")
     errors += _and_isolation_ok()
-    errors += _97_isolation_ok()
+    errors += _rs1g97_holds()
     errors += _buf126_ok()
     errors += _seelim_wrap_ok()
     errors += _registry_ok()
+    errors += _panel_ok()
     load_family("opamp")
     return errors
 
@@ -263,8 +369,8 @@ def main() -> int:
             print(f"  - {line}")
         return 1
     print(
-        "OK logic-dc: shared logic_dc.py + product_model for rs1g08/rs1g97/rs1g126 "
-        "(97 datasheet truth table; seelim locator not runtime; 126 keeps ioz+ten/tdis)"
+        "OK logic-dc: shared logic_dc.py + product_model "
+        "(Datasheet-signed CONFIRM only; UNCONFIRMED is not greenable)"
     )
     return 0
 

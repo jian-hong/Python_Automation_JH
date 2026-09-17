@@ -7,6 +7,18 @@ OE optional: IOZ only when oe != none.
 Does not import Ariff.* / Lim.* / See Lim goldens. Dual-rail RS0204 keeps
 its own bodies; voh/vol/icc dispatch there only when the part has vcca/vccb
 and no Path B model.
+
+INSTRUMENT_SENSE ICC: DMM-on-VCC (DMM in series with PSU CH1 / DUT VCC).
+INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at VCC-offset, others at rail.
+INSTRUMENT_SENSE II: DMM in series with the swept input pin (force VI via AWG/PSU).
+INSTRUMENT_SENSE VOH: force Y-high from truth_table vector; DMM sense V(Y).
+  Loaded IOH only from existing voh_table (no invented IOH/IOL loads).
+INSTRUMENT_SENSE VOL: force Y-low from truth_table vector; DMM sense V(Y).
+  Loaded IOL only from existing vol_table (no invented loads).
+INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
+  Not applicable when oe=none.
+
+truth_table.status UNCONFIRMED is not Datasheet-signed and is not greenable.
 """
 from __future__ import annotations
 
@@ -22,9 +34,12 @@ from ate.tests.logic.product_model import (
     icc_pins,
     isolation_for,
     iter_logic_corners,
+    is_datasheet_signed,
+    is_unconfirmed_status,
     load_part_yaml,
     load_product_model,
     logic_volts,
+    lookup_pass_mode,
     vectors_for_output,
 )
 
@@ -69,6 +84,75 @@ def _current_limit(params: Any, model: ProductModel) -> float:
     )
 
 
+def _uses_truth_table(test_id: str) -> bool:
+    return str(test_id or "").strip().lower() in {
+        "input_threshold",
+        "vth",
+        "voh",
+        "vol",
+    }
+
+
+def _provisional_dc(model: ProductModel, test_id: str) -> bool:
+    block = model.dc_limits.get(test_id) if isinstance(model.dc_limits, dict) else None
+    if isinstance(block, dict) and is_unconfirmed_status(block.get("status")):
+        return True
+    return False
+
+
+def _meas(
+    model: ProductModel,
+    meas_id: str,
+    value: Any,
+    unit: str,
+    *,
+    test_id: str,
+) -> dict[str, Any]:
+    row: dict[str, Any] = {"id": meas_id, "value": value, "unit": unit}
+    mode = lookup_pass_mode(model, meas_id, test_id)
+    if mode:
+        row["pass_mode"] = mode
+    if _uses_truth_table(test_id) and is_unconfirmed_status(model.truth_table_status):
+        row["greenable"] = False
+        row["status"] = model.truth_table_status or "UNCONFIRMED"
+    if _provisional_dc(model, test_id):
+        row["greenable"] = False
+        row["status"] = "PROVISIONAL"
+    return row
+
+
+def _finish(model: ProductModel, test_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Attach schema status. UNCONFIRMED / PROVISIONAL cannot report green."""
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        data = {}
+        payload["data"] = data
+    data["truth_table_status"] = model.truth_table_status
+    data["isolation_status"] = model.isolation_status
+    data["pass_mode"] = dict(model.pass_mode)
+    data["vcc_list"] = list(model.vcc_list)
+    signed = is_datasheet_signed(model.truth_table_status)
+    uses_tt = _uses_truth_table(test_id)
+    greenable = signed and not _provisional_dc(model, test_id)
+    if uses_tt and is_unconfirmed_status(model.truth_table_status):
+        greenable = False
+    data["greenable"] = bool(greenable)
+    if not greenable and uses_tt:
+        tag = (
+            f"truth_table.status={model.truth_table_status or 'UNCONFIRMED'} "
+            "(not Datasheet-signed; not greenable)"
+        )
+        summary = str(payload.get("summary") or "").strip()
+        payload["summary"] = f"{summary} [{tag}]".strip()
+        for row in data.get("rows") or []:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("Result") or "").upper() == "PASS":
+                row["Result"] = "UNCONFIRMED"
+            row.setdefault("status", model.truth_table_status or "UNCONFIRMED")
+    return payload
+
+
 def _vcc_now(params: Any, model: ProductModel) -> float:
     try:
         if getattr(params, "vcc", None) is not None:
@@ -81,6 +165,7 @@ def _vcc_now(params: Any, model: ProductModel) -> float:
 
 
 def _vcc_corners(params: Any, model: ProductModel, recipe_key: str = "") -> list[float]:
+    """vcc_list / recipe lists only. vcc_op_min/max are range metadata, not a sweep."""
     extra = model.recipe.get(recipe_key) if recipe_key else None
     if isinstance(extra, list) and extra:
         return [float(x) for x in extra]
@@ -111,6 +196,7 @@ def _settle(model: ProductModel, default: float = 0.3) -> float:
 
 
 def _vmax_for_ii(model: ProductModel, vcc: float) -> float:
+    """VI force for II. Uses vcc_op_max as pin voltage metadata, not a VCC corner."""
     if model.vcc_op_max is not None:
         return float(model.vcc_op_max)
     if model.vcc_list:
@@ -362,17 +448,21 @@ def _run_input_threshold(instr, params: Any) -> dict[str, Any]:
         vt_p = [r.get("VT+") for r in rows if r.get("VT+") is not None]
         vt_m = [r.get("VT-") for r in rows if r.get("VT-") is not None]
         if vt_p:
-            meas.append({"id": "VTPLUS_V", "value": vt_p[-1], "unit": "V"})
+            meas.append(_meas(model, "VTPLUS_V", vt_p[-1], "V", test_id="input_threshold"))
         if vt_m:
-            meas.append({"id": "VTMINUS_V", "value": vt_m[-1], "unit": "V"})
+            meas.append(_meas(model, "VTMINUS_V", vt_m[-1], "V", test_id="input_threshold"))
     else:
         summary = f"VTH n={len(rows)} last VIH={last.get('VIH')} VIL={last.get('VIL')}"
         meas = []
         if last.get("VIH") is not None:
-            meas.append({"id": "VIH_V", "value": last["VIH"], "unit": "V"})
+            meas.append(_meas(model, "VIH_V", last["VIH"], "V", test_id="input_threshold"))
         if last.get("VIL") is not None:
-            meas.append({"id": "VIL_V", "value": last["VIL"], "unit": "V"})
-    return {"summary": summary, "data": {"rows": rows, "schmitt": schmitt}, "measurements": meas}
+            meas.append(_meas(model, "VIL_V", last["VIL"], "V", test_id="input_threshold"))
+    return _finish(
+        model,
+        "input_threshold",
+        {"summary": summary, "data": {"rows": rows, "schmitt": schmitt}, "measurements": meas},
+    )
 
 
 def pattern_rising_first(pat: IsolationPattern) -> bool:
@@ -380,6 +470,7 @@ def pattern_rising_first(pat: IsolationPattern) -> bool:
 
 
 def _run_icc(instr, params: Any) -> dict[str, Any]:
+    # INSTRUMENT_SENSE ICC: DMM-on-VCC (series with PSU CH1 / DUT VCC).
     _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
     ilim = _current_limit(params, model)
@@ -409,14 +500,19 @@ def _run_icc(instr, params: Any) -> dict[str, Any]:
     finally:
         _power_down(instr)
     mx = max((abs(float(r["ICC_uA"])) for r in rows), default=0.0)
-    return {
-        "summary": f"ICC n={len(rows)} max={mx:.3f} uA ({len(pins)} pins, 2^{len(pins)} corners)",
-        "data": {"rows": rows},
-        "measurements": [{"id": "ICC_uA", "value": mx, "unit": "uA"}],
-    }
+    return _finish(
+        model,
+        "icc",
+        {
+            "summary": f"ICC n={len(rows)} max={mx:.3f} uA ({len(pins)} pins, 2^{len(pins)} corners)",
+            "data": {"rows": rows, "instrument_sense": "DMM-on-VCC"},
+            "measurements": [_meas(model, "ICC_uA", mx, "uA", test_id="icc")],
+        },
+    )
 
 
 def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
+    # INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at VCC-offset.
     _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
     offset = model.recipe.get("delta_offset_v")
@@ -475,14 +571,19 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
     if not rows:
         raise RuntimeError("delta_icc: no points")
     mx = max(abs(float(r["ICC_uA"])) for r in rows)
-    return {
-        "summary": f"DeltaICC n={len(rows)} max={mx:.3f} uA offset={offset_v} V",
-        "data": {"rows": rows},
-        "measurements": [{"id": "DELTA_ICC_uA", "value": mx, "unit": "uA"}],
-    }
+    return _finish(
+        model,
+        "delta_icc",
+        {
+            "summary": f"DeltaICC n={len(rows)} max={mx:.3f} uA offset={offset_v} V",
+            "data": {"rows": rows, "instrument_sense": "DMM-on-VCC"},
+            "measurements": [_meas(model, "DELTA_ICC_uA", mx, "uA", test_id="delta_icc")],
+        },
+    )
 
 
 def _run_ii(instr, params: Any) -> dict[str, Any]:
+    # INSTRUMENT_SENSE II: DMM in series with the swept input; force VI.
     _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
     ilim = _current_limit(params, model)
@@ -517,11 +618,15 @@ def _run_ii(instr, params: Any) -> dict[str, Any]:
     if not rows:
         raise RuntimeError("ii: no points")
     mx = max(abs(float(r["II_uA"])) for r in rows)
-    return {
-        "summary": f"II n={len(rows)} max_abs={mx:.3f} uA",
-        "data": {"rows": rows},
-        "measurements": [{"id": "II_uA", "value": mx, "unit": "uA"}],
-    }
+    return _finish(
+        model,
+        "ii",
+        {
+            "summary": f"II n={len(rows)} max_abs={mx:.3f} uA",
+            "data": {"rows": rows, "instrument_sense": "DMM-series-input"},
+            "measurements": [_meas(model, "II_uA", mx, "uA", test_id="ii")],
+        },
+    )
 
 
 def _voh_vol_table(part_key: str, which: str) -> list[dict[str, Any]]:
@@ -562,6 +667,7 @@ def _apply_y_vector(instr, model: ProductModel, high: bool, vcc: float, ilim: fl
 
 
 def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
+    # INSTRUMENT_SENSE VOH: force Y-high; DMM sense V(Y). Loaded IOH only from voh_table.
     _require(instr, "PSU", "DMM")
     model = _model(params)
     if getattr(instr, "gen", None) is None:
@@ -606,7 +712,7 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
                     }
                 )
                 tag = str(vcc).replace(".", "p")
-                meas.append({"id": f"VOH_{tag}V", "value": measured, "unit": "V"})
+                meas.append(_meas(model, f"VOH_{tag}V", measured, "V", test_id="voh"))
                 power_off(instr.psu)
                 time.sleep(0.3)
         else:
@@ -625,19 +731,28 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
                     rec["status"] = vec["_status"]
                 rows.append(rec)
                 tag = str(vcc).replace(".", "p")
-                meas.append({"id": f"VOH_{tag}V", "value": vout, "unit": "V"})
+                meas.append(_meas(model, f"VOH_{tag}V", vout, "V", test_id="voh"))
     finally:
         _power_down(instr)
     if not rows:
         raise RuntimeError("voh: no points (no vcc_list / table)")
-    return {
-        "summary": f"VOH n={len(rows)} last={rows[-1].get('VOH', rows[-1].get('Measured'))}",
-        "data": {"rows": rows, "limits": "existing yaml / voh_table only; else unspec"},
-        "measurements": meas,
-    }
+    return _finish(
+        model,
+        "voh",
+        {
+            "summary": f"VOH n={len(rows)} last={rows[-1].get('VOH', rows[-1].get('Measured'))}",
+            "data": {
+                "rows": rows,
+                "limits": "existing yaml / voh_table only; else unspec",
+                "instrument_sense": "force-Y / DMM-sense-Vout",
+            },
+            "measurements": meas,
+        },
+    )
 
 
 def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
+    # INSTRUMENT_SENSE VOL: force Y-low; DMM sense V(Y). Loaded IOL only from vol_table.
     _require(instr, "PSU", "DMM")
     model = _model(params)
     if getattr(instr, "gen", None) is None:
@@ -680,7 +795,7 @@ def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
                     }
                 )
                 tag = str(vcc).replace(".", "p")
-                meas.append({"id": f"VOL_{tag}V", "value": measured, "unit": "V"})
+                meas.append(_meas(model, f"VOL_{tag}V", measured, "V", test_id="vol"))
                 power_off(instr.psu)
                 time.sleep(0.3)
         else:
@@ -699,16 +814,24 @@ def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
                     rec["status"] = vec["_status"]
                 rows.append(rec)
                 tag = str(vcc).replace(".", "p")
-                meas.append({"id": f"VOL_{tag}V", "value": vout, "unit": "V"})
+                meas.append(_meas(model, f"VOL_{tag}V", vout, "V", test_id="vol"))
     finally:
         _power_down(instr)
     if not rows:
         raise RuntimeError("vol: no points")
-    return {
-        "summary": f"VOL n={len(rows)} last={rows[-1].get('VOL', rows[-1].get('Measured'))}",
-        "data": {"rows": rows, "limits": "existing yaml / vol_table only; else unspec"},
-        "measurements": meas,
-    }
+    return _finish(
+        model,
+        "vol",
+        {
+            "summary": f"VOL n={len(rows)} last={rows[-1].get('VOL', rows[-1].get('Measured'))}",
+            "data": {
+                "rows": rows,
+                "limits": "existing yaml / vol_table only; else unspec",
+                "instrument_sense": "force-Y / DMM-sense-Vout",
+            },
+            "measurements": meas,
+        },
+    )
 
 
 def _run_ioz(instr, params: Any) -> dict[str, Any]:
@@ -718,6 +841,7 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
             f"ioz: oe is none on {model.part} -- IOZ is not applicable. "
             "Remove ioz from enabled_tests."
         )
+    # INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
     _require(instr, "PSU", "AWG", "DMM")
     ilim = _current_limit(params, model)
     vccs = _vcc_corners(params, model, "ioz_vcc_list")
@@ -758,11 +882,15 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
     if not rows:
         raise RuntimeError("ioz: no points")
     mx = max(abs(float(r["IOZ_uA"])) for r in rows)
-    return {
-        "summary": f"IOZ n={len(rows)} max_abs={mx:.3f} uA",
-        "data": {"rows": rows},
-        "measurements": [{"id": "IOZ_uA", "value": mx, "unit": "uA"}],
-    }
+    return _finish(
+        model,
+        "ioz",
+        {
+            "summary": f"IOZ n={len(rows)} max_abs={mx:.3f} uA",
+            "data": {"rows": rows, "instrument_sense": "DMM-series-Y / force-Vout"},
+            "measurements": [_meas(model, "IOZ_uA", mx, "uA", test_id="ioz")],
+        },
+    )
 
 
 def _run_icc_dispatch(instr, params: Any) -> dict[str, Any]:

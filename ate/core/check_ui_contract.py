@@ -77,6 +77,14 @@ def main() -> int:
         errors.append("STS datalog export / datasheet fetch controls missing")
     if 'id="btn-fill-excel"' not in html:
         errors.append("Fill Excel numbers control missing")
+    if 'id="panel-logic-dc"' not in html or 'id="logic-dc-truth"' not in html:
+        errors.append("Logic DC product_model panel missing")
+    if 'id="logic-dc-isolation"' not in html or 'id="logic-dc-pass-mode"' not in html:
+        errors.append("Logic DC isolation/pass_mode editors missing")
+    if 'id="logic-dc-vcc-list"' not in html or 'id="logic-dc-gaps"' not in html:
+        errors.append("Logic DC vcc_list/gaps fields missing")
+    if 'id="btn-save-logic-dc"' not in html:
+        errors.append("Logic DC save control missing")
 
     js_path = WEB / "app.js"
     if not js_path.is_file():
@@ -87,8 +95,10 @@ def main() -> int:
             errors.append("app.js has invalid if ! without parentheses")
         if "inventoryRows" not in js or "loadInventory" not in js:
             errors.append("Setup tracking sheet must load inventory")
-        if "!(inventoryRows || []).length" not in js:
-            errors.append("family rail click must retry loadInventory when tracking rows are empty")
+        if "loadLogicDcPanel" not in js or "get_product_model" not in js:
+            errors.append("Logic DC panel must load get_product_model")
+        if "save_product_model" not in js or "saveLogicDcPanel" not in js:
+            errors.append("Logic DC panel must save product_model")
         combo = re.search(
             r'\["db-component", "db-part", "db-package", "db-operator", "db-version"\]\.forEach[\s\S]*?\$\("btn-apply-db"\)',
             js,

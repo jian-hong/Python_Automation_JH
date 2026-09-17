@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260911handover1" />
+  <link rel="stylesheet" href="styles.css?v=20260917logicdc1" />
 </head>
 <body>
   <div class="bg"></div>
@@ -278,6 +278,31 @@
             <div id="run-conditions" class="param-grid"></div>
           </div>
 
+          <div class="glass panel wide hidden" id="panel-logic-dc">
+            <h2>Logic DC product model</h2>
+            <p class="hint">Path B fields from part YAML. UNCONFIRMED / PROVISIONAL is not Datasheet-signed and not greenable. Do not invent truth rows or IOH/IOL loads. Isolation is unused ties from the table.</p>
+            <p class="hint" id="logic-dc-status">Apply a Logic campaign with product_model to edit.</p>
+            <div id="logic-dc-gaps" class="hint"></div>
+            <div class="param-grid">
+              <label>vcc_list
+                <input id="logic-dc-vcc-list" type="text" />
+              </label>
+              <label>pass_mode (JSON)
+                <textarea id="logic-dc-pass-mode" class="mono-edit" rows="5"></textarea>
+              </label>
+            </div>
+            <label class="logic-dc-block">truth_table
+              <textarea id="logic-dc-truth" class="mono-edit" rows="10"></textarea>
+            </label>
+            <label class="logic-dc-block">isolation
+              <textarea id="logic-dc-isolation" class="mono-edit" rows="8"></textarea>
+            </label>
+            <div class="row" style="margin-top:8px">
+              <button type="button" id="btn-save-logic-dc" class="btn">Save product_model</button>
+            </div>
+            <p class="hint" id="logic-dc-hint"></p>
+          </div>
+
           <div class="glass panel" id="panel-gain-boards">
             <h2>Board gains (locked)</h2>
             <p class="hint">Gain follows the physical board — not a software knob. VOS ≈201 is research-only.</p>
@@ -448,6 +473,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260911photo1"></script>
+  <script src="app.js?v=20260917logicdc1"></script>
 </body>
 </html>

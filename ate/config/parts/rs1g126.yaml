@@ -58,9 +58,11 @@ product_model:
     pin: OE
     active: high
   output_pin: Y
-  vcc_op_min: 1.65  # limits yaml VCC_V / local RS1G126 extract
+  vcc_op_min: 1.65  # range metadata only until CONFIRM. Not a sweep.
   vcc_op_max: 5.5
+  vcc_op_status: RANGE_METADATA
   vcc_list: [5.0]
+  vcc_list_status: PROVISIONAL
   logic_inputs: [A]
   pins:
     - {name: OE, role: oe}
@@ -79,8 +81,18 @@ product_model:
     # IOZ datasheet extract: VO=0V to 5.5V, VCC=3.6V, max 10 uA
     ioz_vcc_list: [3.6]
     ioz_vout_list: [0.0, 5.5]
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    ioz: max_only
+    voh: min_only
+    vol: max_only
   limit_mode:
-    input_threshold: range
+    VIH: min_only
+    VIL: max_only
     icc: max_only
     delta_icc: max_only
     ii: max_only

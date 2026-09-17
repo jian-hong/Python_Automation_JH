@@ -98,16 +98,17 @@ def load_part_datasheet(part_key: str = "") -> dict[str, Any]:
 def judge_value(value: Any, mn: Any, mx: Any, pass_mode: Any = None) -> str:
     """pass / fail / unspec. typ is display-only.
 
-    pass_mode range | min-only | max-only (optional). Empty = infer from min/max.
+    pass_mode: range (both), min_only / min-only, max_only / max-only.
+    Empty infers from whichever of min/max is present.
     """
-    mode = str(pass_mode or "").strip().lower().replace("_", "-")
-    if mode in ("min-only", "min"):
-        mx = None
-    elif mode in ("max-only", "max"):
-        mn = None
     v = _num(value)
     lo = _num(mn)
     hi = _num(mx)
+    mode = str(pass_mode or "").strip().lower().replace("-", "_")
+    if mode in ("min_only", "min"):
+        hi = None
+    elif mode in ("max_only", "max"):
+        lo = None
     if v is None or (lo is None and hi is None):
         return "unspec"
     if lo is not None and v < lo:
@@ -154,6 +155,7 @@ def enrich_measurement(
     *,
     specs: list[dict[str, Any]] | None = None,
     test_id: str = "",
+    part_key: str = "",
 ) -> dict[str, Any]:
     row = dict(raw)
     sid = str(row.get("id") or row.get("name") or test_id or "").strip()
@@ -173,9 +175,23 @@ def enrich_measurement(
             row["source"] = spec["source"]
         if not row.get("pass_mode") and spec.get("pass_mode"):
             row["pass_mode"] = spec["pass_mode"]
-    row["result"] = judge_value(
-        row.get("value"), row.get("min"), row.get("max"), pass_mode=row.get("pass_mode")
-    )
+    mode = str(row.get("pass_mode") or "").strip()
+    if not mode and part_key:
+        try:
+            from ate.tests.logic.product_model import has_product_model, load_product_model, lookup_pass_mode
+
+            if has_product_model(part_key):
+                model = load_product_model(part_key)
+                if model is not None:
+                    mode = lookup_pass_mode(model, sid, test_id)
+                    if mode:
+                        row["pass_mode"] = mode
+        except Exception:
+            mode = mode
+    row["result"] = judge_value(row.get("value"), row.get("min"), row.get("max"), mode or None)
+    if row.get("greenable") is False and row.get("result") == "pass":
+        row["result"] = "unspec"
+        row.setdefault("note", "PROVISIONAL / UNCONFIRMED; not greenable")
     return row
 
 
@@ -220,7 +236,41 @@ def measurements_from_result(
             hit = _spec_for(specs, test_id, test_id)
             if hit:
                 rows = [{"id": hit["id"]}]
-    out = [enrich_measurement(r, specs=specs, test_id=test_id) for r in rows]
+    out = [
+        enrich_measurement(r, specs=specs, test_id=test_id, part_key=part_key)
+        for r in rows
+    ]
+    if part_key:
+        try:
+            from ate.tests.logic.product_model import (
+                has_product_model,
+                is_unconfirmed_status,
+                load_product_model,
+            )
+
+            if has_product_model(part_key):
+                model = load_product_model(part_key)
+                tid = str(test_id or "").strip().lower()
+                uses_tt = tid in {"input_threshold", "vth", "voh", "vol"}
+                if model is not None and uses_tt and is_unconfirmed_status(model.truth_table_status):
+                    for m in out:
+                        if m.get("result") == "pass":
+                            m["result"] = "unspec"
+                            m["greenable"] = False
+                            m.setdefault(
+                                "note",
+                                f"truth_table.status={model.truth_table_status} not Datasheet-signed; not greenable",
+                            )
+                if model is not None:
+                    block = (model.dc_limits or {}).get(tid)
+                    if isinstance(block, dict) and is_unconfirmed_status(block.get("status")):
+                        for m in out:
+                            if m.get("result") == "pass":
+                                m["result"] = "unspec"
+                                m["greenable"] = False
+                                m.setdefault("note", "dc_limits PROVISIONAL; not greenable")
+        except Exception:
+            pass
     return [m for m in out if m.get("id")]
 
 

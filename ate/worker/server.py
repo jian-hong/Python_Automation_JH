@@ -484,6 +484,23 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
         family = str(params.get("family") or core.family or active_family() or "opamp")
         return catalog_for_ui(part, family=family)
 
+    if method == "get_product_model":
+        from ate.core.database import get_context
+        from ate.tests.logic.product_model import panel_payload
+
+        ctx = get_context()
+        part = str(params.get("part") or ctx.part_key or "").strip().lower()
+        return panel_payload(part)
+
+    if method == "save_product_model":
+        from ate.core.database import get_context
+        from ate.tests.logic.product_model import save_product_model_fields
+
+        ctx = get_context()
+        part = str(params.get("part") or ctx.part_key or "").strip().lower()
+        patch = params.get("patch") if isinstance(params.get("patch"), dict) else {}
+        return save_product_model_fields(part, patch)
+
     if method == "run_sequence":
         ids = list(params.get("test_ids") or [])
         p = params.get("params") or {}

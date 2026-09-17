@@ -687,6 +687,27 @@ select {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.mono-edit {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  margin-top: 4px;
+  padding: 7px 8px;
+  border-radius: var(--radius);
+  background: #0e1115;
+  border: 1px solid var(--dg4);
+  color: var(--g5);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+}
+label.logic-dc-block {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
 .param-section {
   margin: 8px 0 10px;
   padding: 10px;

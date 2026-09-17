@@ -841,9 +841,11 @@ async function loadParamDefaults() {
     renderConditions();
     renderDutPicks();
     applyTestDefaults(false);
+    await loadLogicDcPanel();
   } catch (_) {
     paramCatalog = { tests: {}, gain_profiles: {}, psu_golden: { current_limit_a: 0.1 }, gbw_steps: [], gbw_run_labels: {}, controls: [], sample_size: 4 };
     renderConditions();
+    try { await loadLogicDcPanel(); } catch (_) { /* ignore */ }
   }
 }
 
@@ -879,6 +881,92 @@ function renderConditions() {
     }
     return `<label>${c.label}<input id="${id}" type="number" step="0.01" value="${val}" /></label>`;
   }).join("");
+}
+
+function prettyJson(obj) {
+  try {
+    return JSON.stringify(obj == null ? {} : obj, null, 2);
+  } catch (_) {
+    return "{}";
+  }
+}
+
+async function loadLogicDcPanel() {
+  const panel = $("panel-logic-dc");
+  if (!panel) return;
+  const part = (dbContext && dbContext.part_key) || "";
+  const logicFam = activeFamily === "logic" || activeFamily === "level";
+  if (!logicFam || !part) {
+    panel.classList.add("hidden");
+    return;
+  }
+  try {
+    const data = await rpc("get_product_model", { part });
+    const present = !!(data && data.present);
+    panel.classList.toggle("hidden", !present);
+    if (!present) {
+      if ($("logic-dc-status")) {
+        $("logic-dc-status").textContent = "No Path B product_model for this part.";
+      }
+      return;
+    }
+    const signed = !!data.greenable;
+    if ($("logic-dc-status")) {
+      $("logic-dc-status").textContent =
+        `${data.part || part}  truth_table.status=${data.truth_table_status || "UNCONFIRMED"}  ` +
+        `isolation.status=${data.isolation_status || ""}  ` +
+        (signed ? "Datasheet-signed" : "not Datasheet-signed; not greenable");
+    }
+    const gaps = data.gaps || [];
+    if ($("logic-dc-gaps")) {
+      $("logic-dc-gaps").textContent = gaps.length ? `Gaps: ${gaps.join(" | ")}` : "Gaps: none listed";
+    }
+    if ($("logic-dc-vcc-list")) {
+      $("logic-dc-vcc-list").value = (data.vcc_list || []).join(", ");
+    }
+    if ($("logic-dc-pass-mode")) {
+      $("logic-dc-pass-mode").value = prettyJson(data.pass_mode || data.limit_mode || {});
+    }
+    if ($("logic-dc-truth")) {
+      $("logic-dc-truth").value = prettyJson(data.truth_table || {});
+    }
+    if ($("logic-dc-isolation")) {
+      $("logic-dc-isolation").value = prettyJson(data.isolation || {});
+    }
+    if ($("logic-dc-hint")) $("logic-dc-hint").textContent = "";
+  } catch (e) {
+    panel.classList.add("hidden");
+    if ($("logic-dc-hint")) $("logic-dc-hint").textContent = String((e && e.message) || e);
+  }
+}
+
+function parseJsonField(el, label) {
+  const raw = (el && el.value) || "";
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`${label} JSON: ${(e && e.message) || e}`);
+  }
+}
+
+async function saveLogicDcPanel() {
+  const part = (dbContext && dbContext.part_key) || "";
+  if (!part) throw new Error("Apply a campaign part first");
+  const vccRaw = (($("logic-dc-vcc-list") && $("logic-dc-vcc-list").value) || "").trim();
+  const vcc_list = vccRaw
+    ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
+    : [];
+  const patch = {
+    vcc_list,
+    pass_mode: parseJsonField($("logic-dc-pass-mode"), "pass_mode"),
+    truth_table: parseJsonField($("logic-dc-truth"), "truth_table"),
+    isolation: parseJsonField($("logic-dc-isolation"), "isolation"),
+  };
+  const res = await rpc("save_product_model", { part, patch });
+  await loadLogicDcPanel();
+  if ($("logic-dc-hint")) {
+    $("logic-dc-hint").textContent = `Saved ${res.part || part} (status stays UNCONFIRMED unless Datasheet-signed in YAML).`;
+  }
 }
 
 function renderDutPicks() {
@@ -3307,6 +3395,16 @@ function pollLoop() {
           try { await rpc("open_path", { path: exp.html }); } catch (_) { /* ignore */ }
         }
       } catch (e) {
+        alert(e.message);
+      }
+    };
+  }
+  if ($("btn-save-logic-dc")) {
+    $("btn-save-logic-dc").onclick = async () => {
+      try {
+        await saveLogicDcPanel();
+      } catch (e) {
+        if ($("logic-dc-hint")) $("logic-dc-hint").textContent = String((e && e.message) || e);
         alert(e.message);
       }
     };
