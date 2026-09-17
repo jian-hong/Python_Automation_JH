@@ -8,8 +8,23 @@ specs:
 - id: ICC_uA
   unit: uA
   max: 1.0
-  test: supply_current
+  test: icc
   source: local:RS1G126_(RevA.4).pdf
+- id: DELTA_ICC_uA
+  unit: uA
+  max: 500.0
+  test: delta_icc
+  source: local:RS1G126_(RevA.4).pdf dICC 3V to 5.5V
+- id: II_uA
+  unit: uA
+  max: 1.0
+  test: ii
+  source: local:RS1G126_(RevA.4).pdf II +25C
+- id: IOZ_uA
+  unit: uA
+  max: 10.0
+  test: ioz
+  source: local:RS1G126_(RevA.4).pdf IOZ VCC=3.6V
 - id: VCC_V
   unit: V
   min: 1.65

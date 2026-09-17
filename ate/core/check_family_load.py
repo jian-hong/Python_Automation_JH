@@ -31,6 +31,10 @@ _LOGIC_PROBE_IDS = frozenset(
         "vih_vil",
         "voh_load",
         "vol_load",
+        "input_threshold",
+        "delta_icc",
+        "ii",
+        "ioz",
     }
 )
 _OPA_BOARD_MODES = frozenset({"G11", "G_NEG100", "G201", "G1001"})
@@ -110,6 +114,14 @@ def _check_family_conditions() -> None:
     _assert_logic_catalog(ariff_cat)
     if "delta_supply_current" not in (ariff_cat.get("tests") or {}):
         raise AssertionError("rs1g08 catalog must include delta_supply_current")
+    if "input_threshold" not in (ariff_cat.get("tests") or {}):
+        raise AssertionError("rs1g08 catalog must include Path B input_threshold")
+    if "icc" not in (ariff_cat.get("tests") or {}):
+        raise AssertionError("rs1g08 catalog must include Path B icc")
+    if "vccb" in ((ariff_cat.get("tests") or {}).get("icc") or {}):
+        raise AssertionError("rs1g08 icc must not inherit RS0204 vccb")
+    if "input_threshold" in (logic_cat.get("tests") or {}):
+        raise AssertionError("rs29511 catalog must not include Path B input_threshold")
     if "cap_load" in (ariff_cat.get("tests") or {}):
         raise AssertionError("rs1g08 catalog must not include Soo cap_load")
     for need in ("vih_vil", "voh_load", "vol_load", "supply_current_sweep"):

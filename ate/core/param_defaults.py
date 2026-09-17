@@ -50,6 +50,12 @@ LOGIC_TEST_DEFAULTS: dict[str, dict[str, Any]] = {
     "vih_vil": {"vcc": 1.65},
     "voh_load": {"vcc": 1.65},
     "vol_load": {"vcc": 1.65},
+    # Path B Logic DC (product_model YAML)
+    "input_threshold": {"vcc": 1.65},
+    "vth": {"vcc": 1.65},
+    "delta_icc": {"vcc": 1.65},
+    "ii": {"vcc": 1.65},
+    "ioz": {"vcc": 1.65},
     # RS0204 dual-rail (vcc = VCCA; vccb from part yaml)
     "vih": {"vcc": 1.8, "vccb": 3.3},
     "vil": {"vcc": 1.8, "vccb": 3.3},
@@ -363,6 +369,10 @@ def _apply_part_to_tests(tests: dict[str, Any], part_key: str) -> tuple[dict[str
             if isinstance(entry, dict):
                 tests[tid] = {**entry, "vccb": vccb_f}
         vccb = vccb_f
+    else:
+        for tid, entry in list(tests.items()):
+            if isinstance(entry, dict) and "vccb" in entry:
+                tests[tid] = {k: v for k, v in entry.items() if k != "vccb"}
     extra = raw.get("test_defaults")
     if isinstance(extra, dict):
         for tid, entry in extra.items():

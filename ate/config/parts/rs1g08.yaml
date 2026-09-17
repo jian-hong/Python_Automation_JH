@@ -1,81 +1,142 @@
-# RS1G08 Logic (Ariff) — fixture / campaign binding
-# Tree: #Test_Database/Logic/RS1G08/SOT23/Version_1
-# Owner recipes: Ariff Repo LabAutomation_v1 - Copy (reference only; do not import Ariff.*)
-
-part: RS1G08
-model: RS1G08
-component: Logic
-device: RS1G08
-package: SOT23
-version: Version_1
-sample_size: 4
-year: "2026"
-owner: ariff
-part_key: rs1g08
-
-# Bench defaults (team-editable) — Ariff uses lower VCC in LA-1 configs
-vcc: 1.65
-current_limit: 0.05
-htol_ns: 230
-timing:
-  timeout_s: 4.0
-  settle_s: 0.3
-
-# Short platform sweeps (full 0..5.6/0.1 still available by expanding these lists)
-vcc_sweep_list: [1.65, 3.3, 5.0, 5.5]
-ioff_vcc_list: [0.0, 5.5]
-vih_vil_vcc_list: [2.0, 3.3, 5.0]
-vplus_v: 5.0
-voh_vol_settle_s: 1.0
-voh_table:
-  - {vcc: 2.0, vref: 0.080, spec_min: 1.6, ioh_a: 0.008}
-  - {vcc: 3.3, vref: 0.240, spec_min: 2.5, ioh_a: 0.024}
-  - {vcc: 4.5, vref: 0.320, spec_min: 3.8, ioh_a: 0.032}
-  - {vcc: 5.0, vref: 0.320, spec_min: 4.2, ioh_a: 0.032}
-  - {vcc: 5.5, vref: 0.320, spec_min: 4.8, ioh_a: 0.032}
-vol_table:
-  - {vcc: 2.0, vref: 4.92, spec_max: 0.45, iol_a: 0.008}
-  - {vcc: 3.3, vref: 4.76, spec_max: 0.55, iol_a: 0.024}
-  - {vcc: 4.5, vref: 4.68, spec_max: 0.55, iol_a: 0.032}
-  - {vcc: 5.0, vref: 4.68, spec_max: 0.50, iol_a: 0.032}
-  - {vcc: 5.5, vref: 4.68, spec_max: 0.45, iol_a: 0.032}
-
-# Run list — operator leaves unused checkboxes unchecked
-# voh_load/vol_load: distinct from RS0204 voh/vol registry ids
-enabled_tests:
-  - tp
-  - tidle
-  - tdis
-  - delta_supply_current
-  - off_current
-  - input_thresholds
-  - ioff_leakage
-  - input_leakage_sweep
-  - supply_current_sweep
-  - vih_vil
-  - voh_load
-  - vol_load
-
-fixture_modes:
-  LOGIC:
-    label: "Logic board (RS1G08 / Ariff)"
-    board_class: general
-    checklist:
-      - "Logic fixture for RS1G08 (Ariff)"
-      - "PSU CH1 = VCC; AWG for input stimulus on DC sweeps"
-      - "VOH/VOL need PSU CH2=Vref CH3=V+ and DMM"
-      - "DMM required for all DC / leakage / threshold rows"
-    tests:
-      - tp
-      - tidle
-      - tdis
-      - delta_supply_current
-      - off_current
-      - input_thresholds
-      - ioff_leakage
-      - input_leakage_sweep
-      - supply_current_sweep
-      - vih_vil
-      - voh_load
-      - vol_load
+# RS1G08 Logic (Ariff) — fixture / campaign binding
+# Tree: #Test_Database/Logic/RS1G08/SOT23/Version_1
+# Owner recipes: Ariff Repo LabAutomation_v1 - Copy (reference only; do not import Ariff.*)
+
+part: RS1G08
+model: RS1G08
+component: Logic
+device: RS1G08
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+owner: ariff
+part_key: rs1g08
+
+# Bench defaults (team-editable) — Ariff uses lower VCC in LA-1 configs
+vcc: 1.65
+current_limit: 0.05
+htol_ns: 230
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+
+# Short platform sweeps (full 0..5.6/0.1 still available by expanding these lists)
+vcc_sweep_list: [1.65, 3.3, 5.0, 5.5]
+ioff_vcc_list: [0.0, 5.5]
+vih_vil_vcc_list: [2.0, 3.3, 5.0]
+vplus_v: 5.0
+voh_vol_settle_s: 1.0
+voh_table:
+  - {vcc: 2.0, vref: 0.080, spec_min: 1.6, ioh_a: 0.008}
+  - {vcc: 3.3, vref: 0.240, spec_min: 2.5, ioh_a: 0.024}
+  - {vcc: 4.5, vref: 0.320, spec_min: 3.8, ioh_a: 0.032}
+  - {vcc: 5.0, vref: 0.320, spec_min: 4.2, ioh_a: 0.032}
+  - {vcc: 5.5, vref: 0.320, spec_min: 4.8, ioh_a: 0.032}
+vol_table:
+  - {vcc: 2.0, vref: 4.92, spec_max: 0.45, iol_a: 0.008}
+  - {vcc: 3.3, vref: 4.76, spec_max: 0.55, iol_a: 0.024}
+  - {vcc: 4.5, vref: 4.68, spec_max: 0.55, iol_a: 0.032}
+  - {vcc: 5.0, vref: 4.68, spec_max: 0.50, iol_a: 0.032}
+  - {vcc: 5.5, vref: 4.68, spec_max: 0.45, iol_a: 0.032}
+
+# Run list — operator leaves unused checkboxes unchecked
+# voh_load/vol_load: Ariff loaded DC (kept). Path B catalog ids: input_threshold/icc/delta_icc/ii/voh/vol.
+# No ioz (oe none).
+enabled_tests:
+  - tp
+  - tidle
+  - tdis
+  - delta_supply_current
+  - off_current
+  - input_thresholds
+  - ioff_leakage
+  - input_leakage_sweep
+  - supply_current_sweep
+  - vih_vil
+  - voh_load
+  - vol_load
+  - input_threshold
+  - icc
+  - delta_icc
+  - ii
+  - voh
+  - vol
+
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1G08 / Ariff)"
+    board_class: general
+    checklist:
+      - "Logic fixture for RS1G08 (Ariff)"
+      - "PSU CH1 = VCC; AWG for input stimulus on DC sweeps"
+      - "VOH/VOL need PSU CH2=Vref CH3=V+ and DMM"
+      - "DMM required for all DC / leakage / threshold rows"
+    tests:
+      - tp
+      - tidle
+      - tdis
+      - delta_supply_current
+      - off_current
+      - input_thresholds
+      - ioff_leakage
+      - input_leakage_sweep
+      - supply_current_sweep
+      - vih_vil
+      - voh_load
+      - vol_load
+      - input_threshold
+      - icc
+      - delta_icc
+      - ii
+      - voh
+      - vol
+
+product_model:
+  part: RS1G08
+  schmitt: false
+  oe: none
+  output_pin: Y
+  vcc_op_min: 1.65  # limits yaml VCC_V / local RS1G08 extract
+  vcc_op_max: 5.5
+  # Existing sweep list already in this file -- not a new scrape.
+  vcc_list: [1.65, 3.3, 5.0, 5.5]
+  logic_inputs: [A, B]
+  pins:
+    - {name: A, role: input}
+    - {name: B, role: input}
+    - {name: GND, role: gnd}
+    - {name: Y, role: output}
+    - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+  recipe:
+    threshold_step_v: 0.05
+    settle_s: 0.3
+    delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
+    delta_vcc_min: 3.0
+    voh_vol_settle_s: 1.0
+  limit_mode:
+    input_threshold: range
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    icc: {spec_id: ICC_uA, limit_mode: max_only}
+    delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
+    ii: {spec_id: II_uA, limit_mode: max_only}
+    voh: {note: "loaded rows from existing voh_table in this part yaml"}
+    vol: {note: "loaded rows from existing vol_table in this part yaml"}
+  # Datasheet function table (page 1 extract). Y=AB.
+  truth_table:
+    status: from_datasheet_function_table
+    rows:
+      - {A: H, B: H, Y: H}
+      - {A: L, B: H, Y: L}
+      - {A: H, B: L, Y: L}
+      - {A: L, B: L, Y: L}
+  # Isolation omitted: runner derives unused ties from truth_table (A with B=H tracks; B with A=H tracks).
 

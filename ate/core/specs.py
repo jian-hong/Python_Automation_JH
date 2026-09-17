@@ -113,8 +113,17 @@ def _test_aliases(tid: str) -> set[str]:
     t = str(tid or "").strip().lower()
     if not t:
         return set()
-    if t in ("supply_current", "supply_current_sweep"):
-        return {"supply_current", "supply_current_sweep"}
+    groups = (
+        {"supply_current", "supply_current_sweep", "icc"},
+        {"delta_supply_current", "delta_icc"},
+        {"input_thresholds", "input_threshold", "vth"},
+        {"voh", "voh_load"},
+        {"vol", "vol_load"},
+        {"input_leakage_sweep", "ii"},
+    )
+    for g in groups:
+        if t in g:
+            return set(g)
     return {t}
 
 

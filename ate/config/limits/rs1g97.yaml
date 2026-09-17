@@ -13,5 +13,27 @@ specs:
 - id: ICC_uA
   unit: uA
   max: 10.0
-  test: supply_current
+  test: icc
   source: local:RS1G97_(RevA.2.1).pdf
+- id: DELTA_ICC_uA
+  unit: uA
+  max: 500.0
+  test: delta_icc
+  source: local:RS1G97_(RevA.2.1).pdf dICC 3V to 5.5V
+- id: II_uA
+  unit: uA
+  max: 1.0
+  test: ii
+  source: local:RS1G97_(RevA.2.1).pdf II +25C
+- id: VTPLUS_V
+  unit: V
+  min: 2.8
+  max: 3.4
+  test: input_threshold
+  source: local:RS1G97_(RevA.2.1).pdf VT+ at VCC=5.5V
+- id: VTMINUS_V
+  unit: V
+  min: 0.85
+  max: 1.15
+  test: input_threshold
+  source: local:RS1G97_(RevA.2.1).pdf VT- at VCC=5.5V

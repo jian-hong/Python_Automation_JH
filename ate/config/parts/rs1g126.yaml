@@ -1,5 +1,5 @@
-# RS1G126 Logic bus buffer — RUN-IC small logic. Owner Lim.
-# Lim codes in Downloads/code/RS1G126 (input() waits) — not imported.
+# RS1G126 Logic bus buffer -- Path B product_model.
+# ten/tdis stay AC. Lim Downloads/code not imported.
 
 part: RS1G126
 model: RS1G126
@@ -23,21 +23,86 @@ enabled_tests:
   - tp
   - ten
   - tdis
-  - supply_current
-  - ioff_leakage
-  - input_thresholds
+  - input_threshold
+  - icc
+  - delta_icc
+  - ii
+  - voh
+  - vol
+  - ioz
 
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1G126 / Lim)"
+    label: "Logic board (RS1G126 / Path B DC)"
     board_class: general
     checklist:
       - "RS1G126 is small logic (bus buffer), not analog switch."
-      - "Lim recipes stay in Downloads/code; ATE uses platform Logic ids."
+      - "OE active high. IOZ when OE inactive (data don't-care, Vout sweep)."
+      - "ten/tdis remain AC (Path B DC does not replace them)."
     tests:
       - tp
       - ten
       - tdis
-      - supply_current
-      - ioff_leakage
-      - input_thresholds
+      - input_threshold
+      - icc
+      - delta_icc
+      - ii
+      - voh
+      - vol
+      - ioz
+
+product_model:
+  part: RS1G126
+  schmitt: false
+  oe:
+    pin: OE
+    active: high
+  output_pin: Y
+  vcc_op_min: 1.65  # limits yaml VCC_V / local RS1G126 extract
+  vcc_op_max: 5.5
+  vcc_list: [5.0]
+  logic_inputs: [A]
+  pins:
+    - {name: OE, role: oe}
+    - {name: A, role: input}
+    - {name: GND, role: gnd}
+    - {name: Y, role: output}
+    - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    OE: {src: awg, ch: 2}
+  recipe:
+    threshold_step_v: 0.05
+    settle_s: 0.3
+    delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
+    delta_vcc_min: 3.0
+    # IOZ datasheet extract: VO=0V to 5.5V, VCC=3.6V, max 10 uA
+    ioz_vcc_list: [3.6]
+    ioz_vout_list: [0.0, 5.5]
+  limit_mode:
+    input_threshold: range
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    ioz: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    icc: {spec_id: ICC_uA, limit_mode: max_only}
+    delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
+    ii: {spec_id: II_uA, limit_mode: max_only}
+    ioz: {spec_id: IOZ_uA, limit_mode: max_only}
+    voh: {status: PROVISIONAL, note: "no VOH rows in existing limits yaml"}
+    vol: {status: PROVISIONAL, note: "no VOL rows in existing limits yaml"}
+  truth_table:
+    status: from_datasheet_function_table
+    rows:
+      - {OE: H, A: H, Y: H}
+      - {OE: H, A: L, Y: L}
+      - {OE: L, A: X, Y: Z}
+  isolation:
+    status: UNSURE
+    note: "Unused data ties N/A (single data pin). OE active required. Do not invent extra ties."
+    tests:
+      A:
+        - {sweep_pin: A, fix: {OE: H}, y_expect: track, status: UNSURE}

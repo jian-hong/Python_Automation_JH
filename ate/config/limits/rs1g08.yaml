@@ -60,6 +60,16 @@ specs:
   max: 1.0
   test: supply_current
   source: local:RS1G08_(RevA.7).pdf
+- id: DELTA_ICC_uA
+  unit: uA
+  max: 500.0
+  test: delta_icc
+  source: local:RS1G08_(RevA.7).pdf dICC 3V to 5.5V
+- id: II_uA
+  unit: uA
+  max: 1.0
+  test: ii
+  source: local:RS1G08_(RevA.7).pdf II +25C
 - id: VCC_V
   unit: V
   min: 1.65

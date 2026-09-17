@@ -1,5 +1,5 @@
-# RS1G97 Logic configurable gate — RUN-IC small logic. Owner Lim.
-# Lim codes in Downloads/code/RS1G97 — not imported.
+# RS1G97 Logic configurable gate -- Path B product_model.
+# Lim codes in Downloads/code/RS1G97 -- not imported. Isolation HOLD CONFIRM.
 
 part: RS1G97
 model: RS1G97
@@ -19,20 +19,98 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
+# Path B DC ids. No ioz (oe none). No ioff. tp stays AC.
 enabled_tests:
   - tp
-  - supply_current
-  - input_thresholds
-  - ioff_leakage
+  - input_threshold
+  - vth
+  - icc
+  - delta_icc
+  - ii
+  - voh
+  - vol
 
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1G97 / Lim)"
+    label: "Logic board (RS1G97 / Path B DC)"
     board_class: general
     checklist:
       - "RS1G97 is configurable logic, not analog switch."
+      - "Path B DC: isolation + truth table from product_model YAML."
+      - "3rd input C pin_drive is PSU CH2 (PROVISIONAL -- edit YAML for fixture)."
     tests:
       - tp
-      - supply_current
-      - input_thresholds
-      - ioff_leakage
+      - input_threshold
+      - vth
+      - icc
+      - delta_icc
+      - ii
+      - voh
+      - vol
+
+product_model:
+  part: RS1G97
+  status: HOLD_CONFIRM
+  schmitt: true
+  oe: none
+  output_pin: Y
+  vcc_op_min: 1.65  # limits yaml VCC_V / local RS1G97 extract
+  vcc_op_max: 5.5
+  # Do not invent extra VCC corners; only the part default already in this file.
+  vcc_list: [5.0]
+  logic_inputs: [A, B, C]
+  pins:
+    - {name: B, role: input}
+    - {name: GND, role: gnd}
+    - {name: A, role: input}
+    - {name: Y, role: output}
+    - {name: VCC, role: vcc}
+    - {name: C, role: input}
+  # 2 AWG channels; C on PSU CH2 is fixture-editable, not a Python if.
+  pin_drive:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+    C: {src: psu, ch: 2}  # PROVISIONAL bench map
+  recipe:
+    threshold_step_v: 0.05  # same step as existing Logic DC platform
+    settle_s: 0.3
+    delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
+    delta_vcc_min: 3.0    # datasheet dICC: 3V to 5.5V
+  limit_mode:
+    input_threshold: range
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    # Numbers live in ate/config/limits/rs1g97.yaml. Do not duplicate here.
+    icc: {spec_id: ICC_uA, limit_mode: max_only}
+    delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
+    ii: {spec_id: II_uA, limit_mode: max_only}
+    voh: {status: PROVISIONAL, note: "no VOH rows in existing limits yaml"}
+    vol: {status: PROVISIONAL, note: "no VOL rows in existing limits yaml"}
+  # Page-1 OCR was garbled. This MUX table is the unique function that matches
+  # HOLD CONFIRM isolation (Y = C ? A : B). Edit YAML if the PDF table differs.
+  truth_table:
+    status: HOLD_CONFIRM
+    rows:
+      - {A: L, B: L, C: L, Y: L}
+      - {A: H, B: L, C: L, Y: L}
+      - {A: L, B: H, C: L, Y: H}
+      - {A: H, B: H, C: L, Y: H}
+      - {A: L, B: L, C: H, Y: L}
+      - {A: H, B: L, C: H, Y: H}
+      - {A: L, B: H, C: H, Y: L}
+      - {A: H, B: H, C: H, Y: H}
+  isolation:
+    status: HOLD_CONFIRM
+    tests:
+      A:
+        - {sweep_pin: A, fix: {B: L, C: H}, y_expect: track}
+        - {sweep_pin: A, fix: {B: H, C: H}, y_expect: track}
+      B:
+        - {sweep_pin: B, fix: {A: L, C: L}, y_expect: track}
+      C:
+        - {sweep_pin: C, fix: {A: H, B: L}, y_expect: track}
+        - {sweep_pin: C, fix: {A: L, B: H}, y_expect: invert, vil_sweep: reverse}
