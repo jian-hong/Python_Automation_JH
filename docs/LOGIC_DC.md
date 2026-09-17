@@ -67,6 +67,7 @@ product_model:
   gaps: []                # honest UNSURE / PROVISIONAL notes
   # AE/FAE handoff (97/126/34): wire_map from CONFIRMED pins+pin_drive only.
   # settle_prompt (show wait). data_paths folder templates -- never invent nets/cells.
+  # data_paths.csv: sessions/csv/ (auto overwrite with golden_auto; pretty never auto)
   workbook_policy:
     auto: one_per_version_overwrite            # alias of golden_auto
     golden_auto: one_per_version_overwrite      # Version workbook/ overwrite-in-place
@@ -84,7 +85,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 
 ### What the shared runner derives
 
-- **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4. Sequential (`product_class: sequential_shift_register`) is not combinational 2^n -- Path B gate ICC is FAIL-closed.
+- **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4, 07 open-drain n=1 = 2. Sequential (`product_class: sequential_shift_register`) is not combinational 2^n -- Path B gate ICC is FAIL-closed.
 - **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`. Per-VCC VIH min / VIL max come from `vcc_grid` (owning fixed point or range band). Range steps inherit band limits -- never a fixed-point row. `vcc_grid.status` UNCONFIRMED is not greenable. When `recipe.search` is present, `threshold_search.py` walks VIH up / VIL down: limit-scaled first step, on-hit skip rest, no reverse. Missing search keeps `threshold_step_v`.
 - **II** -- per input, VI=0 and VI=max.
 - **Delta ICC** -- one input at VCC-offset, or at `dc_limits.ICCT_uA.one_input_V` when ICCT is mapped. RS1GT34 enables `delta_icc` from ICCT (500uA @5.5V one_in@3.4). Do not invent `delta_offset_v=0.6`. CMOS cards may map `ICCT_uA.offset_v` (on the card, not invented).
@@ -92,7 +93,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126/RS1GT34 use CONFIRMED tables (34: 100uA expanded onto merged `vcc_list`; high-load only at card-named VCC). No invented extra loads. `check_logic_dc` FAIL-closes if `voh`/`vol` is enabled but the table has no rows. Open-drain skips VOH. Unloaded only when the table is absent and the id is not enabled.
 - **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default. If `stable_eps_A` is set (panel / overlay), eps/N + hard timeout FAIL (never last-reading). If null: tight-settle claims stay FAIL-closed; honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle). Not a DC limit.
 - **AE/FAE Continue** -- every enabled Path B id surfaces `wire_map` (CONFIRMED pins + `pin_drive` only; never invent nets), stimulus, `settle_prompt` (show wait), measure + `pass_mode`, FAIL attach, then `data_paths` save folders. `check_logic_dc` FAIL-closes empty `wire_map` / missing `data_paths` on 97/126/34.
-- **Excel lock** -- `workbook_policy.auto` / `golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. `workbook_policy.pretty` / `ultimate_manual: never_auto_write` -- pretty never auto. The jot/pretty book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == pretty/ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` is CONFIRMED.
+- **Excel lock** -- `workbook_policy.auto` / `golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. CSV sidecar `sessions/csv/{sheet}.csv` + fill log `sessions/path_b_write.json` overwrite with the same auto dest. `workbook_policy.pretty` / `ultimate_manual: never_auto_write` -- pretty never auto (xlsx or CSV). The jot/pretty book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == pretty/ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` is CONFIRMED. RS1G08 / RS1G07 Path B stubs stay sheet_map (`excel_lock` OFF) until a signed card.
 
 ### TestSpec <-> OOP (Part / Pin / TruthTable / Isolation / Limit / Recipe)
 
@@ -110,7 +111,7 @@ See Lim (`seelim_dc.py` locator) and Ariff (`ariff_dc.py` RS1G08-class `voh_load
 
 OCR: PaddleOCR maps each token onto one card field (assign/edit/delete on the Logic DC panel). Do not install Baidu unless asked.
 
-RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18; `RS1GT34_card_CONFIRMED.md`). New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
+RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18; `RS1GT34_card_CONFIRMED.md`). RS1G08 / RS1G07 Path B stubs are **UNCONFIRMED** (in-repo extract only: `ate/config/datasheets/text/rs1g08.txt` / `rs1g07.txt`). VIH/VIL 9.1 is a PDF table image -- leave unset. RS1G07 is open-drain (no VOH; A=H Y=Z is not OE). New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
 
 ### Version overlay
 

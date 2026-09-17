@@ -1,7 +1,7 @@
 # Path B Logic DC (shared runner)
 
 Date: 2026-09-17
-Keywords: path-b, logic-dc, product_model, isolation, rs1g97, rs1g08, rs1g126, rs1gt34, ioz, schmitt, UNCONFIRMED, CONFIRMED, pass_mode, test_params, logic_inputs, eugene-console, seelim, recipe.search, threshold_search, icct, one_input_V, pretty, never_auto_write
+Keywords: path-b, logic-dc, product_model, isolation, rs1g97, rs1g08, rs1g07, rs1g126, rs1gt34, ioz, schmitt, UNCONFIRMED, CONFIRMED, pass_mode, test_params, logic_inputs, eugene-console, seelim, recipe.search, threshold_search, icct, one_input_V, pretty, never_auto_write, csv, path_b_write
 
 ## main_idea
 
@@ -35,6 +35,8 @@ One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_mo
 - Overnight Path B DRAFT scaffold (UNCONFIRMED, no number unlock): inline product_model on rs1g08/rs1g07/rs1g14/rs1g32/rs1gt08/rs1gt32/rs1g125/rs164. Do not call `_fail_closed_until_signed` on these 8 (that would FAIL the suite). Physics FAIL bars in check_logic_dc: G08 AND other=H no IOZ keep AWG; G07 open_drain skip VOH Y=Z not IOZ; G14 Schmitt VT+/- range; G32 OR other=L; GT08/GT32 TTL 2.0-5.5 ICCT 3.4 not 0.6; G125 OE active-L ioz ON; RS164 sequential_shift_register not gate 2^n (icc_pins [] / sim n=0). recipe.search on gate SKUs only. Overlay vcc_list must pop vcc_grid. is_open_drain / is_sequential generic (no part-name ifs in logic_dc.py / product_model.py; banned rs1g08/rs1g125 compares). Do not enable voh/vol without table rows. 08 omit excel_plots. Keep HEAD 85fa7fb GT34 CONFIRMED + threshold_search.
 - Path B Excel lock: never `_filled.xlsx`. PermissionError is OrphanWorkbook FAIL (no second path). rs1g08 without excel_plots stays paste.values. Fill Excel Path B must create the first book (do not return no_workbook first). Series ids only from ALLOWED_SERIES; Schmitt uses vtplus/vtminus not VIH/VIL; ioz only if OE; delta_icc only if enabled+mapped.
 - Path B Excel split: auto/golden_auto = chosen Version workbook/ (one_per_version_overwrite). pretty/ultimate_manual = jot (never_auto_write; pretty never auto). Continue/Open Session/START bind fill/plot to golden_auto only. FAIL if auto dest == pretty/ultimate, or a second golden Version xlsx, or invented columns (G16/GBW). Jot/pretty next to golden is not an orphan. Identify jot by filename/folder regex (ultimate/jot/pretty/all-test) -- do not invent a data_paths.ultimate key. product_model.workbook_policy is a nested map, not a string. Do not import excel_lock from product_model (circular).
+- Dual Excel CSV: sessions/csv/{sheet}.csv + sessions/path_b_write.json overwrite with golden_auto only. pretty never auto (xlsx or CSV). Optional data_paths.csv in DATA_PATH_TEMPLATES requires 97/126/34 yaml keys (handoff exact-match). 08/07 excel_lock OFF until signed (sheet_map).
+- RS1G08 / RS1G07 extract honesty: do not invent VIH/VIL from 9.1 PDF images. Do not copy extract 9.2 over Ariff 08 voh_table. 07 open-drain: no VOH, no ioz (Y=Z is not OE). Light-load 100uA and IOL 24mA VCC glyph-missing -- omit. 07 vol_table is 4 extract-explicit IOL rows. Do not call _fail_closed_until_signed on unsigned 08/07 (would red the check).
 
 ## cite
 
@@ -52,5 +54,8 @@ ate/ui/web/index.html
 ate/config/parts/rs1g97.yaml
 ate/config/parts/rs1g126.yaml
 ate/config/parts/rs1gt34.yaml
+ate/config/parts/rs1g08.yaml
+ate/config/parts/rs1g07.yaml
+ate/config/limits/rs1g07.yaml
 ate/tests/logic/wraps.py
 ate/core/runner.py

@@ -20,6 +20,14 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
+# Extract 9.2 VOL rows with explicit VCC + IOL only. Do not invent 100uA /
+# 24mA VCC (glyph-missing in extract).
+vol_table:
+  - {id: VOL_1p65V_4mA, vcc: 1.65, iol_a: 0.004, spec_max: 0.45}
+  - {id: VOL_2p3V_8mA, vcc: 2.3, iol_a: 0.008, spec_max: 0.3}
+  - {id: VOL_3p0V_16mA, vcc: 3.0, iol_a: 0.016, spec_max: 0.4}
+  - {id: VOL_4p5V_32mA, vcc: 4.5, iol_a: 0.032, spec_max: 0.55}
+
 enabled_tests:
   - supply_current
   - delta_supply_current
@@ -29,6 +37,7 @@ enabled_tests:
   - icc
   - ii
   - delta_icc
+  - vol
 
 fixture_modes:
   LOGIC:
@@ -46,6 +55,7 @@ fixture_modes:
       - icc
       - ii
       - delta_icc
+      - vol
 
 # Path B DRAFT -- UNCONFIRMED. Open-drain: VOH skip; Y=Z is not IOZ.
 product_model:
@@ -101,12 +111,11 @@ product_model:
       note: "open-drain -- skip VOH series"
     VOL:
       status: UNCONFIRMED
+      note: "extract 9.2 explicit IOL rows only; light-load 100uA and IOL 24mA VCC glyph-missing -- omitted"
       loads:
-        - {IOL_mA: 0.1, vcc: [1.65, 5.5], VOL_max_V: 0.1}
         - {IOL_mA: 4, vcc: 1.65, VOL_max_V: 0.45}
         - {IOL_mA: 8, vcc: 2.3, VOL_max_V: 0.3}
         - {IOL_mA: 16, vcc: 3.0, VOL_max_V: 0.4}
-        - {IOL_mA: 24, vcc: 3.0, VOL_max_V: 0.55}
         - {IOL_mA: 32, vcc: 4.5, VOL_max_V: 0.55}
     II_uA: {plus25C_max: 1.0, Full: 5.0}
     ICC_uA: {plus25C_max: 1.0, Full: 10.0}
@@ -132,11 +141,14 @@ product_model:
       on_hit: {skip_rest_of_walk: true, rearm: true, restart_fraction_back: 0.3, next_smaller_step: true}
       after_precision: {interpolate: true, skip_to: next_test_or_vcc}
       coverage_order: [input_threshold, icc, ii, vol, delta_icc]
-  enabled_tests_model: [input_threshold, icc, ii, delta_icc]
+  enabled_tests_model: [input_threshold, icc, ii, vol, delta_icc]
   gaps:
     - "UNCONFIRMED until JH CONFIRM"
     - "VOH N/A open-drain -- do not enable voh"
     - "Y=Z when A=H is open-drain OFF -- not OE-gated IOZ"
     - "stable_eps_A null"
-    - "vol not enabled (no vol_table rows)"
+    - "VIH/VIL 9.1 Recommended Operating Conditions is a PDF table image (not in extract) -- leave unset"
+    - "VOL light-load current (Full 0.1 V row) glyph-missing in extract -- not copied as 100uA"
+    - "IOL 24mA VCC glyph-missing in extract -- row omitted"
+    - "excel_lock OFF (sheet_map paste.values) until Datasheet-signed -- do not bind excel_plots"
 

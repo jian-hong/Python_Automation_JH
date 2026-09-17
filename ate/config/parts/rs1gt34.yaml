@@ -221,6 +221,7 @@ product_model:
     excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
     report: sessions/report.json
     datalog: sessions/datalog.md
+    csv: sessions/csv/
     records: "{test}/DUT_n/records/"
     attach: "{test}/DUT_n/"
   workbook_policy:

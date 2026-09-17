@@ -1712,6 +1712,7 @@ DATA_PATH_TEMPLATES = {
     "excel": "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/",
     "report": "sessions/report.json",
     "datalog": "sessions/datalog.md",
+    "csv": "sessions/csv/",
     "records": "{test}/DUT_n/records/",
     "attach": "{test}/DUT_n/",
 }
@@ -1997,6 +1998,7 @@ def format_save_lines(
         f"Excel golden_auto/auto (pretty never auto): {paths.get('excel')}",
         f"report: {paths.get('report')}",
         f"STS datalog: {paths.get('datalog')}",
+        f"CSV auto overwrite (pretty never auto): {paths.get('csv')}",
         f"records: {paths.get('records')}",
     ]
 

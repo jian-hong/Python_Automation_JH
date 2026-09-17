@@ -3,6 +3,8 @@
 golden_auto = chosen campaign Version
 `#Test_Database/.../{Version_N}/workbook/` -- Continue/START overwrite-in-place.
 JSON->Excel from card-backed field ids only. Never invent columns.
+CSV sidecar: sessions/csv/{sheet}.csv overwrite-in-place (same auto dest).
+pretty / ultimate_manual never auto -- not an xlsx target and not a CSV target.
 
 ultimate_manual = separate all-test jot workbook -- NEVER the auto target.
 workbook_policy.golden_auto: one_per_version_overwrite
@@ -12,8 +14,10 @@ A second golden file in Version workbook/ is an orphan FAIL.
 """
 from __future__ import annotations
 
+import csv
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -818,6 +822,91 @@ def _write_test_sheet(
     return 0
 
 
+def sessions_dir_for(ctx: Any) -> Path:
+    """Version sessions/. CSV + fill log live here, not in pretty/jot."""
+    fn = getattr(ctx, "sessions_dir", None)
+    if callable(fn):
+        return Path(fn())
+    return Path(ctx.workbook_dir()).parent / "sessions"
+
+
+def csv_dir_for(ctx: Any) -> Path:
+    return sessions_dir_for(ctx) / "csv"
+
+
+def _refuse_pretty_csv(path: Path) -> None:
+    if is_ultimate_path(path):
+        raise UltimateWorkbook(
+            f"auto CSV path == pretty/ultimate_manual (never_auto_write): {path}"
+        )
+
+
+def write_path_b_csv(
+    *,
+    ctx: Any,
+    model: ProductModel,
+    report: dict[str, Any] | None,
+    grouped: dict[str, list[str]],
+    dest_xlsx: Path,
+) -> list[str]:
+    """Overwrite-in-place sessions/csv/{sheet}.csv. Never pretty / jot."""
+    _refuse_pretty_csv(dest_xlsx)
+    out_dir = csv_dir_for(ctx)
+    _refuse_pretty_csv(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for sheet, tids in grouped.items():
+        if sheet == "IOZ" and not model.has_oe():
+            continue
+        rows = _steps_rows(report, tids)
+        primary = tids[0] if tids else ""
+        sample = rows[0] if rows else None
+        headers = _headers_for(primary, model, sample)
+        bad = invented_headers(headers)
+        if bad:
+            raise RuntimeError(f"invented columns {bad} (card-backed runner ids only)")
+        body = rows or _template_body(primary, model, ctx)
+        path = out_dir / f"{sheet}.csv"
+        _refuse_pretty_csv(path)
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=headers, extrasaction="ignore")
+            writer.writeheader()
+            for rec in body:
+                writer.writerow(
+                    {name: _cell_dump(rec.get(name)) if rec.get(name) is not None else ""
+                     for name in headers}
+                )
+        written.append(str(path))
+    return written
+
+
+def write_path_b_session_log(
+    *,
+    ctx: Any,
+    dest_xlsx: Path,
+    csv_paths: list[str],
+    policy: dict[str, str],
+    created: bool,
+) -> str:
+    """Living fill log next to report.json. Overwrite-in-place. Not pretty."""
+    sess = sessions_dir_for(ctx)
+    _refuse_pretty_csv(sess)
+    sess.mkdir(parents=True, exist_ok=True)
+    path = sess / "path_b_write.json"
+    _refuse_pretty_csv(path)
+    blob = {
+        "target": "golden_auto",
+        "excel": str(dest_xlsx),
+        "csv": list(csv_paths),
+        "policy": dict(policy),
+        "created": bool(created),
+        "written_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "pretty": "never_auto_write",
+    }
+    path.write_text(json.dumps(blob, indent=2) + "\n", encoding="utf-8")
+    return str(path)
+
+
 def write_path_b_workbook(
     *,
     ctx: Any,
@@ -898,13 +987,30 @@ def write_path_b_workbook(
             raise OrphanWorkbook(
                 f"write created orphan golden xlsx {sorted(p.name for p in extras_after)}"
             )
+        csv_paths = write_path_b_csv(
+            ctx=ctx,
+            model=model,
+            report=report,
+            grouped=grouped,
+            dest_xlsx=dest,
+        )
+        policy = workbook_policy_map(model)
+        log_path = write_path_b_session_log(
+            ctx=ctx,
+            dest_xlsx=dest,
+            csv_paths=csv_paths,
+            policy=policy,
+            created=created,
+        )
         return {
             "filled": 1,
             "status": "ok",
             "excel": str(dest),
+            "csv": csv_paths,
+            "session_log": log_path,
             "created": created,
             "target": "golden_auto",
-            "policy": workbook_policy_map(model),
+            "policy": policy,
             "plots": plots,
         }
     finally:

@@ -332,6 +332,7 @@ fields:
     note: >
       Folder templates only. Never invent Excel cells.
       excel / report / datalog / records required.
+      csv: sessions/csv/ -- auto overwrite with golden_auto; pretty never auto.
   - key: workbook_policy
     oop: Part
     type: json

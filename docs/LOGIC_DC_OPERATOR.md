@@ -24,6 +24,8 @@ Paste this tree under the campaign. Launch with **START.bat** in this folder (zi
   _manifest/test_params.yaml
   sessions/report.json
   sessions/datalog.md        # STS datalog (also .html / .pdf)
+  sessions/csv/              # Path B auto CSV (pretty never auto)
+  sessions/path_b_write.json # Path B fill log (overwrite-in-place)
   {test}/DUT_n/records/
   {test}/DUT_n/              # FAIL scope PNG / photo attach
 ```
@@ -32,7 +34,7 @@ Excel folder template (folders only -- never invent cells):
 
 `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`
 
-`data_paths` on the 97/126 product_model (panel show/edit/delete): `excel` / `sessions/report.json` / `sessions/datalog.md` / `{test}/DUT_n/records/` / attach `{test}/DUT_n/`.
+`data_paths` on the 97/126/34 product_model (panel show/edit/delete): `excel` / `sessions/report.json` / `sessions/datalog.md` / `sessions/csv/` / `{test}/DUT_n/records/` / attach `{test}/DUT_n/`.
 
 ## AE/FAE Continue (no-code)
 
@@ -43,7 +45,7 @@ Every enabled Path B TestSpec run (DC in `logic_dc.py`, AC `tp`/`ten`/`tdis` in 
 3. **Settle** -- `settle_prompt` show wait. Voltage eps/N (`stable_eps_V`). Current: NON_TIGHT if `stable_eps_A` null, else tight eps/N + timeout hard-FAIL.
 4. **Measure + pass_mode**.
 5. **On FAIL** -- prompt scope capture / photo -> session attach path `{test}/DUT_n/`.
-6. **Save path shown** after run: Excel `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/` + `sessions/report.json` + STS datalog + `{test}/DUT_n/records/`.
+6. **Save path shown** after run: Excel `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/` + `sessions/report.json` + `sessions/csv/` + STS datalog + `{test}/DUT_n/records/`.
 
 Panel: show / edit / delete `wire_map`, `settle_prompt`, `data_paths` (card_fields.schema.yaml). Cannot promote Datasheet-signed.
 
@@ -71,7 +73,7 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
 3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **CONFIRMED** (Jian Hong 2026-09-18) for the status gate only -- that is not a bench green.
 4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, stimulus PSU_MSO vs AWG, n) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` only (`vcc_grid`, merged `vcc_list`, `pass_mode` VIH=min_only / VIL=max_only, `sample_size`, `stable_eps_A`). Not xyflow. Visual tables still write pass_mode on the limits table.
-5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4. Timeout SIM raises. **Not a reproduce claim.**
+5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4, rs1g07 open-drain n=1=2. Timeout SIM raises. **Not a reproduce claim.**
 
 DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure. START.bat is still how the zip console comes up.
 
@@ -114,8 +116,8 @@ Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/
 
 **Split:** two books, two jobs.
 
-- **auto** / **golden_auto** = the chosen campaign Version `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`. `workbook_policy.auto` / `golden_auto: one_per_version_overwrite`. Continue / Open Session / START / Fill Excel always overwrite-in-place **that** book. JSON->Excel from card-backed field ids only. Plots as already specified. Setup shows CONFIRMED/UNCONFIRMED.
-- **pretty** / **ultimate_manual** = a separate jot / pretty workbook. `workbook_policy.pretty` / `ultimate_manual: never_auto_write`. pretty never auto. NEVER the auto target. Do not write Path B auto runs into pretty or ultimate. Do not invent columns.
+- **auto** / **golden_auto** = the chosen campaign Version `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`. `workbook_policy.auto` / `golden_auto: one_per_version_overwrite`. Continue / Open Session / START / Fill Excel always overwrite-in-place **that** book. JSON->Excel from card-backed field ids only. CSV sidecar `sessions/csv/{sheet}.csv` + fill log `sessions/path_b_write.json` overwrite with the same auto dest. Plots as already specified. Setup shows CONFIRMED/UNCONFIRMED.
+- **pretty** / **ultimate_manual** = a separate jot / pretty workbook. `workbook_policy.pretty` / `ultimate_manual: never_auto_write`. pretty never auto. NEVER the auto target (xlsx or CSV). Do not write Path B auto runs into pretty or ultimate. Do not invent columns.
 
 Same session always overwrites the same golden_auto xlsx. Never an orphan second Version book (`_filled.xlsx` or another golden name). If Excel has the golden file locked, Fill Excel **FAIL**s (orphan) -- do not save a second path. If the auto dest is the jot / pretty book, Fill Excel **FAIL**s (`ultimate`).
 
@@ -129,6 +131,8 @@ Campaign tree (same copy-ready Version folder as above):
   _manifest/test_params.yaml
   sessions/report.json
   sessions/datalog.md
+  sessions/csv/             # Path B auto CSV (pretty never auto)
+  sessions/path_b_write.json
   {test}/DUT_n/records/
 ```
 
@@ -154,7 +158,7 @@ Auto plots when series data exists (from those headers):
 
 Series ids only: `vih_vs_vcc`, `vil_vs_vcc`, `icc_vs_vcc`, `voh_at_ioh`, `vol_at_iol`, `ii_vs_vcc`, `ioz_vs_vcc` if OE; `vtplus_vs_vcc` / `vtminus_vs_vcc` / `dvt_vs_vcc` if Schmitt; `delta_icc_vs_vcc` only if enabled+mapped.
 
-**Results -> Fill Excel numbers** on Path B overwrites the one Version **auto** / **golden_auto** xlsx (`write_path_b_workbook`). Continue / Open Session bind fill/plot to that Version path only. pretty never auto. `check_logic_dc` FAIL-closes an auto write path that equals **pretty** / **ultimate_manual**, an orphan second Version xlsx, invented columns, or an enabled test with series data but no `excel_plots` binding.
+**Results -> Fill Excel numbers** on Path B overwrites the one Version **auto** / **golden_auto** xlsx (`write_path_b_workbook`) plus `sessions/csv/` and `sessions/path_b_write.json`. Continue / Open Session bind fill/plot to that Version path only. pretty never auto. `check_logic_dc` FAIL-closes an auto write path that equals **pretty** / **ultimate_manual**, an orphan second Version xlsx, invented columns, or an enabled test with series data but no `excel_plots` binding.
 
 RS1GT34 `excel_plots.status` is **CONFIRMED** (Jian Hong 2026-09-18). `delta_icc_vs_vcc` is bound (ICCT mapped). No `ioz_vs_vcc` (`oe: none`). That status gate is not a bench green.
 
@@ -181,6 +185,8 @@ Path B does **not** mint those G16 / D10 cells. The CONFIRMED 97/126 VOH/VOL Ful
 | STS datalog | Results **Export STS datalog** -> `sessions/datalog.md` + `.html` + `.pdf` |
 | Per-step history | `{test_key}/DUT_n/records/{test_id}_{timestamp}.json` (append-only; never overwrite) |
 | FAIL attach | `{test}/DUT_n/` (scope PNG / phone photo from Continue) |
+| Path B auto CSV | `sessions/csv/{sheet}.csv` (overwrite-in-place with golden_auto; pretty never auto) |
+| Path B fill log | `sessions/path_b_write.json` (overwrite-in-place) |
 
 Never dump the RUN-IC catalog into `#Test_Database`. Delete on Results **Run ledger** removes a session JSON only -- never the Version folder or workbook xlsx.
 
@@ -236,8 +242,8 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 
 Eight SKUs carry DRAFT `product_model` from attached cards. Status stays UNCONFIRMED. Do not treat numbers as Datasheet-signed. Gate SKUs use `recipe.search` (PROPOSED_FROM_LIVE). `check_logic_dc` FAIL-closes open-drain VOH and sequential-as-gate 2^n.
 
-1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock.
-2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ.
+1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock. VIH/VIL 9.1 PDF image -- leave unset. Do not copy extract 9.2 over Ariff voh_table. Light-load 100uA and IOH -24mA VCC glyph-missing -- omitted.
+2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ. VOL = extract-explicit IOL only (4/8/16/32mA). Do not invent 100uA or 24mA VCC.
 3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL).
 4. RS1G32 OR-2 other=L. RS1GT08/RS1GT32 TTL VCC 2.0-5.5; ICCT one_in@3.4 (not 0.6).
 5. RS1G125 OE active-L -> tick ioz. RS164 sequential_shift_register -- do not tick Path B gate 2^n.

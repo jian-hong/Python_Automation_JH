@@ -1345,6 +1345,12 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must name ultimate_manual jot workbook")
     if "never_auto_write" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name ultimate_manual never_auto_write")
+    if "sessions/csv" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name sessions/csv (Path B auto CSV)")
+    if "path_b_write.json" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name sessions/path_b_write.json fill log")
+    if "RS1G08" not in text or "RS1G07" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name next Path B stubs RS1G08 and RS1G07")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -1535,6 +1541,13 @@ def _scale_and_overlay_ok() -> list[str]:
         errors.append(f"rs1g97 ICC corners must be 2^3=8, got {p97}")
     if p126["n"] != 4:
         errors.append(f"rs1g126 ICC corners must be 2^(A+OE)=4, got {p126}")
+    m07 = load_product_model("rs1g07")
+    if m07 is None:
+        errors.append("rs1g07 product_model missing (Path B stub)")
+    else:
+        p07 = sim_icc_plan(m07)
+        if p07["n"] != 2:
+            errors.append(f"rs1g07 ICC corners must be 2^1=2, got {p07}")
     over = load_product_model("rs1g08", overlay={"vcc_list": [3.3], "pass_mode": {"ICC_uA": "max-only"}})
     if over is None or over.vcc_list != [3.3]:
         errors.append(f"test_params overlay must replace vcc_list, got {None if over is None else over.vcc_list}")
@@ -1752,6 +1765,10 @@ def _excel_lock_ok() -> list[str]:
         errors.append("excel_lock.py must name never_auto_write")
     if "PRETTY_POLICY" not in src or "pretty" not in src:
         errors.append("excel_lock.py must name pretty never auto")
+    if "write_path_b_csv" not in src or "path_b_write.json" not in src:
+        errors.append("excel_lock.py must write sessions/csv + path_b_write.json")
+    if "sessions/csv" not in src:
+        errors.append("excel_lock.py CSV dest must be sessions/csv")
     runner_src = Path(__file__).resolve().parents[1] / "core" / "runner.py"
     rtxt = runner_src.read_text(encoding="utf-8")
     if "bind_golden_auto" not in rtxt or "coerce_golden_auto_lab_report" not in rtxt:
@@ -1801,6 +1818,9 @@ def _excel_lock_ok() -> list[str]:
     m08 = load_product_model("rs1g08")
     if m08 is not None and el.uses_excel_lock(m08):
         errors.append("rs1g08 must keep sheet_map paste.values (no Path B excel_lock)")
+    m07 = load_product_model("rs1g07")
+    if m07 is not None and el.uses_excel_lock(m07):
+        errors.append("rs1g07 must keep sheet_map paste.values (no Path B excel_lock)")
     m34 = load_product_model("rs1gt34")
     if m34 is not None:
         if el.excel_plots_status(m34).upper() not in ("", "CONFIRMED"):
@@ -1882,6 +1902,11 @@ def _excel_lock_ok() -> list[str]:
             def load_sheet_map(self):
                 return {}
 
+            def sessions_dir(self):
+                p = self._root / "sessions"
+                p.mkdir(parents=True, exist_ok=True)
+                return p
+
         ctx = _Ctx(tmp)
         m = load_product_model("rs1gt34")
         report = {
@@ -1951,12 +1976,41 @@ def _excel_lock_ok() -> list[str]:
         names1 = sorted(p.name for p in el.list_xlsx(ctx.workbook_dir()))
         if len(names1) != 1:
             errors.append(f"Path B SIM must write one xlsx, got {names1}")
+        csv_list = [str(p) for p in (first.get("csv") or [])]
+        if not csv_list:
+            errors.append("Path B SIM must write sessions/csv sidecars")
+        else:
+            missing_csv = [p for p in csv_list if not Path(p).is_file()]
+            if missing_csv:
+                errors.append(f"Path B SIM csv missing on disk: {missing_csv}")
+            if any(el.is_ultimate_path(p) for p in csv_list):
+                errors.append("CSV must not target pretty/ultimate")
+            vth_csv = next((p for p in csv_list if Path(p).stem.upper() == "VTH"), None)
+            if vth_csv:
+                blob_csv = Path(vth_csv).read_text(encoding="utf-8")
+                if "VIH" not in blob_csv or "VCC" not in blob_csv:
+                    errors.append("VTH.csv must keep runner headers (no invented columns)")
+        logp = str(first.get("session_log") or "")
+        if not logp or not Path(logp).is_file():
+            errors.append("Path B SIM must write sessions/path_b_write.json")
+        else:
+            log_txt = Path(logp).read_text(encoding="utf-8")
+            if "golden_auto" not in log_txt or "never_auto_write" not in log_txt:
+                errors.append("path_b_write.json must bind golden_auto / pretty never auto")
+            if el.is_ultimate_path(logp):
+                errors.append("session fill log must not land under pretty/ultimate")
         if int(first.get("plots") or 0) < 1:
             errors.append("Path B SIM must auto-plot when series data exists")
         second = el.write_path_b_workbook(ctx=ctx, model=m, report=report)
         names2 = sorted(p.name for p in el.list_xlsx(ctx.workbook_dir()))
         if len(names2) != 1 or Path(second["excel"]).resolve() != dest.resolve():
             errors.append(f"Path B overwrite must reuse the same xlsx, got {names2}")
+        if logp and str(second.get("session_log") or "") and Path(second["session_log"]).resolve() != Path(logp).resolve():
+            errors.append("session fill log must overwrite in place")
+        csv2 = [Path(p).name for p in (second.get("csv") or [])]
+        csv1 = [Path(p).name for p in csv_list]
+        if csv_list and csv2 != csv1:
+            errors.append(f"CSV overwrite must reuse the same sidecars, got {csv2}")
         fill = fill_workbook_from_report(report=report, ctx=ctx)
         if fill.get("status") == "orphan":
             errors.append(f"fill_workbook Path B SIM orphan: {fill}")
@@ -2054,6 +2108,21 @@ def _excel_lock_ok() -> list[str]:
             errors.append("auto write must not target pretty/ultimate")
         if Path(fourth["excel"]).resolve() == pretty.resolve():
             errors.append("auto write path == pretty")
+        try:
+            el.write_path_b_csv(
+                ctx=ctx,
+                model=m,
+                report=report,
+                grouped={"VTH": ["input_threshold"]},
+                dest_xlsx=pretty,
+            )
+            errors.append("write_path_b_csv must FAIL when dest is pretty")
+        except el.UltimateWorkbook:
+            pass
+        except Exception as exc:
+            errors.append(
+                f"pretty CSV dest must raise UltimateWorkbook, got {type(exc).__name__}: {exc}"
+            )
         class _SheetCtx:
             def __init__(self, inner):
                 self._inner = inner
@@ -2230,6 +2299,21 @@ def _draft_scaffold_ok() -> list[str]:
         errors.append("rs1g07 must not enable voh (open-drain)")
     if "ioz" in en07:
         errors.append("rs1g07 must not enable ioz (Y=Z is not IOZ)")
+    if "vol" not in en07:
+        errors.append("rs1g07 enabled_tests missing vol (extract-explicit IOL rows)")
+    yaml07 = load_part_yaml("rs1g07")
+    vol07 = yaml07.get("vol_table") if isinstance(yaml07.get("vol_table"), list) else []
+    if len(vol07) != 4:
+        errors.append(f"rs1g07 vol_table must be 4 extract-explicit IOL rows, got {len(vol07)}")
+    for row in vol07:
+        if not isinstance(row, dict):
+            continue
+        iol = abs(float(row.get("iol_a") or 0))
+        if iol <= 0.0002:
+            errors.append("rs1g07 must not invent 100uA VOL (light-load current glyph-missing)")
+        sid = str(row.get("id") or "")
+        if "24mA" in sid or "24ma" in sid.lower():
+            errors.append("rs1g07 must not invent IOL 24mA VCC (glyph-missing)")
     yz = [r for r in m07.truth_table if r.get("A") == "H" and r.get("Y") == "Z"]
     if not yz:
         errors.append("rs1g07 truth_table must have A=H -> Y=Z (open-drain OFF)")
