@@ -14,7 +14,11 @@ from typing import Any, Iterable, Optional
 
 import yaml
 
-from ate.core.paths import PARTS_DIR
+from ate.core.paths import PARTS_DIR, REPO_ROOT
+
+# Setup Logic DC panel binds save to this schema (not an opaque key tuple).
+CARD_FIELDS_SCHEMA_PATH = REPO_ROOT / "docs" / "datasheet" / "card_fields.schema.yaml"
+_BANNED_PANEL_KEYS = frozenset({"voh_table", "vol_table", "ioh_a", "iol_a"})
 
 _H = frozenset({"H", "1", "TRUE", "HIGH"})
 _L = frozenset({"L", "0", "FALSE", "LOW"})
@@ -551,11 +555,12 @@ def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, 
         recipe["levels"] = overlay["levels"]
     if overlay.get("rails") is not None:
         recipe["rails"] = overlay["rails"]
+    nested = overlay.get("recipe")
+    if isinstance(nested, dict):
+        for rk, rv in nested.items():
+            recipe[rk] = rv
     if "stable_eps_A" in overlay:
         recipe["stable_eps_A"] = overlay.get("stable_eps_A")
-    nested = overlay.get("recipe")
-    if isinstance(nested, dict) and "stable_eps_A" in nested:
-        recipe["stable_eps_A"] = nested.get("stable_eps_A")
     if recipe != _as_dict(out.get("recipe")):
         out["recipe"] = recipe
     if overlay.get("oe") is not None:
@@ -770,26 +775,145 @@ def panel_payload(part_key: str) -> dict[str, Any]:
         "logic_inputs": list(model.logic_inputs),
         "gaps": model_gaps(model),
         "pins": [{"name": p.name, "role": p.role, "number": p.number} for p in model.pins],
+        "recipe": dict(model.recipe),
+        "pin_drive": {
+            name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
+        },
+        "dc_limits": dict(model.dc_limits),
+        "card_fields": card_fields_for_panel(blob, model),
+        "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }
 
 
-_PANEL_SAVE_KEYS = (
-    "truth_table",
-    "isolation",
-    "threshold_isolation",
-    "pass_mode",
-    "limit_mode",
-    "vcc_list",
-    "vcc_sweep_list",
-    "vcc_list_status",
-    "truth_table_status",
-    "isolation_status",
-    "gaps",
-)
+def load_card_fields_schema() -> dict[str, Any]:
+    """OOP_SCHEMA / card_fields. Missing file is FAIL-closed (no opaque fallback)."""
+    if not CARD_FIELDS_SCHEMA_PATH.is_file():
+        raise RuntimeError(
+            f"card_fields schema missing: {CARD_FIELDS_SCHEMA_PATH}. "
+            "Panel save cannot invent keys."
+        )
+    data = yaml.safe_load(CARD_FIELDS_SCHEMA_PATH.read_text(encoding="utf-8")) or {}
+    if not isinstance(data, dict) or not isinstance(data.get("fields"), list):
+        raise RuntimeError("card_fields.schema.yaml must be a mapping with fields: []")
+    return data
+
+
+def card_field_specs() -> list[dict[str, Any]]:
+    schema = load_card_fields_schema()
+    out: list[dict[str, Any]] = []
+    for row in schema.get("fields") or []:
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("key") or "").strip()
+        if not key or key in _BANNED_PANEL_KEYS:
+            continue
+        out.append(dict(row))
+    return out
+
+
+def panel_save_keys() -> tuple[str, ...]:
+    """Editable product_model keys from card_fields.schema.yaml (not a hardcoded tuple)."""
+    keys: list[str] = []
+    for row in card_field_specs():
+        if row.get("editable", True) is False:
+            continue
+        key = str(row.get("key") or "")
+        if key:
+            keys.append(key)
+    return tuple(keys)
+
+
+def _schema_field(key: str) -> dict[str, Any]:
+    for row in card_field_specs():
+        if row.get("key") == key:
+            return row
+    return {}
+
+
+def _lookup_card_value(blob: dict[str, Any], model: ProductModel, key: str) -> Any:
+    if key.startswith("recipe."):
+        rk = key.split(".", 1)[1]
+        rec = blob.get("recipe") if isinstance(blob.get("recipe"), dict) else {}
+        if rk in rec:
+            return rec.get(rk)
+        return (model.recipe or {}).get(rk)
+    if key in blob:
+        return blob.get(key)
+    attr_map = {
+        "part": model.part,
+        "status": model.status,
+        "pins": [{"name": p.name, "role": p.role, "number": p.number} for p in model.pins],
+        "logic_inputs": list(model.logic_inputs),
+        "output_pin": model.output_pin,
+        "oe": blob.get("oe", model.oe_mode),
+        "schmitt": model.schmitt,
+        "truth_table": blob.get("truth_table"),
+        "truth_table_status": model.truth_table_status,
+        "isolation": blob.get("isolation"),
+        "isolation_status": model.isolation_status,
+        "pass_mode": dict(model.pass_mode),
+        "limit_mode": dict(model.limit_mode),
+        "vcc_list": list(model.vcc_list),
+        "vcc_sweep_list": list(model.vcc_list),
+        "vcc_list_status": model.vcc_list_status,
+        "vcc_op_min": model.vcc_op_min,
+        "vcc_op_max": model.vcc_op_max,
+        "vcc_op_status": model.vcc_op_status,
+        "recipe": dict(model.recipe),
+        "gaps": list(model.gaps),
+        "dc_limits": dict(model.dc_limits),
+        "pin_drive": {
+            name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
+        },
+    }
+    return attr_map.get(key)
+
+
+def card_fields_for_panel(blob: dict[str, Any], model: ProductModel) -> list[dict[str, Any]]:
+    """Per-field panel payload: assign / edit / delete. Values from product_model YAML."""
+    out: list[dict[str, Any]] = []
+    for spec in card_field_specs():
+        row = dict(spec)
+        row["value"] = _lookup_card_value(blob, model, str(spec.get("key") or ""))
+        out.append(row)
+    return out
+
+
+def _set_pm_key(pm: dict[str, Any], key: str, val: Any) -> None:
+    if "." in key:
+        top, rest = key.split(".", 1)
+        nested = dict(pm.get(top) if isinstance(pm.get(top), dict) else {})
+        nested[rest] = val
+        pm[top] = nested
+        return
+    pm[key] = val
+
+
+def _delete_pm_key(pm: dict[str, Any], key: str) -> None:
+    if "." in key:
+        top, rest = key.split(".", 1)
+        nested = dict(pm.get(top) if isinstance(pm.get(top), dict) else {})
+        nested[rest] = None
+        pm[top] = nested
+        return
+    if key in ("truth_table_status", "isolation_status"):
+        pm[key] = "UNCONFIRMED"
+        return
+    if key in ("gaps", "logic_inputs"):
+        pm[key] = []
+        return
+    if key in ("vcc_list", "vcc_sweep_list"):
+        return
+    pm[key] = None
 
 
 def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str, Any]:
-    """Write editable Path B fields back to part YAML. Cannot promote to Datasheet-signed."""
+    """Write editable Path B fields back to part YAML. Cannot promote to Datasheet-signed.
+
+    Keys come from docs/datasheet/card_fields.schema.yaml (OOP_SCHEMA). Banned
+    load tables are never written. Each card field is individually settable or
+    deletable (null / deleted_fields).
+    """
     key = str(part_key or "").strip().lower()
     path = PARTS_DIR / f"{key}.yaml"
     if not path.is_file():
@@ -806,7 +930,19 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
         raise RuntimeError(f"{key}: product_model failed to load")
     if not isinstance(patch, dict):
         raise RuntimeError("save_product_model: patch must be a mapping")
-    for field in _PANEL_SAVE_KEYS:
+    allowed = set(panel_save_keys())
+    deleted = [str(x) for x in (patch.get("deleted_fields") or []) if str(x) in allowed]
+    pending: list[str] = []
+    for field in panel_save_keys():
+        if field in patch or field in deleted:
+            pending.append(field)
+    for field in pending:
+        spec = _schema_field(field)
+        if field in deleted or (field in patch and patch[field] is None and spec.get("deletable", True)):
+            if spec.get("deletable", True) is False:
+                continue
+            _delete_pm_key(pm, field)
+            continue
         if field not in patch:
             continue
         val = patch[field]
@@ -814,7 +950,6 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
             nums = _floats(val) if not isinstance(val, (int, float)) else [float(val)]
             if not nums:
                 continue
-            # Do not expand inventively: keep existing length unless operator edits YAML list.
             pm["vcc_list"] = nums
             pm["vcc_sweep_list"] = nums
             continue
@@ -826,6 +961,8 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
                     "Panel cannot promote status to Datasheet-signed. "
                     "Hand-edit YAML after a signed datasheet confirm."
                 )
+            if val in (None, ""):
+                val = "UNCONFIRMED"
             pm[field] = val
             if field == "truth_table_status" and isinstance(pm.get("truth_table"), dict):
                 pm["truth_table"]["status"] = val
@@ -855,10 +992,19 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
             }
             pm[field] = cleaned
             continue
-        pm[field] = val
-    # Never invent IOH/IOL via the panel.
-    for banned in ("voh_table", "vol_table", "ioh_a", "iol_a"):
+        if field == "recipe" and isinstance(val, dict):
+            rec = dict(pm.get("recipe") if isinstance(pm.get("recipe"), dict) else {})
+            rec.update(val)
+            if "stable_eps_A" not in rec:
+                rec["stable_eps_A"] = None
+            pm["recipe"] = rec
+            continue
+        _set_pm_key(pm, field, val)
+    for banned in _BANNED_PANEL_KEYS:
         pm.pop(banned, None)
+        rec = pm.get("recipe")
+        if isinstance(rec, dict):
+            rec.pop(banned, None)
     data[save_key] = pm
     path.write_text(
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
@@ -1157,4 +1303,12 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
         "settle_timeout_s": model.recipe.get("settle_timeout_s"),
         "status": model.status,
         "output_pin": model.output_pin,
+        "recipe": dict(model.recipe),
+        "pins": [{"name": p.name, "role": p.role, "number": p.number} for p in model.pins],
+        "pin_drive": {
+            name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
+        },
+        "dc_limits": dict(model.dc_limits),
+        "card_fields": card_fields_for_panel(model.raw if isinstance(model.raw, dict) else {}, model),
+        "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }

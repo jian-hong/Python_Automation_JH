@@ -942,6 +942,111 @@ async function loadLogicDcPanel() {
   }
 }
 
+function parseCardFieldValue(field, raw, deleted) {
+  if (deleted) return { deleted: true, value: null };
+  const t = field.type || "text";
+  const s = String(raw == null ? "" : raw).trim();
+  if (t === "bool") {
+    if (!s) return { deleted: true, value: null };
+    const low = s.toLowerCase();
+    return { deleted: false, value: low === "true" || low === "1" || low === "yes" };
+  }
+  if (t === "number" || t === "number_or_null") {
+    if (!s || lowNull(s)) return { deleted: t === "number_or_null", value: null };
+    const n = Number(s);
+    if (!Number.isFinite(n)) throw new Error(`${field.key} must be a number (amps/volts as written; do not invent)`);
+    return { deleted: false, value: n };
+  }
+  if (t === "list_csv") {
+    if (!s || lowNull(s)) return { deleted: true, value: null };
+    const nums = s.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+    return { deleted: false, value: nums };
+  }
+  if (t === "json") {
+    if (!s || lowNull(s)) return { deleted: true, value: null };
+    try {
+      return { deleted: false, value: JSON.parse(s) };
+    } catch (e) {
+      if (s === "none" || s === "true" || s === "false") {
+        return { deleted: false, value: s === "none" ? "none" : s === "true" };
+      }
+      throw new Error(`${field.key} JSON: ${(e && e.message) || e}`);
+    }
+  }
+  if (!s || lowNull(s)) return { deleted: true, value: null };
+  return { deleted: false, value: s };
+}
+
+function lowNull(s) {
+  const low = String(s || "").trim().toLowerCase();
+  return low === "null" || low === "none" || low === "~";
+}
+
+function formatCardValue(field) {
+  const v = field.value;
+  const t = field.type || "text";
+  if (v === null || v === undefined) return "";
+  if (t === "json") {
+    try { return JSON.stringify(v, null, 2); } catch (_) { return ""; }
+  }
+  if (t === "list_csv" && Array.isArray(v)) return v.join(", ");
+  if (t === "bool") return v ? "true" : "false";
+  return String(v);
+}
+
+function renderCardFields(fields) {
+  const rows = fields || [];
+  let html = "<h3 class=\"subhead\">Card fields (OOP / OCR)</h3>";
+  html += "<p class=\"hint\">Each field is assignable, editable, or deletable. Save product_model writes matching <code>product_model</code> keys from <code>docs/datasheet/card_fields.schema.yaml</code>. PaddleOCR maps onto these keys. Do not install Baidu unless asked. Cannot promote Datasheet-signed. Do not invent loads or a uA epsilon.</p>";
+  if (!rows.length) {
+    html += "<p class=\"hint\">card_fields missing -- worker must load card_fields.schema.yaml.</p>";
+    return html;
+  }
+  html += "<table class=\"logic-dc-table\" id=\"logic-dc-card-fields\"><thead><tr><th>Field</th><th>OOP</th><th>Value</th><th></th></tr></thead><tbody>";
+  rows.forEach((f) => {
+    const key = f.key || "";
+    const oop = f.oop || "";
+    const editable = f.editable !== false;
+    const deletable = f.deletable !== false;
+    const t = f.type || "text";
+    const val = formatCardValue(f);
+    const disabled = editable ? "" : "disabled";
+    const isJson = t === "json";
+    const input = isJson
+      ? `<textarea class="mono-edit" data-card-field="${key}" data-card-type="${t}" rows="3" ${disabled}>${val}</textarea>`
+      : `<input data-card-field="${key}" data-card-type="${t}" type="text" value="${String(val).replace(/"/g, "&quot;")}" ${disabled} />`;
+    const del = (deletable && editable)
+      ? `<button type="button" class="btn ghost logic-dc-del" data-delete-field="${key}">Delete</button>`
+      : "";
+    html += `<tr data-card-row="${key}"><td><code>${key}</code></td><td>${oop}</td><td>${input}</td><td>${del}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  return html;
+}
+
+function wireCardFieldDeletes() {
+  document.querySelectorAll("[data-delete-field]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = btn.getAttribute("data-delete-field");
+      const row = document.querySelector(`[data-card-row="${key}"]`);
+      if (!row) return;
+      const el = row.querySelector("[data-card-field]");
+      if (el) {
+        el.value = "";
+        el.setAttribute("data-deleted", "1");
+      }
+      row.setAttribute("data-deleted", "1");
+    };
+  });
+  document.querySelectorAll("[data-card-field]").forEach((el) => {
+    el.addEventListener("input", () => {
+      el.removeAttribute("data-deleted");
+      const row = el.closest("[data-card-row]");
+      if (row) row.removeAttribute("data-deleted");
+    });
+  });
+}
+
 function parseJsonField(el, label) {
   const raw = (el && el.value) || "";
   try {
@@ -954,20 +1059,65 @@ function parseJsonField(el, label) {
 async function saveLogicDcPanel() {
   const part = (dbContext && dbContext.part_key) || "";
   if (!part) throw new Error("Apply a campaign part first");
-  const vccRaw = (($("logic-dc-vcc-list") && $("logic-dc-vcc-list").value) || "").trim();
-  const vcc_list = vccRaw
-    ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
-    : [];
-  const patch = {
-    vcc_list,
-    pass_mode: parseJsonField($("logic-dc-pass-mode"), "pass_mode"),
-    truth_table: parseJsonField($("logic-dc-truth"), "truth_table"),
-    isolation: parseJsonField($("logic-dc-isolation"), "isolation"),
-  };
+  const fields = (paramCatalog.logic_dc && paramCatalog.logic_dc.card_fields) || [];
+  const byKey = {};
+  fields.forEach((f) => { if (f && f.key) byKey[f.key] = f; });
+  const patch = {};
+  const deleted_fields = [];
+  const seen = new Set();
+  document.querySelectorAll("[data-card-field]").forEach((el) => {
+    const key = el.getAttribute("data-card-field");
+    if (!key) return;
+    if (el.closest("#logic-dc-card-fields")) return;
+    seen.add(key);
+    const spec = byKey[key] || { key, type: el.getAttribute("data-card-type") || "text", deletable: true };
+    const deleted = el.getAttribute("data-deleted") === "1";
+    const parsed = parseCardFieldValue(spec, el.value, deleted);
+    if (parsed.deleted) {
+      patch[key] = null;
+      deleted_fields.push(key);
+    } else {
+      patch[key] = parsed.value;
+    }
+  });
+  document.querySelectorAll("#logic-dc-card-fields [data-card-field]").forEach((el) => {
+    const key = el.getAttribute("data-card-field");
+    if (!key) return;
+    seen.add(key);
+    const spec = byKey[key] || { key, type: el.getAttribute("data-card-type") || "text", deletable: true };
+    const row = el.closest("[data-card-row]");
+    const deleted = el.getAttribute("data-deleted") === "1" || (row && row.getAttribute("data-deleted") === "1");
+    const parsed = parseCardFieldValue(spec, el.value, deleted);
+    if (parsed.deleted) {
+      patch[key] = null;
+      if (!deleted_fields.includes(key)) deleted_fields.push(key);
+    } else {
+      patch[key] = parsed.value;
+      const ix = deleted_fields.indexOf(key);
+      if (ix >= 0) deleted_fields.splice(ix, 1);
+    }
+  });
+  if ($("logic-dc-vcc-list") && !seen.has("vcc_list")) {
+    const vccRaw = ($("logic-dc-vcc-list").value || "").trim();
+    patch.vcc_list = vccRaw
+      ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : [];
+  }
+  if ($("logic-dc-pass-mode") && !seen.has("pass_mode")) {
+    patch.pass_mode = parseJsonField($("logic-dc-pass-mode"), "pass_mode");
+  }
+  if ($("logic-dc-truth") && !seen.has("truth_table")) {
+    patch.truth_table = parseJsonField($("logic-dc-truth"), "truth_table");
+  }
+  if ($("logic-dc-isolation") && !seen.has("isolation")) {
+    patch.isolation = parseJsonField($("logic-dc-isolation"), "isolation");
+  }
+  if (deleted_fields.length) patch.deleted_fields = deleted_fields;
   const res = await rpc("save_product_model", { part, patch });
   await loadLogicDcPanel();
+  await loadParamDefaults();
   if ($("logic-dc-hint")) {
-    $("logic-dc-hint").textContent = `Saved ${res.part || part} (status stays UNCONFIRMED unless Datasheet-signed in YAML).`;
+    $("logic-dc-hint").textContent = `Saved ${res.part || part} via card_fields.schema.yaml (status stays unless Datasheet-signed in YAML).`;
   }
 }
 
@@ -996,6 +1146,8 @@ function wirePassModeSync() {
     };
   });
 }
+
+function passModeSelect(sid, cur, extraClass) {
   const modes = [
     ["", "infer"],
     ["range", "range"],
@@ -1044,9 +1196,10 @@ function renderLogicDc() {
   const recipeHtml =
     "<h3 class=\"subhead\">Recipe</h3>" +
     `<p class="hint">logic_inputs: ${inputs.join(", ") || "--"} · vcc_list: ${vcc || "--"} · ICC pins: ${(dc.icc_pins || []).join(",") || "--"}</p>` +
-    `<p class="hint">Voltage settle uses stable_eps_V. Current settle uses stable_eps_A (amps) only; blank/null is FAIL-closed. Do not reuse volts as amps. Do not invent a uA default.</p>` +
+    `<p class="hint">Voltage settle uses stable_eps_V. Current uses stable_eps_A (amps) only; never reuse volts as amps. Blank/null = NON_TIGHT (wait settle_s once; not greenable as tight-settle). Set a grounded amp number for eps/N hard-FAIL. Tight claim without eps FAIL-closes. Do not invent a uA default.</p>` +
     `<label>vcc_list (comma)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>` +
-    `<label>stable_eps_A (amps, current settle; blank = null / FAIL-closed)<input id="logic-dc-stable-eps-a" type="text" value="${epsAShow}" placeholder="null" /></label>`;
+    `<label>stable_eps_A overlay (amps; blank = null / NON_TIGHT)<input id="logic-dc-stable-eps-a" type="text" value="${epsAShow}" placeholder="null" /></label>`;
+  const cardHtml = renderCardFields(dc.card_fields || []);
   const tt = dc.truth_table || [];
   const pins = tt.length ? Object.keys(tt[0]) : inputs.concat([dc.output_pin || "Y"]);
   let ttHtml = "<h3 class=\"subhead\">Truth table</h3>";
@@ -1112,11 +1265,12 @@ function renderLogicDc() {
   specHtml += "</tbody></table>";
   const gaps = (dc.gaps || []).map((g) => `<li>${g}</li>`).join("");
   const gapHtml = gaps ? `<h3 class="subhead">Gaps</h3><ul class="hint">${gaps}</ul>` : "";
-  body.innerHTML = enHtml + recipeHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
+  body.innerHTML = enHtml + recipeHtml + cardHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
   if (hint && !hint.textContent) {
-    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (pass_mode + vcc_list + stable_eps_A). Ctrl+F5 after worker restart if RPC is new.";
+    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (pass_mode + vcc_list + stable_eps_A). Save product_model writes card_fields.schema.yaml keys. Ctrl+F5 after worker restart if RPC is new.";
   }
   wirePassModeSync();
+  wireCardFieldDeletes();
 }
 
 function kindLabel(kind) {
@@ -2642,7 +2796,7 @@ async function saveTestParamsOverlay() {
     } else {
       const n = Number(raw);
       if (!Number.isFinite(n)) {
-        throw new Error("stable_eps_A must be a number in amps, or blank for null (FAIL-closed)");
+        throw new Error("stable_eps_A must be a number in amps, or blank for null (NON_TIGHT)");
       }
       blob.stable_eps_A = n;
     }

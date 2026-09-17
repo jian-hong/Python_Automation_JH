@@ -1,0 +1,286 @@
+# Path B Logic DC card fields (OOP_SCHEMA).
+# Setup Logic DC panel binds save to these keys on product_model YAML.
+# Each field is individually assignable / editable / deletable.
+# OCR: PaddleOCR maps tokens onto these keys. Do not install Baidu unless asked.
+# Do not invent limits / IOH / IOL / uA epsilons.
+
+oop_objects:
+  - Part
+  - Pin
+  - TruthTable
+  - Isolation
+  - Limit
+  - Recipe
+
+ocr:
+  engine: paddleocr
+  forbidden:
+    - baidu
+  note: >
+    PaddleOCR is the chosen path. Each recognized token assigns one card field.
+    Operator can edit or delete that field. No opaque hardcoded panel keys.
+
+banned_panel_keys:
+  - voh_table
+  - vol_table
+  - ioh_a
+  - iol_a
+
+# TestSpec.id -> OOP used at run (bodies stay in ate/tests/logic/).
+testspec_map:
+  tp: {oop: [Recipe], body: wraps.py, note: AC wrap of logic_tests.test_tp}
+  ten: {oop: [Recipe], body: wraps.py, note: AC wrap of logic_tests.test_ten}
+  tdis: {oop: [Recipe], body: wraps.py, note: AC wrap of logic_tests.test_tdis}
+  input_threshold: {oop: [Pin, TruthTable, Isolation, Recipe], body: logic_dc.py}
+  vth: {oop: [Pin, TruthTable, Isolation, Recipe], body: logic_dc.py, alias_of: input_threshold}
+  icc: {oop: [Pin, Recipe, Limit], body: logic_dc.py}
+  delta_icc: {oop: [Pin, Recipe, Limit], body: logic_dc.py}
+  ii: {oop: [Pin, Recipe, Limit], body: logic_dc.py}
+  voh: {oop: [Pin, TruthTable, Limit, Recipe], body: logic_dc.py}
+  vol: {oop: [Pin, TruthTable, Limit, Recipe], body: logic_dc.py}
+  ioz: {oop: [Pin, Recipe, Limit], body: logic_dc.py, note: "only when oe != none"}
+
+refs_readonly:
+  seelim: >
+    ate/tests/logic/seelim_dc.py is a golden locator (goldens/see_lin then
+    See Lim Repo). Isolation pattern "Y tracks the swept pin" is read-only.
+    Do not copy See Lim params/limits into YAML.
+  ariff: >
+    ate/tests/logic/ariff_dc.py is RS1G08-class loaded DC (voh_load/vol_load).
+    Do not copy Ariff default VOH/VOL rows, vref, or broken params into Path B
+    97/126 cards.
+
+fields:
+  - key: part
+    oop: Part
+    type: text
+    editable: true
+    deletable: true
+    label: part name
+  - key: status
+    oop: Part
+    type: text
+    editable: true
+    deletable: true
+    label: card status
+    note: Panel cannot promote to Datasheet-signed.
+  - key: confirmed_by
+    oop: Part
+    type: text
+    editable: true
+    deletable: true
+  - key: confirmed_at
+    oop: Part
+    type: text
+    editable: true
+    deletable: true
+  - key: source_card
+    oop: Part
+    type: text
+    editable: true
+    deletable: true
+  - key: gaps
+    oop: Part
+    type: json
+    editable: true
+    deletable: true
+    label: honest gaps (list)
+  - key: pins
+    oop: Pin
+    type: json
+    editable: true
+    deletable: true
+    label: "pins [{name, role, number}]"
+  - key: pin_drive
+    oop: Pin
+    type: json
+    editable: true
+    deletable: true
+    label: "pin_drive {PIN: {src, ch}}"
+  - key: logic_inputs
+    oop: Pin
+    type: json
+    editable: true
+    deletable: true
+  - key: output_pin
+    oop: Pin
+    type: text
+    editable: true
+    deletable: true
+  - key: oe
+    oop: Pin
+    type: json
+    editable: true
+    deletable: true
+    label: "oe (none or {pin, active})"
+  - key: schmitt
+    oop: Recipe
+    type: bool
+    editable: true
+    deletable: true
+  - key: truth_table
+    oop: TruthTable
+    type: json
+    editable: true
+    deletable: true
+    note: Do not invent rows. Panel cannot promote Datasheet-signed.
+  - key: truth_table_status
+    oop: TruthTable
+    type: text
+    editable: true
+    deletable: true
+  - key: isolation
+    oop: Isolation
+    type: json
+    editable: true
+    deletable: true
+  - key: isolation_status
+    oop: Isolation
+    type: text
+    editable: true
+    deletable: true
+  - key: threshold_isolation
+    oop: Isolation
+    type: json
+    editable: true
+    deletable: true
+  - key: pass_mode
+    oop: Limit
+    type: json
+    editable: true
+    deletable: true
+  - key: limit_mode
+    oop: Limit
+    type: json
+    editable: true
+    deletable: true
+  - key: dc_limits
+    oop: Limit
+    type: json
+    editable: true
+    deletable: true
+    note: Spec ids only. Do not invent IOH/IOL numbers here.
+  - key: vcc_list
+    oop: Recipe
+    type: list_csv
+    editable: true
+    deletable: true
+  - key: vcc_sweep_list
+    oop: Recipe
+    type: list_csv
+    editable: true
+    deletable: true
+  - key: vcc_list_status
+    oop: Recipe
+    type: text
+    editable: true
+    deletable: true
+  - key: vcc_op_min
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+    note: Range metadata, not a sweep.
+  - key: vcc_op_max
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+  - key: vcc_op_status
+    oop: Recipe
+    type: text
+    editable: true
+    deletable: true
+  - key: recipe
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+    label: recipe object
+  - key: recipe.settle_s
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+  - key: recipe.stable_n
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+  - key: recipe.stable_eps_V
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+    note: Voltage settle only. Never reuse as amps.
+  - key: recipe.stable_eps_A
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+    label: current settle eps (amps)
+    note: >
+      null = NON_TIGHT (wait settle_s once). Set a grounded amp number for
+      eps/N hard-FAIL. Do not invent a uA default.
+  - key: recipe.settle_timeout_s
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+  - key: recipe.threshold_step_v
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+  - key: recipe.delta_offset_v
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+    note: Datasheet dICC offset. Do not invent.
+  - key: recipe.delta_vcc_min
+    oop: Recipe
+    type: number_or_null
+    editable: true
+    deletable: true
+  - key: recipe.icc_corners
+    oop: Recipe
+    type: text
+    editable: true
+    deletable: true
+    note: Informational; runner derives 2^n from logic_inputs.
+  - key: recipe.ioz_when
+    oop: Recipe
+    type: text
+    editable: true
+    deletable: true
+  - key: recipe.ioz_vcc_list
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+  - key: recipe.ioz_vout_list
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+  - key: recipe.ii_vcc_list
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+  - key: recipe.delta_vcc_list
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+  - key: recipe.levels
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+  - key: recipe.rails
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true

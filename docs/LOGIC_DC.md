@@ -51,7 +51,7 @@ product_model:
     threshold_step_v: 0.05
     settle_s: 0.3
     stable_eps_V: 0.005
-    stable_eps_A: null  # current settle; FAIL-closed until overlay; do not invent uA
+    stable_eps_A: null  # current: null = NON_TIGHT (wait settle_s once); set amps for eps/N; do not invent uA
     delta_offset_v: 0.6   # dICC; omit if datasheet has no dICC
   gaps: []                # honest UNSURE / PROVISIONAL notes
 ```
@@ -68,7 +68,23 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **Delta ICC** -- one input at VCC-offset.
 - **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`.
 - **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126 use the CONFIRMED Full IOH/IOL grid (same table). No invented extra loads. Unloaded only when the table is absent.
-- **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only; null/missing is FAIL-closed. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default; ground `stable_eps_A` via panel / `_manifest/test_params.yaml`. Timeout raises FAIL; never returns the last reading. Not a DC limit.
+- **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default. If `stable_eps_A` is set (panel / overlay), eps/N + hard timeout FAIL (never last-reading). If null: tight-settle claims stay FAIL-closed; honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle). Not a DC limit.
+
+### TestSpec <-> OOP (Part / Pin / TruthTable / Isolation / Limit / Recipe)
+
+Card field list + OCR bind: `docs/datasheet/card_fields.schema.yaml`. `check_logic_dc` FAIL-closes if a part `enabled_tests` id has no registered TestSpec with callable `run` (enabled-but-unrunnable / stub).
+
+| TestSpec | OOP | Body |
+|----------|-----|------|
+| `tp` / `ten` / `tdis` | Recipe (AC) | `wraps.py` real wrap of `logic_tests.py` |
+| `input_threshold` / `vth` | Pin + TruthTable + Isolation + Recipe | `logic_dc.py` |
+| `icc` / `delta_icc` / `ii` | Pin + Recipe + Limit | `logic_dc.py` |
+| `voh` / `vol` | Pin + TruthTable + Limit + Recipe | `logic_dc.py` |
+| `ioz` | Pin (OE) + Recipe + Limit | `logic_dc.py` (only when `oe != none`) |
+
+See Lim (`seelim_dc.py` locator) and Ariff (`ariff_dc.py` RS1G08-class `voh_load`) are **read-only refs**. Isolation "Y tracks the swept pin" is the See Lim pattern. Do not copy See Lim / Ariff params, vref, or default load rows into Path B 97/126 cards.
+
+OCR: PaddleOCR maps each token onto one card field (assign/edit/delete on the Logic DC panel). Do not install Baidu unless asked.
 
 RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
 
@@ -89,7 +105,7 @@ pass_mode:
 
 Setup **Logic DC** panel:
 
-- JSON editors + **Save product_model** write part yaml (`save_product_model`). Cannot promote status to Datasheet-signed.
+- JSON editors + **Save product_model** write part yaml via `docs/datasheet/card_fields.schema.yaml` keys (`save_product_model`). Each field is assignable/editable/deletable. Cannot promote status to Datasheet-signed.
 - Visual tables + **Save Version overlay** write this campaign file (`save_test_params`). Does not rewrite part yaml.
 
 ### `pass_mode` (first-class)

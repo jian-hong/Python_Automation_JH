@@ -5,16 +5,20 @@ Run: python -m ate.core.check_logic_dc
 from __future__ import annotations
 
 import ast
+import inspect
 import re
 import sys
+import textwrap
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
+from ate.core.paths import PARTS_DIR
 from ate.core.registry import all_tests, get, load_family
 from ate.core.specs import infer_pass_mode, judge_value, load_part_specs
 from ate.fixture.modes import enabled_tests_for_part
 from ate.tests.logic.product_model import (
+    CARD_FIELDS_SCHEMA_PATH,
     claimed_signed_without_datasheet,
     derive_isolation,
     has_product_model,
@@ -23,9 +27,11 @@ from ate.tests.logic.product_model import (
     is_datasheet_signed,
     is_unconfirmed_status,
     iter_logic_corners,
+    load_card_fields_schema,
     load_part_yaml,
     load_product_model,
     lookup_pass_mode,
+    panel_save_keys,
     sim_icc_plan,
     vectors_for_output,
 )
@@ -494,8 +500,12 @@ def _settle_loop_ok() -> list[str]:
             errors.append("_wait_settled current must use stable_eps_A only")
         if "stable_eps_V" not in wait_src:
             errors.append("_wait_settled voltage must keep stable_eps_V")
+        if "NON_TIGHT" not in wait_src:
+            errors.append("_wait_settled current must offer NON_TIGHT when stable_eps_A is null")
         if "FAIL-closed" not in wait_src and "stable_eps_A missing" not in wait_src:
-            errors.append("current settle must FAIL-closed when stable_eps_A is null/missing")
+            errors.append("tight current settle must FAIL-closed when stable_eps_A is null/missing")
+        if re.search(r"kind == \"current\".*_recipe_num\(\s*model,\s*[\"']stable_eps_V\"", wait_src):
+            errors.append("_wait_settled current must not reuse stable_eps_V as amps")
     power_src = _fn_src(src, "_power_vcc")
     if "time.sleep" in power_src:
         errors.append("_power_vcc must not sleep-as-settle; caller uses settle-to-stable")
@@ -577,15 +587,37 @@ def _settle_loop_ok() -> list[str]:
 
     try:
         i_ua = ldc._wait_settled_current_ua(_FlatCurr(), fast, setup=False)
-        errors.append("current settle without stable_eps_A must FAIL-closed (not reuse stable_eps_V)")
+        if abs(float(i_ua) - 1.0) > 1e-6:
+            errors.append(f"NON_TIGHT current SIM must return uA after settle_s, got {i_ua!r}")
+        if ldc._current_settle_tag(fast) != "NON_TIGHT":
+            errors.append("null stable_eps_A must tag settle=NON_TIGHT (not greenable as tight-settle)")
+    except RuntimeError as exc:
+        errors.append(
+            f"honest current path with null stable_eps_A must not raise; got {exc!r}"
+        )
+    except Exception as exc:
+        errors.append(f"NON_TIGHT current SIM raised: {exc!r}")
+    try:
+        ldc._wait_settled(_FlatCurr(), fast, kind="current", setup=False, tight=True)
+        errors.append("tight current settle without stable_eps_A must FAIL-closed")
     except RuntimeError as exc:
         msg = str(exc)
         if "stable_eps_A" not in msg:
-            errors.append(f"current settle null eps must name stable_eps_A, got {exc!r}")
-        if "stable_eps_V" in msg and "do not reuse" not in msg.lower() and "reuse" not in msg.lower():
-            pass
+            errors.append(f"tight current settle null eps must name stable_eps_A, got {exc!r}")
+        if "FAIL-closed" not in msg and "tight" not in msg.lower():
+            errors.append(f"tight current settle must say FAIL-closed/tight, got {exc!r}")
     except Exception as exc:
-        errors.append(f"current settle without stable_eps_A must be RuntimeError, got {exc!r}")
+        errors.append(f"tight current settle without stable_eps_A must be RuntimeError, got {exc!r}")
+    try:
+        ramp_i = ldc._wait_settled_current_ua(_RampDmm(), fast, setup=False)
+        if abs(float(ramp_i) - 1e5) > 1.0:
+            errors.append(
+                f"NON_TIGHT must measure once (RampDmm first=0.1A -> 1e5 uA), got {ramp_i!r}"
+            )
+    except RuntimeError as exc:
+        errors.append(f"NON_TIGHT must not timeout-FAIL, got {exc!r}")
+    except Exception as exc:
+        errors.append(f"NON_TIGHT ramp SIM raised: {exc!r}")
     grounded = replace(
         fast,
         recipe={**dict(fast.recipe), "stable_eps_A": 1.0},  # SIM probe window, not a SKU uA default
@@ -602,6 +634,19 @@ def _settle_loop_ok() -> list[str]:
     bare = load_product_model("rs1g97")
     if bare is not None and bare.recipe.get("stable_eps_A") not in (None,):
         errors.append("rs1g97 recipe.stable_eps_A must stay null without overlay")
+    tagged = ldc._finish(
+        fast,
+        "icc",
+        {
+            "summary": "ICC SIM",
+            "data": {"rows": [{"ICC_uA": 1.0}]},
+            "measurements": [{"id": "ICC_uA", "value": 1.0}],
+        },
+    )
+    if (tagged.get("data") or {}).get("settle") != "NON_TIGHT":
+        errors.append("ICC result must tag settle=NON_TIGHT when stable_eps_A is null")
+    if (tagged.get("data") or {}).get("tight_settle_greenable") is not False:
+        errors.append("NON_TIGHT ICC must not be greenable as tight-settle")
     return errors
 
 
@@ -648,7 +693,19 @@ def _operator_doc_ok() -> list[str]:
     if "stable_eps_A" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must document stable_eps_A (current; not volts)")
     if "FAIL-closed" not in text and "fail-closed" not in text.lower():
-        errors.append("LOGIC_DC_OPERATOR.md must say current settle is FAIL-closed without stable_eps_A")
+        errors.append("LOGIC_DC_OPERATOR.md must say tight current settle is FAIL-closed without stable_eps_A")
+    if "NON_TIGHT" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must document settle=NON_TIGHT when stable_eps_A is null")
+    if "PaddleOCR" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name PaddleOCR (chosen OCR path)")
+    if "baidu" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must say do not install Baidu unless asked")
+    if "card_fields.schema.yaml" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must link docs/datasheet/card_fields.schema.yaml")
+    if "TestSpec" not in text or "Recipe" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must map TestSpec to OOP (Part/Pin/TruthTable/Isolation/Limit/Recipe)")
+    if "See Lim" not in text or "Ariff" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must note See Lim/Ariff as read-only refs")
     if "invent a ua" not in text.lower().replace("µ", "u"):
         errors.append("LOGIC_DC_OPERATOR.md must forbid inventing a uA current-settle epsilon")
     if not re.search(r"HEAD SHA.*[`']?[0-9a-f]{7,40}", text, re.I | re.S):
@@ -760,7 +817,39 @@ def _panel_ok() -> list[str]:
     if "icc_corner_rows" not in js or "Enabled tests" not in js or "fail-open" not in js:
         errors.append("app.js must visualise enabled tests, ICC corners, fail-open")
     if "logic-dc-stable-eps-a" not in js or "stable_eps_A" not in js:
-        errors.append("Logic DC panel must edit stable_eps_A (overlay; null FAIL-closed)")
+        errors.append("Logic DC panel must edit stable_eps_A (overlay; null = NON_TIGHT)")
+    if "data-card-field" not in js or "deleted_fields" not in js:
+        errors.append("Logic DC panel must bind per-field assign/edit/delete to card_fields")
+    if "card_fields" not in js:
+        errors.append("app.js must render card_fields from OOP_SCHEMA")
+    if not CARD_FIELDS_SCHEMA_PATH.is_file():
+        errors.append("docs/datasheet/card_fields.schema.yaml missing")
+    else:
+        schema_txt = CARD_FIELDS_SCHEMA_PATH.read_text(encoding="utf-8")
+        for need in ("Part", "Pin", "TruthTable", "Isolation", "Limit", "Recipe", "paddleocr"):
+            if need not in schema_txt:
+                errors.append(f"card_fields.schema.yaml must name {need}")
+        if "baidu" not in schema_txt.lower():
+            errors.append("card_fields.schema.yaml must forbid Baidu unless asked")
+    model_src = _MODEL.read_text(encoding="utf-8")
+    if "load_card_fields_schema" not in model_src or "panel_save_keys" not in model_src:
+        errors.append("save_product_model must bind keys from card_fields.schema.yaml")
+    if "_PANEL_SAVE_KEYS" in model_src:
+        errors.append("product_model must not keep an opaque _PANEL_SAVE_KEYS tuple")
+    try:
+        schema = load_card_fields_schema()
+        objs = schema.get("oop_objects") or []
+        for need in ("Part", "Pin", "TruthTable", "Isolation", "Limit", "Recipe"):
+            if need not in objs:
+                errors.append(f"card_fields.schema.yaml oop_objects missing {need}")
+        if str(schema.get("ocr", {}).get("engine") or "").lower() != "paddleocr":
+            errors.append("card_fields.schema.yaml ocr.engine must be paddleocr")
+        keys = panel_save_keys()
+        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt"):
+            if need not in keys:
+                errors.append(f"panel_save_keys missing {need}")
+    except Exception as exc:
+        errors.append(f"load_card_fields_schema failed: {exc!r}")
     if judge_value(1, None, None, pass_mode="fail-open") != "fail":
         errors.append("fail-open with no limits must fail")
     srv = Path(__file__).resolve().parents[1] / "worker" / "server.py"
@@ -824,6 +913,94 @@ def _scale_and_overlay_ok() -> list[str]:
     return errors
 
 
+def _run_is_stub(run) -> str:
+    """Empty / NotImplementedError-only body. Callable wraps are not stubs."""
+    if run is None or not callable(run):
+        return "run is not callable"
+    try:
+        src = inspect.getsource(inspect.unwrap(run))
+    except (OSError, TypeError):
+        return ""
+    try:
+        tree = ast.parse(textwrap.dedent(src))
+    except SyntaxError:
+        if re.search(r"raise\s+NotImplementedError", src):
+            return "NotImplementedError stub"
+        return ""
+    fn = None
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            fn = node
+            break
+    if fn is None:
+        if re.search(r"raise\s+NotImplementedError", src):
+            return "NotImplementedError stub"
+        return ""
+    stmts = []
+    for node in fn.body:
+        if isinstance(node, ast.Expr) and isinstance(getattr(node, "value", None), ast.Constant):
+            continue
+        if isinstance(node, ast.Pass):
+            stmts.append(node)
+            continue
+        stmts.append(node)
+    if not stmts:
+        return "empty stub"
+    if len(stmts) == 1 and isinstance(stmts[0], ast.Pass):
+        return "pass-only stub"
+    if len(stmts) == 1 and isinstance(stmts[0], ast.Raise):
+        exc = stmts[0].exc
+        names: list[str] = []
+        if isinstance(exc, ast.Name):
+            names.append(exc.id)
+        elif isinstance(exc, ast.Call):
+            func = exc.func
+            if isinstance(func, ast.Name):
+                names.append(func.id)
+        if any(n in ("NotImplementedError",) for n in names):
+            return "NotImplementedError stub"
+        if any(n == "RuntimeError" for n in names):
+            if re.search(r"(?i)\bstub\b", src):
+                return "RuntimeError stub"
+    if re.search(r"raise\s+NotImplementedError", src) and "not a stub" not in src.lower():
+        # real bodies may mention the word in comments; only fail if raise is present
+        for node in ast.walk(fn):
+            if isinstance(node, ast.Raise):
+                exc = node.exc
+                if isinstance(exc, ast.Name) and exc.id == "NotImplementedError":
+                    return "NotImplementedError stub"
+                if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name):
+                    if exc.func.id == "NotImplementedError":
+                        return "NotImplementedError stub"
+    return ""
+
+
+def _runnable_ok() -> list[str]:
+    """Every enabled_tests id must have a registered TestSpec with callable run."""
+    errors: list[str] = []
+    load_family("logic")
+    parts: list[str] = []
+    for path in sorted(PARTS_DIR.glob("*.yaml")):
+        key = path.stem.lower()
+        if has_product_model(key):
+            parts.append(key)
+    if "rs1g97" not in parts or "rs1g126" not in parts:
+        errors.append("runnable gate needs Path B parts rs1g97 and rs1g126")
+    for part in parts:
+        ids = [str(x).strip() for x in (enabled_tests_for_part(part) or []) if str(x).strip()]
+        for tid in ids:
+            spec = get(tid)
+            if spec is None:
+                errors.append(f"{part}: enabled {tid} has no registered TestSpec")
+                continue
+            why = _run_is_stub(spec.run)
+            if why:
+                errors.append(f"{part}: enabled {tid} is enabled-but-unrunnable ({why})")
+            elif not callable(spec.run):
+                errors.append(f"{part}: enabled {tid} TestSpec.run is not callable")
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -843,6 +1020,7 @@ def check_logic_dc() -> list[str]:
     errors += _scale_and_overlay_ok()
     errors += _seelim_wrap_ok()
     errors += _registry_ok()
+    errors += _runnable_ok()
     errors += _settle_loop_ok()
     errors += _operator_doc_ok()
     errors += _panel_ok()

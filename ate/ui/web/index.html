@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917logicdc6" />
+  <link rel="stylesheet" href="styles.css?v=20260917logicdc7" />
 </head>
 <body>
   <div class="bg"></div>
@@ -289,17 +289,17 @@
               <summary>YAML JSON (engineer -- Save product_model)</summary>
               <div class="param-grid">
                 <label>vcc_list
-                  <input id="logic-dc-vcc-list" type="text" />
+                  <input id="logic-dc-vcc-list" data-card-field="vcc_list" data-card-type="list_csv" type="text" />
                 </label>
                 <label>pass_mode (JSON)
-                  <textarea id="logic-dc-pass-mode" class="mono-edit" rows="5"></textarea>
+                  <textarea id="logic-dc-pass-mode" data-card-field="pass_mode" data-card-type="json" class="mono-edit" rows="5"></textarea>
                 </label>
               </div>
               <label class="logic-dc-block">truth_table
-                <textarea id="logic-dc-truth" class="mono-edit" rows="10"></textarea>
+                <textarea id="logic-dc-truth" data-card-field="truth_table" data-card-type="json" class="mono-edit" rows="10"></textarea>
               </label>
               <label class="logic-dc-block">isolation
-                <textarea id="logic-dc-isolation" class="mono-edit" rows="8"></textarea>
+                <textarea id="logic-dc-isolation" data-card-field="isolation" data-card-type="json" class="mono-edit" rows="8"></textarea>
               </label>
               <div class="row" style="margin-top:8px">
                 <button type="button" id="btn-save-logic-dc" class="btn">Save product_model</button>
@@ -308,7 +308,7 @@
             <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px">
               <button type="button" id="btn-save-test-params" class="btn accent">Save Version overlay</button>
             </div>
-            <p class="hint" id="logic-dc-hint">Save Version overlay writes this campaign <code>_manifest/test_params.yaml</code> (vcc_list + pass_mode + stable_eps_A). Save product_model (inside YAML JSON) writes part yaml and cannot promote Datasheet-signed.</p>
+            <p class="hint" id="logic-dc-hint">Save Version overlay writes this campaign <code>_manifest/test_params.yaml</code> (vcc_list + pass_mode + stable_eps_A). Save product_model writes every <code>docs/datasheet/card_fields.schema.yaml</code> field (assign/edit/delete). Cannot promote Datasheet-signed.</p>
           </div>
 
           <div class="glass panel" id="panel-gain-boards">
@@ -493,6 +493,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260917logicdc6"></script>
+  <script src="app.js?v=20260917logicdc7"></script>
 </body>
 </html>

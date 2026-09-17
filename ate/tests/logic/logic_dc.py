@@ -16,11 +16,12 @@ INSTRUMENT_SENSE VOH: force Y-high from truth_table vector; DMM sense V(Y).
 INSTRUMENT_SENSE VOL: force Y-low from truth_table vector; DMM sense V(Y).
   Loaded IOL from CONFIRMED vol_table (PSU CH2 Y-load source rail = VCC unless vref given).
 SETTLE: measure-after-settle (recipe settle_s / stable_n / stable_eps_V / settle_timeout_s).
-  Voltage uses stable_eps_V. Current (ICC / ΔICC / II / IOZ) uses stable_eps_A only;
-  null/missing is FAIL-closed (do not reuse stable_eps_V as amps).
-  Every PSU VCC switch and pin force uses settle-to-stable (eps/N + hard timeout),
-  including ICC / ΔICC / II / IOZ -- not sleep(_settle) only. Timeout raises
-  RuntimeError / FAIL; never returns the last reading as a measurement.
+  Voltage uses stable_eps_V. Current (ICC / ΔICC / II / IOZ) uses stable_eps_A only
+  (never reuse stable_eps_V as amps). If stable_eps_A is set (panel/overlay),
+  eps/N + hard timeout (RuntimeError / FAIL; never last-reading). If
+  stable_eps_A is null: tight-settle claims stay FAIL-closed; honest path waits
+  settle_s once then measures and tags settle=NON_TIGHT (not greenable as
+  tight-settle). Do not invent a uA default.
 INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
   Not applicable when oe=none.
 
@@ -141,6 +142,16 @@ def _meas(
     return row
 
 
+_CURRENT_SETTLE_IDS = frozenset({"icc", "delta_icc", "ii", "ioz"})
+
+
+def _current_settle_tag(model: ProductModel) -> str:
+    """TIGHT when stable_eps_A is a positive amp number; else NON_TIGHT."""
+    if _recipe_optional_positive(model, "stable_eps_A") is None:
+        return "NON_TIGHT"
+    return "TIGHT"
+
+
 def _finish(model: ProductModel, test_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     """Attach schema status. UNCONFIRMED / PROVISIONAL cannot report green."""
     data = payload.get("data")
@@ -170,6 +181,24 @@ def _finish(model: ProductModel, test_id: str, payload: dict[str, Any]) -> dict[
             if str(row.get("Result") or "").upper() == "PASS":
                 row["Result"] = "UNCONFIRMED"
             row.setdefault("status", model.truth_table_status or "UNCONFIRMED")
+    tid = str(test_id or "").strip().lower()
+    if tid in _CURRENT_SETTLE_IDS:
+        settle = _current_settle_tag(model)
+        data["settle"] = settle
+        tight_ok = settle == "TIGHT"
+        data["tight_settle_greenable"] = tight_ok
+        if settle == "NON_TIGHT":
+            summary = str(payload.get("summary") or "").strip()
+            payload["summary"] = (
+                f"{summary} [settle=NON_TIGHT; not greenable as tight-settle]"
+            ).strip()
+        for row in data.get("rows") or []:
+            if isinstance(row, dict):
+                row.setdefault("settle", settle)
+        for meas in payload.get("measurements") or []:
+            if isinstance(meas, dict):
+                meas["settle"] = settle
+                meas["tight_settle_greenable"] = tight_ok
     return payload
 
 
@@ -231,15 +260,25 @@ def _recipe_optional_positive(model: ProductModel, key: str) -> float | None:
     return v
 
 
-def _wait_settled(dmm, model: ProductModel, *, kind: str = "voltage", setup: bool = True) -> float:
+def _wait_settled(
+    dmm,
+    model: ProductModel,
+    *,
+    kind: str = "voltage",
+    setup: bool = True,
+    tight: bool = False,
+) -> float:
     """Wait settle_s, then measure until stable_n within eps, or FAIL.
 
     Measure-after-settle, not before. Recipe is not a DC limit.
     kind voltage: DMM volts vs stable_eps_V.
-    kind current: DMM amps vs stable_eps_A only. Null/missing raises FAIL-closed
-    (never reuse stable_eps_V; 0.005 V is not a 5 mA window).
-    settle_timeout_s expiry raises RuntimeError (FAIL). Never returns the last
-    reading. Sleep is capped by remaining time so this cannot hang forever.
+    kind current: DMM amps vs stable_eps_A only (never reuse stable_eps_V).
+    If stable_eps_A is null: tight=True raises FAIL-closed. tight=False waits
+    settle_s once then one reading (settle=NON_TIGHT; not greenable as
+    tight-settle). Do not invent a uA default.
+    When stable_eps_A is set: eps/N + hard timeout. Timeout raises RuntimeError
+    (FAIL). Never returns the last reading. Sleep is capped by remaining time
+    so this cannot hang forever.
     """
     from dmm_setup import dmm_read, dmm_setup_current, dmm_setup_voltage
 
@@ -254,12 +293,19 @@ def _wait_settled(dmm, model: ProductModel, *, kind: str = "voltage", setup: boo
     if kind == "current":
         eps_a = _recipe_optional_positive(model, "stable_eps_A")
         if eps_a is None:
-            raise RuntimeError(
-                "stable_eps_A missing: current settle FAIL-closed "
-                "(do not reuse stable_eps_V / 0.005 V as amps). "
-                "Set recipe.stable_eps_A or campaign test_params overlay. "
-                "Do not invent a uA default."
-            )
+            if tight:
+                raise RuntimeError(
+                    "stable_eps_A missing: tight current settle FAIL-closed "
+                    "(do not reuse stable_eps_V / 0.005 V as amps). "
+                    "Set recipe.stable_eps_A or campaign test_params overlay. "
+                    "Do not invent a uA default. Honest path (tight=False): "
+                    "wait settle_s once then measure; tag settle=NON_TIGHT."
+                )
+            if setup:
+                dmm_setup_current(dmm)
+            if settle_s > 0:
+                time.sleep(settle_s)
+            return float(dmm_read(dmm))
         if eps_a <= 0:
             raise RuntimeError("stable_eps_A must be > 0 A (amps; not volts)")
         eps = eps_a
@@ -306,9 +352,15 @@ def _wait_settled_voltage(dmm, model: ProductModel, *, setup: bool = True) -> fl
     return _wait_settled(dmm, model, kind="voltage", setup=setup)
 
 
-def _wait_settled_current_ua(dmm, model: ProductModel, *, setup: bool = True) -> float:
-    """Settled DMM current in uA. Timeout raises RuntimeError / FAIL."""
-    return _wait_settled(dmm, model, kind="current", setup=setup) * 1e6
+def _wait_settled_current_ua(
+    dmm, model: ProductModel, *, setup: bool = True, tight: bool = False
+) -> float:
+    """DMM current in uA. tight=True FAIL-closes when stable_eps_A is null.
+
+    Default tight=False: null eps waits settle_s once (NON_TIGHT). When
+    stable_eps_A is set, eps/N hard-FAIL timeout. Never reuses stable_eps_V.
+    """
+    return _wait_settled(dmm, model, kind="current", setup=setup, tight=tight) * 1e6
 
 
 def _vmax_for_ii(model: ProductModel, vcc: float) -> float:

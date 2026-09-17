@@ -113,7 +113,7 @@ product_model:
     settle_s: 0.05
     stable_n: 3
     stable_eps_V: 0.005
-    stable_eps_A: null  # current settle FAIL-closed until overlay; do not invent uA
+    stable_eps_A: null  # current settle: null = NON_TIGHT; do not invent uA
     settle_timeout_s: 2.0
     icc_corners: "data x OE"
     ioz_when: oe_inactive
