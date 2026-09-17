@@ -33,6 +33,7 @@ from ate.tests.logic.product_model import (
 _LOGIC_DC = Path(__file__).resolve().parents[1] / "tests" / "logic" / "logic_dc.py"
 _DC_ALIAS = Path(__file__).resolve().parents[1] / "tests" / "logic" / "dc.py"
 _MODEL = Path(__file__).resolve().parents[1] / "tests" / "logic" / "product_model.py"
+_OPERATOR_DOC = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC_OPERATOR.md"
 
 _PATH_B_IDS = (
     "input_threshold",
@@ -566,6 +567,54 @@ def _settle_loop_ok() -> list[str]:
     return errors
 
 
+def _operator_doc_ok() -> list[str]:
+    """Operator bench doc exists. DEMO/SIM is not a reproduce claim. No invented cells."""
+    errors: list[str] = []
+    if not _OPERATOR_DOC.is_file():
+        return ["docs/LOGIC_DC_OPERATOR.md missing (operator bench; not a reproduce claim)"]
+    text = _OPERATOR_DOC.read_text(encoding="utf-8")
+    if "not" not in text.lower() or "reproduce" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must say DEMO/SIM is not a reproduce claim")
+    if "python -m ate.core.check_logic_dc" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name python -m ate.core.check_logic_dc")
+    if "sheet_map" not in text or "campaign_outline" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must use sheet_map / campaign_outline only (never invent cells)")
+    if "invent" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must forbid inventing Excel cells")
+    if "sessions/report.json" not in text.replace(" ", ""):
+        # allow sessions/report.json with or without backticks
+        if "report.json" not in text:
+            errors.append("LOGIC_DC_OPERATOR.md must name sessions/report.json")
+    if "datalog.md" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name STS datalog.md")
+    if "records/" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name {test}/DUT_n/records/")
+    if "START.bat" not in text or "127.0.0.1:5174" not in text or "8766" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name START.bat, UI 5174, worker 8766")
+    if "Ctrl+F5" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name Ctrl+F5 after pull")
+    if "idle-restart" not in text.lower() and "restart_ate_worker" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name idle-restart worker")
+    if "Open Session" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md checklist must include Open Session")
+    if "RS1G97" not in text or "RS1G126" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must checklist RS1G97 and RS1G126")
+    if "DMM-on-VCC" not in text or "2^n" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must cover ICC DMM-on-VCC 2^n")
+    if "hard-FAIL" not in text and "hard-fail" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must cover settle timeout hard-FAIL")
+    if "VOH" not in text or "min" not in text.lower() or "VOL" not in text or "max" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must confirm VOH >= min / VOL <= max vs table")
+    if "IOZ" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must cover IOZ if OE")
+    if not re.search(r"HEAD SHA.*[`']?[0-9a-f]{7,40}", text, re.I | re.S):
+        errors.append("LOGIC_DC_OPERATOR.md must list PR HEAD SHA")
+    logic = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC.md"
+    if "LOGIC_DC_OPERATOR.md" not in logic.read_text(encoding="utf-8"):
+        errors.append("docs/LOGIC_DC.md must point at LOGIC_DC_OPERATOR.md")
+    return errors
+
+
 def _registry_ok() -> list[str]:
     errors: list[str] = []
     load_family("logic")
@@ -749,6 +798,7 @@ def check_logic_dc() -> list[str]:
     errors += _seelim_wrap_ok()
     errors += _registry_ok()
     errors += _settle_loop_ok()
+    errors += _operator_doc_ok()
     errors += _panel_ok()
     load_family("opamp")
     return errors

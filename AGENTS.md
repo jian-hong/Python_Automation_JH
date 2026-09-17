@@ -15,7 +15,7 @@ Paste the SharePoint *https* link into `ate/config/sharepoint.url` when you have
 
 Daily clone update: `python -m ate.core.sync_repo` (Cursor folder-open + `run_ate_app.bat`). `git pull --ff-only` only when the tree is clean. Dirty tree = fetch only. Never `reset --hard`.
 
-Longer plug-in detail: `docs/ATE_PLUGIN.md`. Logic DC SKUs: `docs/LOGIC_DC.md`. UI chrome: `ate/ui/web/UI_CONTRACT.md`. Human landing: `README.md`.
+Longer plug-in detail: `docs/ATE_PLUGIN.md`. Logic DC SKUs: `docs/LOGIC_DC.md`. Operator bench (not a reproduce claim): `docs/LOGIC_DC_OPERATOR.md`. UI chrome: `ate/ui/web/UI_CONTRACT.md`. Human landing: `README.md`.
 
 ## Mental model (do not invent a fourth axis)
 

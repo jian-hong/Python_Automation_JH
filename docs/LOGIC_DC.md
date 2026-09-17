@@ -4,6 +4,8 @@ Live console only (`ate/` + worker **8766** + UI **5174**). Vibe-coder map: `AGE
 
 New RS1Gxx (2-input, 3-input, N-input, with/without OE) should not need a forked `logic_dc.py`.
 
+Operator bench (DEMO/SIM vs HUMAN+instruments, Excel/log paths, 97/126 checklist): `docs/LOGIC_DC_OPERATOR.md`. DEMO/SIM and `check_logic_dc` are **not** a reproduce claim.
+
 ## Which path (labels match Setup)
 
 Stop at the first row that holds. Same three paths as `AGENTS.md` + `docs/ATE_PLUGIN.md`.
