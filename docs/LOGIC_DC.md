@@ -63,7 +63,8 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **II** -- per input, VI=0 and VI=max.
 - **Delta ICC** -- one input at VCC-offset.
 - **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`.
-- **VOH/VOL** -- when catalog-enabled. Loaded rows only from existing `voh_table` / `vol_table`. No invented loads (PROVISIONAL unloaded otherwise).
+- **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126 use the CONFIRMED Full IOH/IOL grid (same table). No invented extra loads. Unloaded only when the table is absent.
+- **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Measure after settle (VOH/VOL/threshold). Not a DC limit.
 
 RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
 

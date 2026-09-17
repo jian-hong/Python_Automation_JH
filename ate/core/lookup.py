@@ -195,7 +195,7 @@ def _from_part_tables(part_key: str) -> list[dict[str, Any]]:
         mn = row.get("spec_min")
         if vcc is None or mn is None:
             continue
-        sid = f"VOH_{str(vcc).replace('.', 'p')}V"
+        sid = str(row.get("id") or "").strip() or f"VOH_{str(vcc).replace('.', 'p')}V"
         out.append(
             {
                 "id": sid,
@@ -212,7 +212,7 @@ def _from_part_tables(part_key: str) -> list[dict[str, Any]]:
         mx = row.get("spec_max")
         if vcc is None or mx is None:
             continue
-        sid = f"VOL_{str(vcc).replace('.', 'p')}V"
+        sid = str(row.get("id") or "").strip() or f"VOL_{str(vcc).replace('.', 'p')}V"
         out.append(
             {
                 "id": sid,

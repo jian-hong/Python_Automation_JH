@@ -36,3 +36,123 @@ specs:
   max: 5.5
   pass_mode: range
   source: local:RS1G126_(RevA.4).pdf
+- id: VOH_1p65V_100uA
+  unit: V
+  min: 1.55
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -100uA VCC-0.1 @1.65
+- id: VOH_2p3V_100uA
+  unit: V
+  min: 2.2
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -100uA VCC-0.1 @2.3
+- id: VOH_3p0V_100uA
+  unit: V
+  min: 2.9
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -100uA VCC-0.1 @3.0
+- id: VOH_4p5V_100uA
+  unit: V
+  min: 4.4
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -100uA VCC-0.1 @4.5
+- id: VOH_5p5V_100uA
+  unit: V
+  min: 5.4
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -100uA VCC-0.1 @5.5
+- id: VOH_1p65V_4mA
+  unit: V
+  min: 1.2
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -4mA @1.65
+- id: VOH_2p3V_8mA
+  unit: V
+  min: 1.9
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -8mA @2.3
+- id: VOH_3p0V_16mA
+  unit: V
+  min: 2.4
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -16mA @3
+- id: VOH_3p0V_24mA
+  unit: V
+  min: 2.3
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -24mA @3
+- id: VOH_4p5V_32mA
+  unit: V
+  min: 3.8
+  pass_mode: min-only
+  test: voh
+  source: CONFIRMED Full IOH -32mA @4.5
+- id: VOL_1p65V_100uA
+  unit: V
+  max: 0.1
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 100uA @1.65-5.5
+- id: VOL_2p3V_100uA
+  unit: V
+  max: 0.1
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 100uA @1.65-5.5
+- id: VOL_3p0V_100uA
+  unit: V
+  max: 0.1
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 100uA @1.65-5.5
+- id: VOL_4p5V_100uA
+  unit: V
+  max: 0.1
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 100uA @1.65-5.5
+- id: VOL_5p5V_100uA
+  unit: V
+  max: 0.1
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 100uA @1.65-5.5
+- id: VOL_1p65V_4mA
+  unit: V
+  max: 0.45
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 4mA @1.65
+- id: VOL_2p3V_8mA
+  unit: V
+  max: 0.3
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 8mA @2.3
+- id: VOL_3p0V_16mA
+  unit: V
+  max: 0.4
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 16mA @3
+- id: VOL_3p0V_24mA
+  unit: V
+  max: 0.55
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 24mA @3
+- id: VOL_4p5V_32mA
+  unit: V
+  max: 0.55
+  pass_mode: max-only
+  test: vol
+  source: CONFIRMED Full IOL 32mA @4.5

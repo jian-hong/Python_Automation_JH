@@ -120,6 +120,100 @@ def _row_key(row: dict[str, str]) -> tuple[str, str, str, str]:
 
 _CONFIRMED_VCC = [1.65, 2.3, 3.0, 4.5, 5.5]
 
+# CONFIRMED Full load grid (same table 97/126). 100uA expanded onto vcc_list.
+_SIGNED_VOH = (
+    (1.65, -0.0001, 1.55),
+    (2.3, -0.0001, 2.2),
+    (3.0, -0.0001, 2.9),
+    (4.5, -0.0001, 4.4),
+    (5.5, -0.0001, 5.4),
+    (1.65, -0.004, 1.2),
+    (2.3, -0.008, 1.9),
+    (3.0, -0.016, 2.4),
+    (3.0, -0.024, 2.3),
+    (4.5, -0.032, 3.8),
+)
+_SIGNED_VOL = (
+    (1.65, 0.0001, 0.1),
+    (2.3, 0.0001, 0.1),
+    (3.0, 0.0001, 0.1),
+    (4.5, 0.0001, 0.1),
+    (5.5, 0.0001, 0.1),
+    (1.65, 0.004, 0.45),
+    (2.3, 0.008, 0.3),
+    (3.0, 0.016, 0.4),
+    (3.0, 0.024, 0.55),
+    (4.5, 0.032, 0.55),
+)
+
+
+def _table_sigs(rows: list, i_key: str, spec_key: str) -> set[tuple[float, float, float]]:
+    out: set[tuple[float, float, float]] = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            out.add(
+                (
+                    round(float(row["vcc"]), 6),
+                    round(float(row[i_key]), 9),
+                    round(float(row[spec_key]), 6),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _signed_voh_vol_ok(part: str) -> list[str]:
+    errors: list[str] = []
+    raw = load_part_yaml(part)
+    voh = _table_sigs(raw.get("voh_table") if isinstance(raw.get("voh_table"), list) else [], "ioh_a", "spec_min")
+    vol = _table_sigs(raw.get("vol_table") if isinstance(raw.get("vol_table"), list) else [], "iol_a", "spec_max")
+    want_voh = {(round(a, 6), round(b, 9), round(c, 6)) for a, b, c in _SIGNED_VOH}
+    want_vol = {(round(a, 6), round(b, 9), round(c, 6)) for a, b, c in _SIGNED_VOL}
+    if voh != want_voh:
+        errors.append(f"{part} voh_table must match CONFIRMED Full IOH grid (no extra/missing rows)")
+    if vol != want_vol:
+        errors.append(f"{part} vol_table must match CONFIRMED Full IOL grid (no extra/missing rows)")
+    specs = {s.get("id"): s for s in load_part_specs(part)}
+    for sid, _, spec in (
+        ("VOH_4p5V_32mA", "min", 3.8),
+        ("VOL_4p5V_32mA", "max", 0.55),
+    ):
+        row = specs.get(sid) or {}
+        if sid.startswith("VOH"):
+            if round(float(row.get("min") or 0), 6) != 3.8:
+                errors.append(f"{part} limits missing {sid} min=3.8")
+            mode = str(row.get("pass_mode") or "").replace("_", "-")
+            if mode not in ("min-only", "min"):
+                errors.append(f"{part} {sid} pass_mode must be min-only")
+        else:
+            if round(float(row.get("max") or 0), 6) != 0.55:
+                errors.append(f"{part} limits missing {sid} max=0.55")
+            mode = str(row.get("pass_mode") or "").replace("_", "-")
+            if mode not in ("max-only", "max"):
+                errors.append(f"{part} {sid} pass_mode must be max-only")
+    pm = raw.get("product_model") if isinstance(raw.get("product_model"), dict) else {}
+    dc = pm.get("dc_limits") if isinstance(pm.get("dc_limits"), dict) else {}
+    for which in ("voh", "vol"):
+        st = str((dc.get(which) or {}).get("status") or "") if isinstance(dc.get(which), dict) else ""
+        if st.upper() == "PROVISIONAL":
+            errors.append(f"{part} dc_limits.{which} must drop PROVISIONAL once the load grid is wired")
+    recipe = pm.get("recipe") if isinstance(pm.get("recipe"), dict) else {}
+    try:
+        if abs(float(recipe.get("settle_s")) - 0.05) > 1e-9:
+            errors.append(f"{part} recipe.settle_s must be 0.05 (DC Spec), got {recipe.get('settle_s')}")
+        if int(recipe.get("stable_n")) != 3:
+            errors.append(f"{part} recipe.stable_n must be 3")
+        if abs(float(recipe.get("stable_eps_V")) - 0.005) > 1e-9:
+            errors.append(f"{part} recipe.stable_eps_V must be 0.005")
+        if abs(float(recipe.get("settle_timeout_s")) - 2.0) > 1e-9:
+            errors.append(f"{part} recipe.settle_timeout_s must be 2.0")
+    except (TypeError, ValueError):
+        errors.append(f"{part} recipe settle loop keys missing")
+    return errors
+
 
 def _fail_closed_until_signed(part: str, m) -> list[str]:
     """UNCONFIRMED / signed-looking tokens fail-close until Datasheet-signed CONFIRMED."""
@@ -270,10 +364,11 @@ def _rs1g97_holds() -> list[str]:
     got_vcc = [round(float(x), 6) for x in m.vcc_list]
     if got_vcc != _CONFIRMED_VCC:
         errors.append(f"rs1g97 vcc_list must be CONFIRMED {_CONFIRMED_VCC}, got {m.vcc_list}")
-    raw = load_part_yaml("rs1g97")
-    blob = str(raw)
-    if "ioh_a" in blob.lower() or "iol_a" in blob.lower():
-        errors.append("rs1g97 must not invent IOH/IOL load numbers")
+    errors += _signed_voh_vol_ok("rs1g97")
+    if lookup_pass_mode(m, "VOH", "voh") != "min_only":
+        errors.append("rs1g97 pass_mode VOH must be min_only")
+    if lookup_pass_mode(m, "VOL", "vol") != "max_only":
+        errors.append("rs1g97 pass_mode VOL must be max_only")
     specs = {s.get("id"): s for s in load_part_specs("rs1g97")}
     if specs.get("ICC_uA", {}).get("test") != "icc":
         errors.append("rs1g97 ICC_uA spec test must be icc (Path B id)")
@@ -288,6 +383,8 @@ def _rs1g97_holds() -> list[str]:
         errors.append("logic_dc.py must document INSTRUMENT_SENSE ICC: DMM-on-VCC")
     if "INSTRUMENT_SENSE VOH:" not in src or "INSTRUMENT_SENSE IOZ:" not in src:
         errors.append("logic_dc.py must document VOH/VOL/IOZ force/sense")
+    if "SETTLE: measure-after-settle" not in src or "_wait_settled_voltage" not in src:
+        errors.append("logic_dc.py must settle then measure (VOH/VOL/threshold)")
     if "_mux97_isolation_ok" in src or "_mux97_isolation_ok" in _MODEL.read_text(encoding="utf-8"):
         errors.append("_mux97_isolation_ok must not remain as a green gate")
     return errors
@@ -339,6 +436,11 @@ def _buf126_ok() -> list[str]:
     got_vcc = [round(float(x), 6) for x in m.vcc_list]
     if got_vcc != _CONFIRMED_VCC:
         errors.append(f"rs1g126 vcc_list must be CONFIRMED {_CONFIRMED_VCC}, got {m.vcc_list}")
+    errors += _signed_voh_vol_ok("rs1g126")
+    if lookup_pass_mode(m, "VOH", "voh") != "min_only":
+        errors.append("rs1g126 pass_mode VOH must be min_only")
+    if lookup_pass_mode(m, "VOL", "vol") != "max_only":
+        errors.append("rs1g126 pass_mode VOL must be max_only")
     errors += _fail_closed_until_signed("rs1g126", m)
     return errors
 

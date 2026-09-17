@@ -955,6 +955,10 @@ def load_product_model(
         else {}
     )
     recipe = _as_dict(blob.get("recipe"))
+    recipe.setdefault("settle_s", 0.05)
+    recipe.setdefault("stable_n", 3)
+    recipe.setdefault("stable_eps_V", 0.005)
+    recipe.setdefault("settle_timeout_s", 2.0)
     pin_drive = _pin_drive(blob, logic_inputs, oe_pin, oe_mode)
     part_name = str(blob.get("part") or part_yaml.get("part") or key).strip()
     pass_mode = _pass_mode(blob, schmitt)

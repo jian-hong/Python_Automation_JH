@@ -21,6 +21,32 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
+# CONFIRMED VOH/VOL Full load grid (same table as RS1G97). Jian Hong 2026-09-17.
+# 100uA @1.65-5.5 expanded onto CONFIRMED vcc_list only. VOH min = VCC-0.1.
+# PSU CH2 is Y-load: VOH sink rail 0V; VOL source rail = VCC. Not datasheet Vref.
+voh_table:
+  - {id: VOH_1p65V_100uA, vcc: 1.65, ioh_a: -0.0001, spec_min: 1.55}
+  - {id: VOH_2p3V_100uA, vcc: 2.3, ioh_a: -0.0001, spec_min: 2.2}
+  - {id: VOH_3p0V_100uA, vcc: 3.0, ioh_a: -0.0001, spec_min: 2.9}
+  - {id: VOH_4p5V_100uA, vcc: 4.5, ioh_a: -0.0001, spec_min: 4.4}
+  - {id: VOH_5p5V_100uA, vcc: 5.5, ioh_a: -0.0001, spec_min: 5.4}
+  - {id: VOH_1p65V_4mA, vcc: 1.65, ioh_a: -0.004, spec_min: 1.2}
+  - {id: VOH_2p3V_8mA, vcc: 2.3, ioh_a: -0.008, spec_min: 1.9}
+  - {id: VOH_3p0V_16mA, vcc: 3.0, ioh_a: -0.016, spec_min: 2.4}
+  - {id: VOH_3p0V_24mA, vcc: 3.0, ioh_a: -0.024, spec_min: 2.3}
+  - {id: VOH_4p5V_32mA, vcc: 4.5, ioh_a: -0.032, spec_min: 3.8}
+vol_table:
+  - {id: VOL_1p65V_100uA, vcc: 1.65, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_2p3V_100uA, vcc: 2.3, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_3p0V_100uA, vcc: 3.0, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p5V_100uA, vcc: 4.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p5V_100uA, vcc: 5.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_1p65V_4mA, vcc: 1.65, iol_a: 0.004, spec_max: 0.45}
+  - {id: VOL_2p3V_8mA, vcc: 2.3, iol_a: 0.008, spec_max: 0.3}
+  - {id: VOL_3p0V_16mA, vcc: 3.0, iol_a: 0.016, spec_max: 0.4}
+  - {id: VOL_3p0V_24mA, vcc: 3.0, iol_a: 0.024, spec_max: 0.55}
+  - {id: VOL_4p5V_32mA, vcc: 4.5, iol_a: 0.032, spec_max: 0.55}
+
 enabled_tests:
   - tp
   - ten
@@ -84,7 +110,10 @@ product_model:
     OE: {src: awg, ch: 2}
   recipe:
     threshold_step_v: 0.05
-    settle_s: 0.3
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    settle_timeout_s: 2.0
     icc_corners: "data x OE"
     ioz_when: oe_inactive
     delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
@@ -115,8 +144,8 @@ product_model:
     delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
     ii: {spec_id: II_uA, limit_mode: max_only}
     ioz: {spec_id: IOZ_uA, limit_mode: max_only}
-    voh: {status: PROVISIONAL, note: "card CONFIRMED load grid -- not wired; do not invent"}
-    vol: {status: PROVISIONAL, note: "card CONFIRMED load grid -- not wired; do not invent"}
+    voh: {status: CONFIRMED, note: "wired CONFIRMED Full IOH grid; PSU CH2 Y-load"}
+    vol: {status: CONFIRMED, note: "wired CONFIRMED Full IOL grid; PSU CH2 Y-load"}
   # Function table (OE, A -> Y / Z). CONFIRMED Jian Hong 2026-09-17.
   truth_table:
     status: CONFIRMED
@@ -134,4 +163,3 @@ product_model:
   gaps:
     - "Q1V / automotive: UNSURE on card -- leave unset"
     - "XDFN6 NC/VCC pin map differs -- package-specific fixture, not invented here"
-    - "VOH/VOL load grid on card -- not wired into limits yaml; do not invent IOH/IOL."

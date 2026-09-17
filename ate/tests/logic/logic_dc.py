@@ -12,9 +12,10 @@ INSTRUMENT_SENSE ICC: DMM-on-VCC (DMM in series with PSU CH1 / DUT VCC).
 INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at VCC-offset, others at rail.
 INSTRUMENT_SENSE II: DMM in series with the swept input pin (force VI via AWG/PSU).
 INSTRUMENT_SENSE VOH: force Y-high from truth_table vector; DMM sense V(Y).
-  Loaded IOH only from existing voh_table (no invented IOH/IOL loads).
+  Loaded IOH from CONFIRMED voh_table (PSU CH2 Y-load sink rail 0V unless vref given).
 INSTRUMENT_SENSE VOL: force Y-low from truth_table vector; DMM sense V(Y).
-  Loaded IOL only from existing vol_table (no invented loads).
+  Loaded IOL from CONFIRMED vol_table (PSU CH2 Y-load source rail = VCC unless vref given).
+SETTLE: measure-after-settle (recipe settle_s / stable_n / stable_eps_V / settle_timeout_s).
 INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
   Not applicable when oe=none.
 
@@ -199,7 +200,7 @@ def _step_v(model: ProductModel) -> float:
     return 0.05
 
 
-def _settle(model: ProductModel, default: float = 0.3) -> float:
+def _settle(model: ProductModel, default: float = 0.05) -> float:
     raw = model.recipe.get("settle_s")
     try:
         if raw is not None:
@@ -207,6 +208,48 @@ def _settle(model: ProductModel, default: float = 0.3) -> float:
     except (TypeError, ValueError):
         pass
     return default
+
+
+def _recipe_num(model: ProductModel, key: str, default: float) -> float:
+    raw = model.recipe.get(key)
+    try:
+        if raw is not None:
+            return float(raw)
+    except (TypeError, ValueError):
+        pass
+    return float(default)
+
+
+def _wait_settled_voltage(dmm, model: ProductModel, *, setup: bool = True) -> float:
+    """Wait settle_s, then measure. Repeat until stable_n within eps or timeout.
+
+    Measure-after-settle, not before. Recipe is not a DC limit.
+    """
+    from dmm_setup import dmm_read, dmm_setup_voltage
+
+    settle_s = max(0.0, _recipe_num(model, "settle_s", 0.05))
+    try:
+        n = int(model.recipe.get("stable_n") or 3)
+    except (TypeError, ValueError):
+        n = 3
+    n = max(1, n)
+    eps = _recipe_num(model, "stable_eps_V", 0.005)
+    timeout = _recipe_num(model, "settle_timeout_s", 2.0)
+    if setup:
+        dmm_setup_voltage(dmm)
+    t0 = time.monotonic()
+    window: list[float] = []
+    v = 0.0
+    while True:
+        time.sleep(settle_s)
+        v = float(dmm_read(dmm))
+        window.append(v)
+        if len(window) > n:
+            window = window[-n:]
+        if len(window) >= n and (max(window) - min(window)) <= eps:
+            return sum(window) / len(window)
+        if (time.monotonic() - t0) >= timeout:
+            return sum(window) / len(window) if window else v
 
 
 def _vmax_for_ii(model: ProductModel, vcc: float) -> float:
@@ -374,7 +417,7 @@ def _sweep_threshold(
     pattern: IsolationPattern,
     rising: bool,
 ) -> Optional[float]:
-    from dmm_setup import dmm_read, dmm_setup_voltage
+    from dmm_setup import dmm_setup_voltage
 
     drives = _drive_for_sweep(model, pattern.sweep_pin)
     _apply_levels(instr, model, pattern.fix, vcc, ilim, drives=drives)
@@ -386,13 +429,11 @@ def _sweep_threshold(
         seq = list(reversed(seq))
     found: Optional[float] = None
     prev: Optional[float] = None
-    settle = max(0.02, _settle(model, 0.05) if _settle(model, 0.05) < 0.2 else 0.05)
     sweep_drive = drives[pattern.sweep_pin]
     for i in seq:
         vin = min(vcc, i * step)
         _apply_pin(instr, sweep_drive, vin, ilim)
-        time.sleep(settle)
-        vout = float(dmm_read(instr.dmm))
+        vout = _wait_settled_voltage(instr.dmm, model, setup=False)
         if _transition(prev, vout, _mid(vcc), pattern.y_expect, rising):
             found = vin
             break
@@ -698,43 +739,45 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
             from psu_setup import power_off, power_on_protected
 
             vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
-            settle = float(model.recipe.get("voh_vol_settle_s") or load_part_yaml(key).get("voh_vol_settle_s") or 1.0)
             for entry in table:
                 vcc = float(entry["vcc"])
                 spec = entry.get("spec_min")
                 ioh = entry.get("ioh_a")
-                vref = entry.get("vref")
-                if spec is None or ioh is None or vref is None:
-                    rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "voh_table row missing spec/ioh/vref"})
+                if spec is None or ioh is None:
+                    rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "voh_table row missing spec/ioh"})
                     continue
+                vref = entry.get("vref")
+                if vref is None:
+                    vref = 0.0  # fixture sink rail; not a datasheet Vref
                 _power_vcc(instr, vcc, ilim)
                 _apply_y_vector(instr, model, True, vcc, ilim)
                 if vplus is not None:
                     power_on_protected(instr.psu, 3, float(vplus), ilim)
-                power_on_protected(instr.psu, 2, float(vref), float(ioh), ocp=0.05)
-                time.sleep(settle)
-                measured = _avg_voltage(instr.dmm, 3)
+                power_on_protected(instr.psu, 2, float(vref), abs(float(ioh)), ocp=max(0.05, abs(float(ioh)) * 1.2))
+                measured = _wait_settled_voltage(instr.dmm, model)
                 ok = measured >= float(spec)
+                mid = str(entry.get("id") or f"VOH_{str(vcc).replace('.', 'p')}V")
                 rows.append(
                     {
+                        "id": mid,
                         "VCC": vcc,
+                        "IOH_A": float(ioh),
                         "Vref": float(vref),
                         "Measured": measured,
                         "Spec_min": float(spec),
                         "Result": "PASS" if ok else "FAIL",
                         "mode": "loaded",
+                        "pass_mode": "min_only",
                     }
                 )
-                tag = str(vcc).replace(".", "p")
-                meas.append(_meas(model, f"VOH_{tag}V", measured, "V", test_id="voh"))
+                meas.append(_meas(model, mid, measured, "V", test_id="voh"))
                 power_off(instr.psu)
                 time.sleep(0.3)
         else:
             for vcc in _vcc_corners(params, model):
                 _power_vcc(instr, vcc, ilim)
                 vec = _apply_y_vector(instr, model, True, vcc, ilim)
-                time.sleep(_settle(model, 0.5))
-                vout = _avg_voltage(instr.dmm, 3)
+                vout = _wait_settled_voltage(instr.dmm, model)
                 rec = {
                     "VCC": vcc,
                     "VOH": vout,
@@ -781,43 +824,45 @@ def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
             from psu_setup import power_off, power_on_protected
 
             vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
-            settle = float(model.recipe.get("voh_vol_settle_s") or load_part_yaml(key).get("voh_vol_settle_s") or 1.0)
             for entry in table:
                 vcc = float(entry["vcc"])
                 spec = entry.get("spec_max")
                 iol = entry.get("iol_a")
-                vref = entry.get("vref")
-                if spec is None or iol is None or vref is None:
-                    rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "vol_table row missing spec/iol/vref"})
+                if spec is None or iol is None:
+                    rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "vol_table row missing spec/iol"})
                     continue
+                vref = entry.get("vref")
+                if vref is None:
+                    vref = vcc  # fixture source rail; not a datasheet Vref
                 _power_vcc(instr, vcc, ilim)
                 _apply_y_vector(instr, model, False, vcc, ilim)
-                power_on_protected(instr.psu, 2, float(vref), float(iol), ocp=0.05)
+                power_on_protected(instr.psu, 2, float(vref), abs(float(iol)), ocp=max(0.05, abs(float(iol)) * 1.2))
                 if vplus is not None:
                     power_on_protected(instr.psu, 3, float(vplus), ilim)
-                time.sleep(settle)
-                measured = _avg_voltage(instr.dmm, 3)
+                measured = _wait_settled_voltage(instr.dmm, model)
                 ok = measured <= float(spec)
+                mid = str(entry.get("id") or f"VOL_{str(vcc).replace('.', 'p')}V")
                 rows.append(
                     {
+                        "id": mid,
                         "VCC": vcc,
+                        "IOL_A": float(iol),
                         "Vref": float(vref),
                         "Measured": measured,
                         "Spec_max": float(spec),
                         "Result": "PASS" if ok else "FAIL",
                         "mode": "loaded",
+                        "pass_mode": "max_only",
                     }
                 )
-                tag = str(vcc).replace(".", "p")
-                meas.append(_meas(model, f"VOL_{tag}V", measured, "V", test_id="vol"))
+                meas.append(_meas(model, mid, measured, "V", test_id="vol"))
                 power_off(instr.psu)
                 time.sleep(0.3)
         else:
             for vcc in _vcc_corners(params, model):
                 _power_vcc(instr, vcc, ilim)
                 vec = _apply_y_vector(instr, model, False, vcc, ilim)
-                time.sleep(_settle(model, 0.5))
-                vout = _avg_voltage(instr.dmm, 3)
+                vout = _wait_settled_voltage(instr.dmm, model)
                 rec = {
                     "VCC": vcc,
                     "VOL": vout,

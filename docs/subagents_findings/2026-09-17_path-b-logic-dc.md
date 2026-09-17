@@ -10,7 +10,7 @@ One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_mo
 ## traps
 
 - Logic registry is one id namespace: do not register a second `voh`/`vol`/`icc`. Dispatch on product_model vs vcca/vccb.
-- Do not invent truth rows or VOH/VOL IOH/IOL numbers. 97/126 tables are CONFIRMED (Jian Hong 2026-09-17). VOH/VOL loads stay unwired / PROVISIONAL.
+- Do not invent truth rows or VOH/VOL IOH/IOL numbers. 97/126 tables are CONFIRMED (Jian Hong 2026-09-17). VOH/VOL Full load grid is wired (same table); no extra VCC/load rows.
 - check_logic_dc fail-closes UNCONFIRMED SKUs. 97 and 126 pass the Datasheet-signed CONFIRMED status gate. Do not claim bench green.
 - 126 unused data ties N/A (single data pin). Only OE-active isolation for A.
 - Do not scrape Ariff/See Lim/Eugene trees into YAML. Limits stay in `ate/config/limits/` citing the Reference PDF extract.
