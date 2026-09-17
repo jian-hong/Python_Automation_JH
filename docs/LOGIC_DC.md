@@ -52,9 +52,9 @@ product_model:
   gaps: []                # honest UNSURE / PROVISIONAL notes
 ```
 
-Aliases accepted: `vcc_sweep_list`; `threshold_isolation: [{sweep, hold, y_tracks}]`.
+Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_list`; `threshold_isolation: [{sweep, hold, y_tracks}]`. Shared runner: `ate/tests/logic/logic_dc.py` (import-format alias `ate/tests/logic/dc.py` -- not a second fork).
 
-`pass_mode` on the part yaml (alias `limit_mode`): Schmitt VT+/VT- = `range`; VIH/`VOH` = `min_only`; VIL/VOL/ICC/dICC/II/IOZ = `max_only`.
+`pass_mode` on the part yaml (alias `limit_mode`): Schmitt VT+/VT-/hysteresis = `range`; VIH/`VOH` = `min_only`; VIL/VOL/ICC/dICC/II/IOZ = `max_only`.
 
 ### What the shared runner derives
 

@@ -130,6 +130,9 @@ def _check_family_conditions() -> None:
         raise AssertionError(f"rs1g97 logic_dc icc_corners must be 8, got {rs97_ldc}")
     if "ioz" in (rs97_cat.get("tests") or {}):
         raise AssertionError("rs1g97 catalog must not include ioz")
+    for banned in ("ioff", "ioff_leakage", "off_current"):
+        if banned in (rs97_cat.get("tests") or {}):
+            raise AssertionError(f"rs1g97 catalog must not include {banned}")
     if "input_threshold" in (logic_cat.get("tests") or {}):
         raise AssertionError("rs29511 catalog must not include Path B input_threshold")
     if "cap_load" in (ariff_cat.get("tests") or {}):

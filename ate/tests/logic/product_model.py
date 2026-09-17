@@ -202,11 +202,24 @@ def load_part_yaml(part_key: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _model_block(blob: Any) -> dict[str, Any]:
+    """Accept product_model: or import-format logic_dc: (same mapping)."""
+    if not isinstance(blob, dict):
+        return {}
+    for key in ("product_model", "logic_dc"):
+        inner = blob.get(key)
+        if isinstance(inner, dict) and inner:
+            return dict(inner)
+    if blob.get("logic_inputs") or blob.get("truth_table") or blob.get("pins"):
+        return dict(blob)
+    return {}
+
+
 def load_product_model_dict(part_key: str) -> dict[str, Any]:
     """Return the product_model mapping, or {} if this part is not Path B.
 
     Adjacent file: ate/config/parts/<key>.model.yaml (optional). Inline
-    `product_model:` in the part YAML wins on overlapping keys.
+    `product_model:` wins over import-format `logic_dc:` on overlapping keys.
     """
     key = str(part_key or "").strip().lower()
     if not key:
@@ -215,11 +228,15 @@ def load_product_model_dict(part_key: str) -> dict[str, Any]:
     adj = PARTS_DIR / f"{key}.model.yaml"
     if adj.is_file():
         blob = yaml.safe_load(adj.read_text(encoding="utf-8")) or {}
-        if isinstance(blob, dict):
-            inner = blob.get("product_model") if isinstance(blob.get("product_model"), dict) else blob
-            if isinstance(inner, dict):
-                merged.update(inner)
+        inner = _model_block(blob)
+        if inner:
+            merged.update(inner)
+        elif isinstance(blob, dict) and not any(k in blob for k in ("product_model", "logic_dc")):
+            merged.update(blob)
     part = load_part_yaml(key)
+    logic_dc = part.get("logic_dc")
+    if isinstance(logic_dc, dict):
+        merged.update(logic_dc)
     inline = part.get("product_model")
     if isinstance(inline, dict):
         merged.update(inline)
@@ -595,6 +612,7 @@ def _pass_mode(blob: dict[str, Any], schmitt: bool) -> dict[str, str]:
             if out.get("input_threshold") == "range":
                 out["VT+"] = "range"
                 out["VT-"] = "range"
+        out.setdefault("HYST", "range")
     else:
         # Drop a collapsed input_threshold:range so callers must use VIH/VIL.
         if "VIH" not in out and "VIH_V" not in out:
@@ -621,6 +639,8 @@ def lookup_pass_mode(model: ProductModel, meas_id: str, test_id: str = "") -> st
         keys.extend(["VT+", "VTPLUS", "VTPLUS_V", "input_threshold", "vth"])
     if mid.upper() in ("VTMINUS_V", "VT-", "VTMINUS"):
         keys.extend(["VT-", "VTMINUS", "VTMINUS_V", "input_threshold", "vth"])
+    if "HYST" in mid.upper() or "HYSTERESIS" in mid.upper():
+        keys.extend(["HYST", "hyst", "hysteresis"])
     if mid.upper() in ("VIH_V", "VIH"):
         keys.extend(["VIH", "VIH_V"])
     if mid.upper() in ("VIL_V", "VIL"):
@@ -750,6 +770,7 @@ _PANEL_SAVE_KEYS = (
     "pass_mode",
     "limit_mode",
     "vcc_list",
+    "vcc_sweep_list",
     "vcc_list_status",
     "truth_table_status",
     "isolation_status",
@@ -766,9 +787,10 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise RuntimeError(f"part yaml is not a mapping: {path}")
-    pm = data.get("product_model")
+    save_key = "product_model" if isinstance(data.get("product_model"), dict) else "logic_dc"
+    pm = data.get(save_key)
     if not isinstance(pm, dict):
-        raise RuntimeError(f"{key}: no product_model block to edit")
+        raise RuntimeError(f"{key}: no product_model / logic_dc block to edit")
     before = load_product_model(key)
     if before is None:
         raise RuntimeError(f"{key}: product_model failed to load")
@@ -778,12 +800,13 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
         if field not in patch:
             continue
         val = patch[field]
-        if field == "vcc_list":
+        if field in ("vcc_list", "vcc_sweep_list"):
             nums = _floats(val) if not isinstance(val, (int, float)) else [float(val)]
             if not nums:
                 continue
             # Do not expand inventively: keep existing length unless operator edits YAML list.
             pm["vcc_list"] = nums
+            pm["vcc_sweep_list"] = nums
             continue
         if field in ("truth_table_status", "isolation_status"):
             if is_datasheet_signed(val) and not is_datasheet_signed(
@@ -826,7 +849,7 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
     # Never invent IOH/IOL via the panel.
     for banned in ("voh_table", "vol_table", "ioh_a", "iol_a"):
         pm.pop(banned, None)
-    data["product_model"] = pm
+    data[save_key] = pm
     path.write_text(
         yaml.safe_dump(data, sort_keys=False, allow_unicode=True),
         encoding="utf-8",

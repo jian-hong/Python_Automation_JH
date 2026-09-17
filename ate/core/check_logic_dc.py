@@ -30,6 +30,7 @@ from ate.tests.logic.product_model import (
 )
 
 _LOGIC_DC = Path(__file__).resolve().parents[1] / "tests" / "logic" / "logic_dc.py"
+_DC_ALIAS = Path(__file__).resolve().parents[1] / "tests" / "logic" / "dc.py"
 _MODEL = Path(__file__).resolve().parents[1] / "tests" / "logic" / "product_model.py"
 
 _PATH_B_IDS = (
@@ -241,6 +242,8 @@ def _rs1g97_holds() -> list[str]:
         errors.append("rs1g97 pass_mode VT+ must be range")
     if lookup_pass_mode(m, "VTMINUS_V", "input_threshold") != "range":
         errors.append("rs1g97 pass_mode VT- must be range")
+    if lookup_pass_mode(m, "HYST", "input_threshold") != "range":
+        errors.append("rs1g97 pass_mode HYST must be range")
     if str(m.pass_mode.get("input_threshold") or "").lower() == "range" and "VT+" not in m.pass_mode:
         errors.append("rs1g97 must not collapse VT+/VT- into a single input_threshold: range")
     if [round(float(x), 6) for x in m.vcc_list] != [5.0]:
@@ -330,9 +333,12 @@ def _registry_ok() -> list[str]:
     if icc is None or icc.dual_channel:
         errors.append("icc must be registered dual_channel=False")
     from ate.tests.logic import logic_dc as ldc
+    from ate.tests.logic import dc as dcmod
 
     if th.run is not ldc._run_input_threshold:
         errors.append("input_threshold must be logic_dc._run_input_threshold")
+    if dcmod._run_icc is not ldc._run_icc:
+        errors.append("dc.py must be the same runner as logic_dc.py (no per-chip fork)")
     if get("delta_icc") is None or get("delta_icc").run is not ldc._run_delta_icc:
         errors.append("delta_icc must be logic_dc._run_delta_icc")
     if get("ioz") is None or get("ioz").run is not ldc._run_ioz:
@@ -479,6 +485,12 @@ def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
     errors += _no_part_name_ifs(_MODEL)
+    if _DC_ALIAS.is_file():
+        errors += _no_part_name_ifs(_DC_ALIAS)
+    else:
+        errors.append("ate/tests/logic/dc.py missing (import-format alias of logic_dc)")
+    if 'part.get("logic_dc")' not in _MODEL.read_text(encoding="utf-8"):
+        errors.append("product_model loader must accept logic_dc: import-format key")
     if not has_product_model("rs1g08") or not has_product_model("rs1g97"):
         errors.append("rs1g08 and rs1g97 must carry product_model schema")
     errors += _and_isolation_ok()

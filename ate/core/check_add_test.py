@@ -33,7 +33,9 @@ def check_add_test() -> list[str]:
         "Wrap + enable on part",
         "Test program",
         "logic_inputs",
-        "truth_table",
+        "threshold_isolation",
+        "logic_dc",
+        "dc.py",
         "test_params.yaml",
         "pass_mode",
         "fail-open",
@@ -76,6 +78,16 @@ def check_add_test() -> list[str]:
     th = get("input_threshold")
     if th is None or th.run is not ldc._run_input_threshold:
         errors.append("input_threshold must stay logic_dc body (no per-chip fork)")
+    from ate.tests.logic import dc as dcmod
+
+    if dcmod._run_icc is not ldc._run_icc or dcmod._run_input_threshold is not ldc._run_input_threshold:
+        errors.append("ate.tests.logic.dc must be the same runner as logic_dc (no per-chip fork)")
+    dc_path = _REPO / "ate" / "tests" / "logic" / "dc.py"
+    dc_src = dc_path.read_text(encoding="utf-8") if dc_path.is_file() else ""
+    if "logic_dc" not in dc_src or "__getattr__" not in dc_src:
+        errors.append("dc.py must re-export logic_dc (Product Model import name)")
+    if "register(TestSpec" in dc_src:
+        errors.append("dc.py must not register a second TestSpec suite")
     m08 = load_product_model("rs1g08")
     m97 = load_product_model("rs1g97")
     if m08 is None or sim_icc_plan(m08)["n"] != 4:

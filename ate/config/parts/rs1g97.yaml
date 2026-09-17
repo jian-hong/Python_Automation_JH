@@ -40,7 +40,7 @@ fixture_modes:
     checklist:
       - "RS1G97 is configurable logic, not analog switch."
       - "truth_table.status=UNCONFIRMED (Datasheet §4 rows; not Datasheet-signed)."
-      - "AWG CH1=A CH2=B; PSU CH1=VCC CH3=C static; CH2 is Y-load/vref for VOH/VOL/IOZ."
+      - "AWG CH1=A CH2=B; PSU CH1=VCC CH3=C static; CH2 is Y-load/vref for VOH/VOL (no IOZ: oe none)."
       - "See Lim goldens are detect-only (seelim_dc locator). Limits stay in ate/config/limits."
     tests:
       - tp
@@ -93,6 +93,7 @@ product_model:
     ii: max_only
     voh: min_only
     vol: max_only
+    HYST: range
   limit_mode:
     VT+: range
     VT-: range
@@ -101,6 +102,7 @@ product_model:
     ii: max_only
     voh: min_only
     vol: max_only
+    HYST: range
   dc_limits:
     # Numbers live in ate/config/limits/rs1g97.yaml. Do not invent IOH/IOL.
     icc: {spec_id: ICC_uA, limit_mode: max_only}
