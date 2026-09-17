@@ -118,8 +118,11 @@ def _row_key(row: dict[str, str]) -> tuple[str, str, str, str]:
     return (row.get("A", ""), row.get("B", ""), row.get("C", ""), row.get("Y", ""))
 
 
+_CONFIRMED_VCC = [1.65, 2.3, 3.0, 4.5, 5.5]
+
+
 def _fail_closed_until_signed(part: str, m) -> list[str]:
-    """UNCONFIRMED / signed-looking tokens fail-close until Datasheet-signed CONFIRM."""
+    """UNCONFIRMED / signed-looking tokens fail-close until Datasheet-signed CONFIRMED."""
     errors: list[str] = []
     if claimed_signed_without_datasheet(m.truth_table_status):
         errors.append(
@@ -131,11 +134,20 @@ def _fail_closed_until_signed(part: str, m) -> list[str]:
             f"{part} isolation.status={m.isolation_status!r} must not claim confirm "
             "without Datasheet-signed"
         )
-    if is_datasheet_signed(m.truth_table_status) and is_datasheet_signed(m.isolation_status):
+    if claimed_signed_without_datasheet(m.status):
+        errors.append(
+            f"{part} product_model.status={m.status!r} must not claim confirm "
+            "without Datasheet-signed"
+        )
+    if (
+        is_datasheet_signed(m.truth_table_status)
+        and is_datasheet_signed(m.isolation_status)
+        and is_datasheet_signed(m.status or m.truth_table_status)
+    ):
         return errors
     errors.append(
         f"{part} truth_table.status={m.truth_table_status} isolation.status={m.isolation_status} "
-        "UNCONFIRMED (not Datasheet-signed CONFIRM; not greenable)"
+        "UNCONFIRMED (not Datasheet-signed CONFIRMED; not greenable)"
     )
     return errors
 
@@ -150,14 +162,20 @@ def _status_tokens_ok() -> list[str]:
         errors.append("from_datasheet_function_table must fail-close as UNCONFIRMED (not greenable)")
     if not claimed_signed_without_datasheet(bogus):
         errors.append("from_datasheet_function_table must not look signed/confirmed")
+    if not is_datasheet_signed("CONFIRMED"):
+        errors.append("CONFIRMED must pass the Datasheet-signed CONFIRMED status gate")
+    if claimed_signed_without_datasheet("CONFIRMED") or is_unconfirmed_status("CONFIRMED"):
+        errors.append("CONFIRMED must not fail-close as unsigned / UNCONFIRMED")
+    if is_datasheet_signed("CONFIRM"):
+        errors.append("bare CONFIRM (no ED) must not pass the Datasheet-signed gate")
     return errors
 
 
 def _rs1g97_holds() -> list[str]:
-    """Data holds for RS1G97. Does not treat the table as Datasheet-signed.
+    """Data holds for RS1G97. Status gate passes on Datasheet-signed CONFIRMED.
 
-    Isolation is checked against derive_isolation(truth_table). UNCONFIRMED
-    is fail-closed / not greenable.
+    Isolation is checked against derive_isolation(truth_table). C-track
+    A:H B:L is CONFIRMED (not PROPOSED HOLD CONFIRM).
     """
     errors: list[str] = []
     m = load_product_model("rs1g97")
@@ -210,27 +228,30 @@ def _rs1g97_holds() -> list[str]:
         if not yaml_sigs.issubset(der_sigs):
             errors.append("rs1g97 YAML isolation must match derive_isolation(truth_table)")
     yaml_c = isolation_for(m, "C")
-    proposed = [
+    track_c = [
         p
         for p in yaml_c
         if p.fix.get("A") == "H" and p.fix.get("B") == "L" and p.y_expect == "track"
     ]
-    if not proposed:
-        errors.append("rs1g97 C-track A:H B:L must exist as YAML data (PROPOSED HOLD CONFIRM)")
-    elif not any("PROPOSED" in str(p.status or "").upper() for p in proposed):
-        errors.append("rs1g97 C-track A:H B:L must be marked PROPOSED HOLD CONFIRM")
+    if not track_c:
+        errors.append("rs1g97 C-track A:H B:L must exist (CONFIRMED)")
+    elif any(
+        "PROPOSED" in str(p.status or "").upper() or "HOLD CONFIRM" in str(p.status or "").upper()
+        for p in track_c
+    ):
+        errors.append("rs1g97 C-track A:H B:L must not stay PROPOSED HOLD CONFIRM")
     invert_c = [
         p
         for p in yaml_c
         if p.fix.get("A") == "L" and p.fix.get("B") == "H" and p.y_expect == "invert"
     ]
     if not invert_c:
-        errors.append("rs1g97 C invert A:L B:H must stay (See Lim fallback)")
+        errors.append("rs1g97 C invert A:L B:H must stay")
     c_run = isolation_for_run(m, "C")
-    if not c_run or c_run[0].y_expect != "invert":
-        errors.append("rs1g97 run isolation C must skip PROPOSED track and use invert A:L B:H")
-    elif c_run[0].fix.get("A") != "L" or c_run[0].fix.get("B") != "H":
-        errors.append(f"rs1g97 run isolation C invert hold must be A:L B:H, got {c_run[0].fix}")
+    if not c_run or c_run[0].y_expect != "track":
+        errors.append("rs1g97 run isolation C must use CONFIRMED track A:H B:L")
+    elif c_run[0].fix.get("A") != "H" or c_run[0].fix.get("B") != "L":
+        errors.append(f"rs1g97 run isolation C track hold must be A:H B:L, got {c_run[0].fix}")
     a_run = isolation_for_run(m, "A")
     if not a_run or a_run[0].y_expect != "track":
         errors.append("rs1g97 run isolation A must prefer first track")
@@ -244,10 +265,11 @@ def _rs1g97_holds() -> list[str]:
         errors.append("rs1g97 pass_mode VT- must be range")
     if lookup_pass_mode(m, "HYST", "input_threshold") != "range":
         errors.append("rs1g97 pass_mode HYST must be range")
-    if str(m.pass_mode.get("input_threshold") or "").lower() == "range" and "VT+" not in m.pass_mode:
+    if str(m.pass_mode.get("input_threshold") or "").lower() == "range" and "VT+" not in m.pass_mode and "vth_vt_plus" not in m.pass_mode:
         errors.append("rs1g97 must not collapse VT+/VT- into a single input_threshold: range")
-    if [round(float(x), 6) for x in m.vcc_list] != [5.0]:
-        errors.append(f"rs1g97 vcc_list must stay [5.0] (not expanded), got {m.vcc_list}")
+    got_vcc = [round(float(x), 6) for x in m.vcc_list]
+    if got_vcc != _CONFIRMED_VCC:
+        errors.append(f"rs1g97 vcc_list must be CONFIRMED {_CONFIRMED_VCC}, got {m.vcc_list}")
     raw = load_part_yaml("rs1g97")
     blob = str(raw)
     if "ioh_a" in blob.lower() or "iol_a" in blob.lower():
@@ -313,7 +335,10 @@ def _buf126_ok() -> list[str]:
     ):
         token = str(st or "").strip().lower().replace("_", "-")
         if "from-datasheet" in token:
-            errors.append(f"rs1g126 {label}={st!r} must not look signed (use UNCONFIRMED)")
+            errors.append(f"rs1g126 {label}={st!r} must not look signed (use UNCONFIRMED or CONFIRMED)")
+    got_vcc = [round(float(x), 6) for x in m.vcc_list]
+    if got_vcc != _CONFIRMED_VCC:
+        errors.append(f"rs1g126 vcc_list must be CONFIRMED {_CONFIRMED_VCC}, got {m.vcc_list}")
     errors += _fail_closed_until_signed("rs1g126", m)
     return errors
 

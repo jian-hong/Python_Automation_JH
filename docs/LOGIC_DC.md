@@ -65,7 +65,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`.
 - **VOH/VOL** -- when catalog-enabled. Loaded rows only from existing `voh_table` / `vol_table`. No invented loads (PROVISIONAL unloaded otherwise).
 
-RS1G97 Datasheet §4 table in part yaml is **UNCONFIRMED** (not Datasheet-signed, not greenable). Isolation C invert `A:L B:H` is the See Lim fallback used at run. C-track `A:H B:L` is stored as **PROPOSED HOLD CONFIRM** and skipped until a signed confirm. RS1G126 truth_table is the same fail-close (UNCONFIRMED; not `from_datasheet_function_table`). Do not invent IOH/IOL.
+RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
 
 ### Version overlay
 
@@ -113,7 +113,7 @@ python -m ate.core.check_specs_datalog
 python -m ate.core.check_ui_contract
 ```
 
-A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` stays FAIL-CLOSED while RS1G97 truth_table is UNCONFIRMED.
+A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate.
 
 ## Do not
 

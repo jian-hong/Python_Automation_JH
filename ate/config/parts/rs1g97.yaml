@@ -1,7 +1,7 @@
 # RS1G97 Logic configurable gate -- Path B product_model.
 # Lim codes in Downloads/code/RS1G97 -- not imported.
-# truth_table: Datasheet §4 FUNCTION TABLE rows from local extract. UNCONFIRMED
-# (not Datasheet-signed; not greenable). See Lim goldens: seelim_dc locator only.
+# truth_table / isolation: CONFIRMED. Jian Hong signed 2026-09-17
+# (RS1G97_card_CONFIRMED.md). See Lim goldens: seelim_dc locator only.
 
 part: RS1G97
 model: RS1G97
@@ -39,7 +39,7 @@ fixture_modes:
     board_class: general
     checklist:
       - "RS1G97 is configurable logic, not analog switch."
-      - "truth_table.status=UNCONFIRMED (Datasheet §4 rows; not Datasheet-signed)."
+      - "truth_table.status=CONFIRMED (Jian Hong 2026-09-17; Datasheet §4). Not a bench green."
       - "AWG CH1=A CH2=B; PSU CH1=VCC CH3=C static; CH2 is Y-load/vref for VOH/VOL (no IOZ: oe none)."
       - "See Lim goldens are detect-only (seelim_dc locator). Limits stay in ate/config/limits."
     tests:
@@ -54,17 +54,20 @@ fixture_modes:
 
 product_model:
   part: RS1G97
-  status: UNCONFIRMED
-  truth_table_status: UNCONFIRMED
-  isolation_status: UNCONFIRMED
+  status: CONFIRMED
+  confirmed_by: Jian Hong
+  confirmed_at: "2026-09-17"
+  source_card: RS1G97_card_CONFIRMED.md
+  truth_table_status: CONFIRMED
+  isolation_status: CONFIRMED
   schmitt: true
   oe: none
   output_pin: Y
-  vcc_op_min: 1.65  # range metadata only (datasheet recommended VCC). Not a sweep.
+  vcc_op_min: 1.65  # range metadata (datasheet recommended VCC). Not a sweep.
   vcc_op_max: 5.5
   vcc_op_status: RANGE_METADATA
-  vcc_list: [5.0]  # do not expand inventively
-  vcc_list_status: PROVISIONAL
+  vcc_list: [1.65, 2.3, 3.0, 4.5, 5.5]
+  vcc_list_status: CONFIRMED
   logic_inputs: [A, B, C]
   # Datasheet §7 PIN DESCRIPTION SOT23-6/SC70-6: B=1 GND=2 A=3 Y=4 VCC=5 C=6
   pins:
@@ -82,39 +85,44 @@ product_model:
   recipe:
     threshold_step_v: 0.05
     settle_s: 0.3
+    icc_corners: 8  # 2^3
     delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
     delta_vcc_min: 3.0    # datasheet dICC: 3V to 5.5V
   # Schmitt VT+/VT- = range. Not a single input_threshold:range collapse.
+  # pass_mode keys from CONFIRMED card (vth_vt_plus / hysteresis).
   pass_mode:
+    vth_vt_plus: range
+    vth_vt_minus: range
+    hysteresis: range
     VT+: range
     VT-: range
+    HYST: range
     icc: max_only
     delta_icc: max_only
     ii: max_only
     voh: min_only
     vol: max_only
-    HYST: range
   limit_mode:
     VT+: range
     VT-: range
+    HYST: range
     icc: max_only
     delta_icc: max_only
     ii: max_only
     voh: min_only
     vol: max_only
-    HYST: range
   dc_limits:
     # Numbers live in ate/config/limits/rs1g97.yaml. Do not invent IOH/IOL.
     icc: {spec_id: ICC_uA, limit_mode: max_only}
     delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
     ii: {spec_id: II_uA, limit_mode: max_only}
-    voh: {status: PROVISIONAL, note: "catalog hook only; no invented IOH/IOL loads"}
-    vol: {status: PROVISIONAL, note: "catalog hook only; no invented IOH/IOL loads"}
-  # Datasheet §4 FUNCTION TABLE (A B C -> Y). UNCONFIRMED / not greenable.
+    voh: {status: PROVISIONAL, note: "card CONFIRMED IOH grid -- loads not wired; do not invent"}
+    vol: {status: PROVISIONAL, note: "card CONFIRMED IOL grid -- loads not wired; do not invent"}
+  # Datasheet §4 FUNCTION TABLE (A B C -> Y). CONFIRMED Jian Hong 2026-09-17.
   # LLL->L HLL->L LHL->H HHL->H LLH->L HLH->H LHH->L HHH->H
   truth_table:
-    status: UNCONFIRMED
-    source: "Datasheet §4 FUNCTION TABLE RUNIC RS1G97_(RevA.2.1) local extract"
+    status: CONFIRMED
+    source: "datasheet §4 / RS1G97_(RevA.2.1)"
     rows:
       - {A: L, B: L, C: L, Y: L}
       - {A: H, B: L, C: L, Y: L}
@@ -124,12 +132,10 @@ product_model:
       - {A: H, B: L, C: H, Y: H}
       - {A: L, B: H, C: H, Y: L}
       - {A: H, B: H, C: H, Y: H}
-  # Isolation from this table only (unused ties). Same UNCONFIRMED status.
-  # C invert A:L B:H is the See Lim fallback and is what isolation_for_run uses.
-  # C track A:H B:L is the MUX guess -- PROPOSED / HOLD CONFIRM, skipped at run.
+  # Isolation from CONFIRMED §4 rows (unused ties). C-track A:H B:L unlocked.
   isolation:
-    status: UNCONFIRMED
-    source: "derived from truth_table (Datasheet §4); not Datasheet-signed"
+    status: CONFIRMED
+    source: "derived from truth_table (Datasheet §4); Jian Hong 2026-09-17"
     tests:
       A:
         - {sweep_pin: A, fix: {B: L, C: H}, y_expect: track}
@@ -137,13 +143,13 @@ product_model:
       B:
         - {sweep_pin: B, fix: {A: L, C: L}, y_expect: track}
       C:
+        - {sweep_pin: C, fix: {A: H, B: L}, y_expect: track}
         - {sweep_pin: C, fix: {A: L, B: H}, y_expect: invert, vil_sweep: reverse}
-        - {sweep_pin: C, fix: {A: H, B: L}, y_expect: track, status: "PROPOSED HOLD CONFIRM"}
   threshold_isolation:
+    - {sweep: C, hold: {A: H, B: L}, y_tracks: true}
     - {sweep: C, hold: {A: L, B: H}, y_tracks: false, vil_sweep: reverse}
-    - {sweep: C, hold: {A: H, B: L}, y_tracks: true, status: "PROPOSED HOLD CONFIRM"}
   gaps:
-    - "truth_table.status=UNCONFIRMED (Datasheet §4; not Datasheet-signed; not greenable)"
-    - "C-track A:H B:L is PROPOSED HOLD CONFIRM (MUX guess). Run uses invert A:L B:H until Datasheet-signed CONFIRM."
-    - "VOH/VOL unloaded PROVISIONAL -- no invented IOH/IOL loads."
+    - "Q1V / automotive: UNSURE on card -- leave unset"
+    - "Ioff at VCC=0 is on card; Path B IOZ stays OFF (oe: none)"
+    - "VOH/VOL load grid on card -- not wired into limits yaml; do not invent IOH/IOL."
     - "oe=none: do not enable ioz/ioff"

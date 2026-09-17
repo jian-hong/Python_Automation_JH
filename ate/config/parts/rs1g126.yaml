@@ -1,7 +1,7 @@
 # RS1G126 Logic bus buffer -- Path B product_model.
 # ten/tdis stay AC. Lim Downloads/code not imported.
-# truth_table: function table rows from local extract. UNCONFIRMED
-# (not Datasheet-signed; not greenable). Same fail-close as RS1G97.
+# truth_table / isolation: CONFIRMED. Jian Hong signed 2026-09-17
+# (RS1G126_card_CONFIRMED.md).
 
 part: RS1G126
 model: RS1G126
@@ -40,7 +40,7 @@ fixture_modes:
     checklist:
       - "RS1G126 is small logic (bus buffer), not analog switch."
       - "OE active high. IOZ when OE inactive (data don't-care, Vout sweep)."
-      - "truth_table.status=UNCONFIRMED (not Datasheet-signed; not greenable)."
+      - "truth_table.status=CONFIRMED (Jian Hong 2026-09-17). Not a bench green."
       - "ten/tdis remain AC (Path B DC does not replace them)."
     tests:
       - tp
@@ -56,35 +56,40 @@ fixture_modes:
 
 product_model:
   part: RS1G126
-  status: UNCONFIRMED
-  truth_table_status: UNCONFIRMED
-  isolation_status: UNCONFIRMED
+  status: CONFIRMED
+  confirmed_by: Jian Hong
+  confirmed_at: "2026-09-17"
+  source_card: RS1G126_card_CONFIRMED.md
+  truth_table_status: CONFIRMED
+  isolation_status: CONFIRMED
   schmitt: false
   oe:
     pin: OE
     active: high
   output_pin: Y
-  vcc_op_min: 1.65  # range metadata only until CONFIRM. Not a sweep.
+  vcc_op_min: 1.65  # range metadata. Sweep is CONFIRMED vcc_list.
   vcc_op_max: 5.5
   vcc_op_status: RANGE_METADATA
-  vcc_list: [5.0]
-  vcc_list_status: PROVISIONAL
+  vcc_list: [1.65, 2.3, 3.0, 4.5, 5.5]
+  vcc_list_status: CONFIRMED
   logic_inputs: [A]
   pins:
-    - {name: OE, role: oe}
-    - {name: A, role: input}
-    - {name: GND, role: gnd}
-    - {name: Y, role: output}
-    - {name: VCC, role: vcc}
+    - {name: OE, role: oe, number: 1}
+    - {name: A, role: input, number: 2}
+    - {name: GND, role: gnd, number: 3}
+    - {name: Y, role: output, number: 4}
+    - {name: VCC, role: vcc, number: 5}
   pin_drive:
     A: {src: awg, ch: 1}
     OE: {src: awg, ch: 2}
   recipe:
     threshold_step_v: 0.05
     settle_s: 0.3
+    icc_corners: "data x OE"
+    ioz_when: oe_inactive
     delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
     delta_vcc_min: 3.0
-    # IOZ datasheet extract: VO=0V to 5.5V, VCC=3.6V, max 10 uA
+    # IOZ card: VO=0V to 5.5V, VCC=3.6V, max 10 uA
     ioz_vcc_list: [3.6]
     ioz_vout_list: [0.0, 5.5]
   pass_mode:
@@ -110,23 +115,23 @@ product_model:
     delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
     ii: {spec_id: II_uA, limit_mode: max_only}
     ioz: {spec_id: IOZ_uA, limit_mode: max_only}
-    voh: {status: PROVISIONAL, note: "no VOH rows in existing limits yaml"}
-    vol: {status: PROVISIONAL, note: "no VOL rows in existing limits yaml"}
-  # Function table (OE, A -> Y / Z). UNCONFIRMED / not greenable.
+    voh: {status: PROVISIONAL, note: "card CONFIRMED load grid -- not wired; do not invent"}
+    vol: {status: PROVISIONAL, note: "card CONFIRMED load grid -- not wired; do not invent"}
+  # Function table (OE, A -> Y / Z). CONFIRMED Jian Hong 2026-09-17.
   truth_table:
-    status: UNCONFIRMED
-    source: "function table rows from local extract; not Datasheet-signed"
+    status: CONFIRMED
+    source: "RS1G126_(RevA.4) function table"
     rows:
       - {OE: H, A: H, Y: H}
       - {OE: H, A: L, Y: L}
       - {OE: L, A: X, Y: Z}
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     note: "Unused data ties N/A (single data pin). OE active required. Do not invent extra ties."
     tests:
       A:
-        - {sweep_pin: A, fix: {OE: H}, y_expect: track, status: UNCONFIRMED}
+        - {sweep_pin: A, fix: {OE: H}, y_expect: track}
   gaps:
-    - "Unused data ties N/A (single data pin). Do not invent extra ties."
-    - "truth_table.status=UNCONFIRMED (not Datasheet-signed; not greenable)"
-    - "VOH/VOL PROVISIONAL -- no VOH/VOL rows in existing limits yaml."
+    - "Q1V / automotive: UNSURE on card -- leave unset"
+    - "XDFN6 NC/VCC pin map differs -- package-specific fixture, not invented here"
+    - "VOH/VOL load grid on card -- not wired into limits yaml; do not invent IOH/IOL."

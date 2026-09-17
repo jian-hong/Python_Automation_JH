@@ -21,14 +21,19 @@ _L = frozenset({"L", "0", "FALSE", "LOW"})
 _Z = frozenset({"Z", "HZ", "HIZ", "HI-Z"})
 _X = frozenset({"X", "DC", "DONTCARE", "DON'T-CARE"})
 
-# Datasheet-signed is the only greenable token. CONFIRM alone is not signed.
+# Datasheet-signed CONFIRMED is greenable for the status gate.
+# Bare CONFIRM (no ED) is not signed.
 _SIGNED_STATUSES = frozenset(
     {
+        "CONFIRMED",
         "DATASHEET-SIGNED",
         "DATASHEET_SIGNED",
         "DATASHEET-SIGNED CONFIRM",
         "DATASHEET_SIGNED_CONFIRM",
         "DATASHEET-SIGNED-CONFIRM",
+        "DATASHEET-SIGNED CONFIRMED",
+        "DATASHEET-SIGNED-CONFIRMED",
+        "DATASHEET_SIGNED_CONFIRMED",
     }
 )
 _UNCONFIRMED_STATUSES = frozenset(
@@ -83,7 +88,7 @@ def claimed_signed_without_datasheet(status: Any) -> bool:
     if not s:
         return False
     token = s.replace(" ", "-")
-    if s in ("CONFIRM", "CONFIRMED", "SIGNED", "DATASHEET"):
+    if s in ("CONFIRM", "SIGNED", "DATASHEET"):
         return True
     if s.startswith("CONFIRM") or s == "GREEN":
         return True
@@ -636,9 +641,9 @@ def lookup_pass_mode(model: ProductModel, meas_id: str, test_id: str = "") -> st
         tid,
     ]
     if mid.upper() in ("VTPLUS_V", "VT+", "VTPLUS"):
-        keys.extend(["VT+", "VTPLUS", "VTPLUS_V", "input_threshold", "vth"])
+        keys.extend(["VT+", "VTPLUS", "VTPLUS_V", "vth_vt_plus", "input_threshold", "vth"])
     if mid.upper() in ("VTMINUS_V", "VT-", "VTMINUS"):
-        keys.extend(["VT-", "VTMINUS", "VTMINUS_V", "input_threshold", "vth"])
+        keys.extend(["VT-", "VTMINUS", "VTMINUS_V", "vth_vt_minus", "input_threshold", "vth"])
     if "HYST" in mid.upper() or "HYSTERESIS" in mid.upper():
         keys.extend(["HYST", "hyst", "hysteresis"])
     if mid.upper() in ("VIH_V", "VIH"):
@@ -1065,8 +1070,9 @@ def _skip_isolation_status(status: str) -> bool:
 def isolation_for_run(model: ProductModel, sweep_pin: str) -> list[IsolationPattern]:
     """One combo per pin: first non-inverting track, else first invert.
 
-    Skips PROPOSED / HOLD CONFIRM rows. UNCONFIRMED table status is not skipped
-    here -- check_logic_dc stays fail-closed until Datasheet-signed.
+    Skips PROPOSED / HOLD CONFIRM rows. CONFIRMED track rows run.
+    UNCONFIRMED table status is not skipped here -- check_logic_dc
+    fail-closes until Datasheet-signed CONFIRMED.
     """
     pats = [p for p in isolation_for(model, sweep_pin) if not _skip_isolation_status(p.status)]
     tracks = [p for p in pats if p.y_expect == "track"]
