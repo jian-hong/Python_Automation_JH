@@ -1,5 +1,6 @@
 # RS1G97 Logic configurable gate -- Path B product_model.
-# Lim codes in Downloads/code/RS1G97 -- not imported. Isolation HOLD CONFIRM.
+# Lim codes in Downloads/code/RS1G97 -- not imported.
+# See Lim goldens: ate/tests/logic/seelim_dc.py locator only (not START runtime).
 
 part: RS1G97
 model: RS1G97
@@ -36,8 +37,9 @@ fixture_modes:
     board_class: general
     checklist:
       - "RS1G97 is configurable logic, not analog switch."
-      - "Path B DC: isolation + truth table from product_model YAML."
-      - "3rd input C pin_drive is PSU CH2 (PROVISIONAL -- edit YAML for fixture)."
+      - "Path B DC: isolation + truth table from product_model YAML (datasheet function table)."
+      - "AWG CH1=A CH2=B; PSU CH1=VCC CH3=C static; CH2 is Y-load/vref for VOH."
+      - "See Lim goldens are detect-only (seelim_dc locator). Limits stay in ate/config/limits."
     tests:
       - tp
       - input_threshold
@@ -50,7 +52,7 @@ fixture_modes:
 
 product_model:
   part: RS1G97
-  status: HOLD_CONFIRM
+  status: from_datasheet_function_table
   schmitt: true
   oe: none
   output_pin: Y
@@ -66,11 +68,11 @@ product_model:
     - {name: Y, role: output}
     - {name: VCC, role: vcc}
     - {name: C, role: input}
-  # 2 AWG channels; C on PSU CH2 is fixture-editable, not a Python if.
+  # 2 AWG channels; C on PSU CH3 so CH2 stays Y-load/vref.
   pin_drive:
     A: {src: awg, ch: 1}
     B: {src: awg, ch: 2}
-    C: {src: psu, ch: 2}  # PROVISIONAL bench map
+    C: {src: psu, ch: 3}
   recipe:
     threshold_step_v: 0.05  # same step as existing Logic DC platform
     settle_s: 0.3
@@ -84,33 +86,31 @@ product_model:
     voh: min_only
     vol: max_only
   dc_limits:
-    # Numbers live in ate/config/limits/rs1g97.yaml. Do not duplicate here.
+    # Numbers live in ate/config/limits/rs1g97.yaml. Do not duplicate here or from See Lim.
     icc: {spec_id: ICC_uA, limit_mode: max_only}
     delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
     ii: {spec_id: II_uA, limit_mode: max_only}
-    voh: {status: PROVISIONAL, note: "no VOH rows in existing limits yaml"}
-    vol: {status: PROVISIONAL, note: "no VOL rows in existing limits yaml"}
-  # Page-1 OCR was garbled. This MUX table is the unique function that matches
-  # HOLD CONFIRM isolation (Y = C ? A : B). Edit YAML if the PDF table differs.
+    voh: {status: PROVISIONAL, note: "no voh_table in part yaml -- do not copy RS1G08 loads"}
+    vol: {status: PROVISIONAL, note: "no vol_table in part yaml -- do not copy RS1G08 loads"}
+  # Function table from ate/config/datasheets/text/rs1g97.txt page 1 (Rev A.2.1).
+  # C=L => Y=B; C=H => Y=A AND B. Not a C-select MUX.
   truth_table:
-    status: HOLD_CONFIRM
+    status: from_datasheet_function_table
     rows:
       - {A: L, B: L, C: L, Y: L}
       - {A: H, B: L, C: L, Y: L}
       - {A: L, B: H, C: L, Y: H}
       - {A: H, B: H, C: L, Y: H}
       - {A: L, B: L, C: H, Y: L}
-      - {A: H, B: L, C: H, Y: H}
+      - {A: H, B: L, C: H, Y: L}
       - {A: L, B: H, C: H, Y: L}
       - {A: H, B: H, C: H, Y: H}
   isolation:
-    status: HOLD_CONFIRM
+    status: from_datasheet_function_table
     tests:
       A:
-        - {sweep_pin: A, fix: {B: L, C: H}, y_expect: track}
         - {sweep_pin: A, fix: {B: H, C: H}, y_expect: track}
       B:
         - {sweep_pin: B, fix: {A: L, C: L}, y_expect: track}
       C:
-        - {sweep_pin: C, fix: {A: H, B: L}, y_expect: track}
         - {sweep_pin: C, fix: {A: L, B: H}, y_expect: invert, vil_sweep: reverse}

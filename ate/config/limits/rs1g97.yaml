@@ -3,37 +3,45 @@ datasheet:
   lang: en
   source: local-reference
   file: C:\Users\OoiJianHong\Downloads\Reference\Reference\RS1G97_(RevA.2.1).pdf
-  extract: C:\Users\OoiJianHong\Eugene's Repo\PythonAutomation\ate\config\datasheets\text\rs1g97.txt
+  extract: ate/config/datasheets/text/rs1g97.txt
+# Numbers from the in-repo extract (local Reference PDF). Do not duplicate from See Lim.
+# pass_mode: range = min and max, max-only = abs max. II keeps +25C 1 uA (Full is 5).
 specs:
 - id: VCC_V
   unit: V
   min: 1.65
   max: 5.5
+  pass_mode: range
   source: local:RS1G97_(RevA.2.1).pdf
 - id: ICC_uA
   unit: uA
   max: 10.0
+  pass_mode: max-only
   test: icc
-  source: local:RS1G97_(RevA.2.1).pdf
+  source: local:RS1G97_(RevA.2.1).pdf Full
 - id: DELTA_ICC_uA
   unit: uA
   max: 500.0
+  pass_mode: max-only
   test: delta_icc
   source: local:RS1G97_(RevA.2.1).pdf dICC 3V to 5.5V
 - id: II_uA
   unit: uA
   max: 1.0
+  pass_mode: max-only
   test: ii
-  source: local:RS1G97_(RevA.2.1).pdf II +25C
+  source: local:RS1G97_(RevA.2.1).pdf II +25C (Full +/-5 not copied)
 - id: VTPLUS_V
   unit: V
   min: 2.8
   max: 3.4
+  pass_mode: range
   test: input_threshold
   source: local:RS1G97_(RevA.2.1).pdf VT+ at VCC=5.5V
 - id: VTMINUS_V
   unit: V
   min: 0.85
   max: 1.15
+  pass_mode: range
   test: input_threshold
   source: local:RS1G97_(RevA.2.1).pdf VT- at VCC=5.5V

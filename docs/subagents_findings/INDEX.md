@@ -2,7 +2,7 @@
 
 | Date | File | Keywords |
 |------|------|----------|
-| 2026-09-17 | 2026-09-17_path-b-logic-dc.md | path-b, logic-dc, product_model, isolation, rs1g97, rs1g08, rs1g126, ioz, schmitt, eugene-console |
+| 2026-09-17 | 2026-09-17_path-b-logic-dc.md | path-b, logic-dc, product_model, isolation, rs1g97, rs1g08, rs1g126, ioz, schmitt, seelim, goldens, pass_mode |
 | 2026-09-11 | 2026-09-11_operator-zip-daily-pull.md | installer, zip, eugene-console, rift, auto-pull, ff-only, sharepoint |
 | 2026-09-11 | 2026-09-11_sharepoint-rs622-photos.md | sharepoint, rd-handover, rs622-golden, photo-boxes, eugene-branch |
 | 2026-09-11 | 2026-09-11_joinall-vox-fill.md | a19, a20, join-all, vox, sop8, golden-skip, merged-cell, rs1g08, rs2323 |

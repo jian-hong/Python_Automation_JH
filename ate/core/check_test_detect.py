@@ -141,6 +141,10 @@ def check_test_detect() -> list[str]:
     # Missing root skip: temp non-existent path in config is fine via load_golden_roots
     missing = [r for r in roots if not r.get("exists")]
     _ = missing  # expected; not an error
+    labels = {str(r.get("label") or "") for r in roots}
+    for need in ("see_lin", "See-Lim-Repo", "Ariff-Repo", "Eugene-Repo"):
+        if need not in labels:
+            errors.append(f"golden_roots.yaml must list {need} (skipped if missing, read-only)")
 
     return errors
 

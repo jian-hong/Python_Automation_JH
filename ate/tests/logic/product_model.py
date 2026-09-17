@@ -1,7 +1,8 @@
 """Path B Logic product-model loader (schema in YAML, not per-chip Python).
 
 Isolation is derived from truth_table unless the part YAML supplies an
-explicit isolation block (RS1G97 HOLD CONFIRM). Do not branch on part name.
+explicit isolation block. Do not branch on part name. RS1G97 table is the
+datasheet extract (not a C-select MUX). See Lim goldens are not loaded here.
 """
 from __future__ import annotations
 

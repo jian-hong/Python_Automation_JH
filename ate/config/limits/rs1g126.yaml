@@ -3,30 +3,36 @@ datasheet:
   lang: en
   source: local-reference
   file: C:\Users\OoiJianHong\Downloads\Reference\Reference\RS1G126_(RevA.4).pdf
-  extract: C:\Users\OoiJianHong\Eugene's Repo\PythonAutomation\ate\config\datasheets\text\rs1g126.txt
+  extract: ate/config/datasheets/text/rs1g126.txt
+# Numbers from the in-repo extract. ICC keeps features/+25C 1 uA (Full row is 10).
 specs:
 - id: ICC_uA
   unit: uA
   max: 1.0
+  pass_mode: max-only
   test: icc
-  source: local:RS1G126_(RevA.4).pdf
+  source: local:RS1G126_(RevA.4).pdf features / +25C
 - id: DELTA_ICC_uA
   unit: uA
   max: 500.0
+  pass_mode: max-only
   test: delta_icc
   source: local:RS1G126_(RevA.4).pdf dICC 3V to 5.5V
 - id: II_uA
   unit: uA
   max: 1.0
+  pass_mode: max-only
   test: ii
   source: local:RS1G126_(RevA.4).pdf II +25C
 - id: IOZ_uA
   unit: uA
   max: 10.0
+  pass_mode: max-only
   test: ioz
-  source: local:RS1G126_(RevA.4).pdf IOZ VCC=3.6V
+  source: local:RS1G126_(RevA.4).pdf IOZ VCC=3.6V Full 10 uA
 - id: VCC_V
   unit: V
   min: 1.65
   max: 5.5
+  pass_mode: range
   source: local:RS1G126_(RevA.4).pdf

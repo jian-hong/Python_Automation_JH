@@ -86,7 +86,7 @@ def _and_isolation_ok() -> list[str]:
     return errors
 
 
-def _mux97_isolation_ok() -> list[str]:
+def _97_isolation_ok() -> list[str]:
     errors: list[str] = []
     m = load_product_model("rs1g97")
     if m is None:
@@ -102,26 +102,46 @@ def _mux97_isolation_ok() -> list[str]:
     for need in ("input_threshold", "icc", "delta_icc", "ii", "voh", "vol"):
         if need not in en:
             errors.append(f"rs1g97 enabled_tests missing {need}")
+    # Datasheet function table (extract page 1): C=L => Y=B; C=H => Y=A AND B.
+    # Mux Y=C?A:B is wrong (A=H B=L C=H is Y=L, not H).
+    want = {
+        ("L", "L", "L", "L"),
+        ("H", "L", "L", "L"),
+        ("L", "H", "L", "H"),
+        ("H", "H", "L", "H"),
+        ("L", "L", "H", "L"),
+        ("H", "L", "H", "L"),
+        ("L", "H", "H", "L"),
+        ("H", "H", "H", "H"),
+    }
+    got = set()
+    for row in m.truth_table:
+        got.add((row.get("A"), row.get("B"), row.get("C"), row.get("Y")))
+    if got != want:
+        errors.append(f"rs1g97 truth_table must match datasheet extract, got {sorted(got)}")
+    if ("H", "L", "H", "H") in got:
+        errors.append("rs1g97 must not use C-select MUX row A=H B=L C=H Y=H")
     a = isolation_for(m, "A")
     b = isolation_for(m, "B")
     c = isolation_for(m, "C")
-    if not any(p.fix.get("B") == "L" and p.fix.get("C") == "H" and p.y_expect == "track" for p in a):
-        errors.append("rs1g97 isolation A: missing B:L C:H track (HOLD CONFIRM)")
     if not any(p.fix.get("B") == "H" and p.fix.get("C") == "H" and p.y_expect == "track" for p in a):
-        errors.append("rs1g97 isolation A: missing B:H C:H track (HOLD CONFIRM)")
+        errors.append("rs1g97 isolation A: need B=H C=H track (Y=A AND B)")
     if not any(p.fix.get("A") == "L" and p.fix.get("C") == "L" and p.y_expect == "track" for p in b):
-        errors.append("rs1g97 isolation B: missing A:L C:L track (HOLD CONFIRM)")
-    if not any(p.fix.get("A") == "H" and p.fix.get("B") == "L" and p.y_expect == "track" for p in c):
-        errors.append("rs1g97 isolation C: missing A:H B:L track (HOLD CONFIRM)")
+        errors.append("rs1g97 isolation B: need A=L C=L track (Y=B when C=L)")
     if not any(
         p.fix.get("A") == "L" and p.fix.get("B") == "H" and p.y_expect == "invert" for p in c
     ):
-        errors.append("rs1g97 isolation C: missing A:L B:H invert (HOLD CONFIRM)")
-    if str(m.isolation_status).upper() != "HOLD_CONFIRM" and str(m.raw.get("isolation", {}).get("status") or "").upper() != "HOLD_CONFIRM":
-        errors.append("rs1g97 isolation status should stay HOLD_CONFIRM in YAML")
+        errors.append("rs1g97 isolation C: need A=L B=H invert")
+    c_drive = m.pin_drive.get("C")
+    if c_drive is None or c_drive.src != "psu" or c_drive.ch != 3:
+        errors.append("rs1g97 pin_drive C must be PSU CH3 (CH2 is Y-load/vref)")
     specs = {s.get("id"): s for s in load_part_specs("rs1g97")}
     if specs.get("ICC_uA", {}).get("test") != "icc":
         errors.append("rs1g97 ICC_uA spec test must be icc (Path B id)")
+    if str(specs.get("ICC_uA", {}).get("pass_mode") or "") != "max-only":
+        errors.append("rs1g97 ICC_uA pass_mode must be max-only")
+    if str(specs.get("VTPLUS_V", {}).get("pass_mode") or "") != "range":
+        errors.append("rs1g97 VTPLUS_V pass_mode must be range")
     return errors
 
 
@@ -196,6 +216,30 @@ def _registry_ok() -> list[str]:
     return errors
 
 
+def _seelim_wrap_ok() -> list[str]:
+    """Locator exists; family load must not execute goldens or scrape limits."""
+    errors: list[str] = []
+    src = Path(__file__).resolve().parents[1] / "tests" / "logic" / "seelim_dc.py"
+    if not src.is_file():
+        return ["seelim_dc.py missing -- wrap goldens/see_lin/<PART>/current_tests.py"]
+    text = src.read_text(encoding="utf-8")
+    if re.search(r"(?m)^\s*(?:import\s+Lim\b|from\s+Lim\b)", text):
+        errors.append("seelim_dc.py must not import Lim.*")
+    if "goldens" not in text or "see_lin" not in text:
+        errors.append("seelim_dc.py must look up goldens/see_lin/<PART>/current_tests.py")
+    if "See Lim Repo" not in text:
+        errors.append("seelim_dc.py must fall back to Downloads/See Lim Repo")
+    visa_before = "pyvisa" in sys.modules
+    from ate.tests.logic.seelim_dc import resolve_current_tests
+
+    missing = resolve_current_tests("rs1g97")
+    if missing is not None and not Path(missing).is_file():
+        errors.append("resolve_current_tests must return an existing file or None")
+    if not visa_before and "pyvisa" in sys.modules:
+        errors.append("seelim_dc locator must not import pyvisa")
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -203,8 +247,9 @@ def check_logic_dc() -> list[str]:
     if not has_product_model("rs1g08") or not has_product_model("rs1g97"):
         errors.append("rs1g08 and rs1g97 must carry product_model schema")
     errors += _and_isolation_ok()
-    errors += _mux97_isolation_ok()
+    errors += _97_isolation_ok()
     errors += _buf126_ok()
+    errors += _seelim_wrap_ok()
     errors += _registry_ok()
     load_family("opamp")
     return errors
@@ -219,7 +264,7 @@ def main() -> int:
         return 1
     print(
         "OK logic-dc: shared logic_dc.py + product_model for rs1g08/rs1g97/rs1g126 "
-        "(isolation from YAML/truth table; 97 no ioz; 126 keeps ioz+ten/tdis)"
+        "(97 datasheet truth table; seelim locator not runtime; 126 keeps ioz+ten/tdis)"
     )
     return 0
 
