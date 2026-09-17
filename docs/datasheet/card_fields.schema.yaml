@@ -323,13 +323,14 @@ fields:
       excel / report / datalog / records required.
   - key: workbook_policy
     oop: Part
-    type: text
+    type: json
     editable: true
     deletable: true
-    label: workbook_policy
+    label: workbook_policy (golden_auto / ultimate_manual)
     note: >
-      one_per_version_overwrite -- same session always writes the same xlsx
-      under workbook/. Never a second orphan book.
+      golden_auto: one_per_version_overwrite -- Continue/START overwrite the
+      chosen Version workbook/. ultimate_manual: never_auto_write -- jot
+      book is never the auto target. Do not invent columns.
   - key: excel_plots
     oop: Limit
     type: json

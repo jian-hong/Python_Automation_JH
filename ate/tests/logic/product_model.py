@@ -187,7 +187,7 @@ class ProductModel:
     vcc_grid: dict[str, Any] = field(default_factory=dict)
     sample_size: Optional[int] = None
     excel_plots: dict[str, Any] = field(default_factory=dict)
-    workbook_policy: str = ""
+    workbook_policy: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
 
     def has_oe(self) -> bool:
@@ -217,14 +217,21 @@ def _excel_plots_blob(blob: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _workbook_policy_blob(blob: dict[str, Any]) -> str:
-    raw = str(blob.get("workbook_policy") or "").strip()
-    if raw:
-        return raw
+def _workbook_policy_blob(blob: dict[str, Any]) -> dict[str, Any]:
+    """golden_auto / ultimate_manual map. Legacy string -> golden_auto only."""
+    raw = blob.get("workbook_policy")
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str) and raw.strip():
+        return {"golden_auto": raw.strip()}
     plots = blob.get("excel_plots")
     if isinstance(plots, dict):
-        return str(plots.get("policy") or plots.get("workbook_policy") or "").strip()
-    return ""
+        nested = plots.get("policy") or plots.get("workbook_policy")
+        if isinstance(nested, dict):
+            return dict(nested)
+        if nested not in (None, ""):
+            return {"golden_auto": str(nested).strip()}
+    return {}
 
 
 def load_part_yaml(part_key: str) -> dict[str, Any]:
@@ -1889,7 +1896,7 @@ def format_save_lines(
     paths = resolve_data_paths(model, test_id, dut_index)
     return [
         "Save path after run (folders only; do not invent Excel cells)",
-        f"Excel: {paths.get('excel')}",
+        f"Excel golden_auto (never ultimate_manual): {paths.get('excel')}",
         f"report: {paths.get('report')}",
         f"STS datalog: {paths.get('datalog')}",
         f"records: {paths.get('records')}",
@@ -1917,6 +1924,12 @@ def format_handoff_begin(model: ProductModel, test_id: str) -> list[str]:
     lines.extend(format_stimulus_lines(model, test_id))
     lines.extend(format_settle_lines(model, test_id))
     lines.extend(format_measure_lines(model, test_id))
+    wp = model.workbook_policy if isinstance(model.workbook_policy, dict) else {}
+    if wp or model.excel_plots:
+        lines.append(
+            "Excel fill/plot: golden_auto Version workbook/ only "
+            "(ultimate_manual never_auto_write)"
+        )
     return lines
 
 

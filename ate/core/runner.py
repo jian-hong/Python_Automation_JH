@@ -177,7 +177,18 @@ class ATECore:
         if "DMM" not in self._mapping:
             self._log("WARNING DMM not found -- Logic IDD/VOUT/cap_load and OpAmp VOL need it")
         self._log(f"Session open: {list(self._mapping)}")
-        return dict(self._mapping)
+        out = dict(self._mapping)
+        try:
+            from ate.tests.logic.excel_lock import bind_golden_auto
+
+            dest = bind_golden_auto(get_context())
+            if dest:
+                out["golden_auto"] = dest
+                out["lab_report"] = dest
+                self._log(f"Excel golden_auto (never ultimate_manual): {dest}")
+        except Exception as exc:
+            self._log(f"Excel golden_auto bind: {exc}")
+        return out
 
     def close_session(self) -> None:
         if self._instr is None:
@@ -259,8 +270,22 @@ class ATECore:
         try:
             ctx = get_context()
             ctx.ensure_tree()
-            if not params.lab_report:
-                params = replace(params, lab_report=str(ctx.lab_report_path()))
+            try:
+                from ate.tests.logic.excel_lock import (
+                    UltimateWorkbook,
+                    coerce_golden_auto_lab_report,
+                )
+
+                bound = coerce_golden_auto_lab_report(ctx, params.lab_report)
+                if bound:
+                    params = replace(params, lab_report=bound)
+                elif not params.lab_report:
+                    params = replace(params, lab_report=str(ctx.lab_report_path()))
+            except UltimateWorkbook:
+                raise
+            except Exception:
+                if not params.lab_report:
+                    params = replace(params, lab_report=str(ctx.lab_report_path()))
 
             duts = params.resolved_duts()
             channels = params.resolved_channels()

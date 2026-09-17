@@ -46,12 +46,26 @@ def _build_run_params(params: dict[str, Any]) -> RunParams:
     run_label = str(p.get("run_label") or "").strip()
     raw_vccb = p.get("vccb")
     vccb = float(raw_vccb) if raw_vccb not in (None, "") else None
+    lab_report = str(p.get("lab_report") or ctx.lab_report_path())
+    try:
+        from ate.tests.logic.excel_lock import (
+            UltimateWorkbook,
+            coerce_golden_auto_lab_report,
+        )
+
+        bound = coerce_golden_auto_lab_report(ctx, lab_report)
+        if bound:
+            lab_report = bound
+    except UltimateWorkbook:
+        raise
+    except Exception:
+        pass
     rp = RunParams(
         vcc=float(p.get("vcc", 5.0)),
         freq_hz=float(p.get("freq_hz", 500.0)),
         amp_vpp=float(p.get("amp_vpp", 0.004)),
         n_repeats=int(p.get("n_repeats", 3)),
-        lab_report=str(p.get("lab_report") or ctx.lab_report_path()),
+        lab_report=lab_report,
         research_excel=str(p.get("research_excel") or ""),
         reset_before_run=bool(p.get("reset_before_run", False)),
         unit_index=int(p.get("unit_index", 1)),

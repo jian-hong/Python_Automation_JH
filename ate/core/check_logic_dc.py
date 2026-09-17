@@ -913,14 +913,25 @@ def _rs1gt34_draft_ok() -> list[str]:
         errors.append("rs1gt34 pass_mode VIL must be max_only")
     from ate.tests.logic.excel_lock import (
         WORKBOOK_POLICY,
+        ULTIMATE_POLICY,
         bound_series_ids,
         excel_plots_status,
+        golden_auto_policy,
+        ultimate_manual_policy,
         workbook_policy,
     )
 
+    if golden_auto_policy(m) != WORKBOOK_POLICY:
+        errors.append(
+            f"rs1gt34 workbook_policy.golden_auto must be {WORKBOOK_POLICY}, got {golden_auto_policy(m)!r}"
+        )
+    if ultimate_manual_policy(m) != ULTIMATE_POLICY:
+        errors.append(
+            f"rs1gt34 workbook_policy.ultimate_manual must be {ULTIMATE_POLICY}, got {ultimate_manual_policy(m)!r}"
+        )
     if workbook_policy(m) != WORKBOOK_POLICY:
         errors.append(
-            f"rs1gt34 workbook_policy must be {WORKBOOK_POLICY}, got {workbook_policy(m)!r}"
+            f"rs1gt34 workbook_policy golden_auto token must be {WORKBOOK_POLICY}, got {workbook_policy(m)!r}"
         )
     if excel_plots_status(m).upper() != "UNCONFIRMED":
         errors.append(
@@ -1116,6 +1127,12 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must show Excel #Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/")
     if "one_per_version_overwrite" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name workbook_policy one_per_version_overwrite")
+    if "golden_auto" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name golden_auto Version workbook")
+    if "ultimate_manual" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name ultimate_manual jot workbook")
+    if "never_auto_write" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name ultimate_manual never_auto_write")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -1458,6 +1475,11 @@ def _handoff_ok() -> list[str]:
                     errors.append(f"{part} handoff must surface Measure + pass_mode")
                 if "NON_TIGHT" not in blob and "tight" not in blob.lower():
                     errors.append(f"{part} handoff settle must name NON_TIGHT or tight")
+                if "golden_auto" not in blob or "ultimate_manual" not in blob:
+                    errors.append(
+                        f"{part} handoff must bind Excel fill/plot to golden_auto "
+                        "(never ultimate_manual)"
+                    )
     model_src = _MODEL.read_text(encoding="utf-8")
     ldc_src = _LOGIC_DC.read_text(encoding="utf-8")
     if "path_b_handoff" not in model_src:
@@ -1503,7 +1525,7 @@ def _runnable_ok() -> list[str]:
 
 
 def _excel_lock_ok() -> list[str]:
-    """One Version xlsx. Card-backed excel_plots only. Orphan second book FAIL."""
+    """golden_auto Version xlsx. Never write ultimate_manual. Invented columns FAIL."""
     from ate.reporting.session_values import fill_workbook_from_report
     from ate.tests.logic import excel_lock as el
 
@@ -1512,6 +1534,24 @@ def _excel_lock_ok() -> list[str]:
     src = lock_src.read_text(encoding="utf-8")
     if "one_per_version_overwrite" not in src:
         errors.append("excel_lock.py must name one_per_version_overwrite")
+    if "golden_auto" not in src or "ultimate_manual" not in src:
+        errors.append("excel_lock.py must split golden_auto vs ultimate_manual")
+    if "never_auto_write" not in src:
+        errors.append("excel_lock.py must name never_auto_write")
+    runner_src = Path(__file__).resolve().parents[1] / "core" / "runner.py"
+    rtxt = runner_src.read_text(encoding="utf-8")
+    if "bind_golden_auto" not in rtxt or "coerce_golden_auto_lab_report" not in rtxt:
+        errors.append("Open Session / START must bind fill/plot to golden_auto Version path")
+    wtxt = (
+        Path(__file__).resolve().parents[1] / "worker" / "server.py"
+    ).read_text(encoding="utf-8")
+    if "coerce_golden_auto_lab_report" not in wtxt:
+        errors.append("START worker must bind fill/plot to golden_auto Version path")
+    dtxt = (
+        Path(__file__).resolve().parents[1] / "core" / "database.py"
+    ).read_text(encoding="utf-8")
+    if "bind_golden_auto" not in dtxt:
+        errors.append("lab_report_path must bind fill/plot to golden_auto Version path")
     for line in src.splitlines():
         if "_filled.xlsx" in line and re.search(r"\.save\s*\(", line):
             errors.append("excel_lock.py must not save _filled.xlsx")
@@ -1531,7 +1571,11 @@ def _excel_lock_ok() -> list[str]:
             continue
         if el.workbook_policy(m) != el.WORKBOOK_POLICY:
             errors.append(
-                f"{part} workbook_policy must be {el.WORKBOOK_POLICY}, got {el.workbook_policy(m)!r}"
+                f"{part} workbook_policy.golden_auto must be {el.WORKBOOK_POLICY}, got {el.workbook_policy(m)!r}"
+            )
+        if el.ultimate_manual_policy(m) != el.ULTIMATE_POLICY:
+            errors.append(
+                f"{part} workbook_policy.ultimate_manual must be {el.ULTIMATE_POLICY}, got {el.ultimate_manual_policy(m)!r}"
             )
         if not el.uses_excel_lock(m):
             errors.append(f"{part} must bind excel_plots + workbook_policy")
@@ -1734,6 +1778,70 @@ def _excel_lock_ok() -> list[str]:
         )
         if "voh_at_ioh" not in voh or "vol_at_iol" in voh:
             errors.append(f"VOH Measured must not bind vol_at_iol, got {voh}")
+        bad = el.invented_headers(["G16", "GBW_MHz", "VIH"])
+        if "G16" not in bad or "GBW_MHz" not in bad or "VIH" in bad:
+            errors.append(f"invented_headers must FAIL G16/GBW only, got {bad}")
+        if el.header_allowed("G16") or el.header_allowed("GBW_MHz"):
+            errors.append("header_allowed must reject invented G16/GBW columns")
+        if not el.is_ultimate_path(Path("ultimate_manual.xlsx")):
+            errors.append("is_ultimate_path must match filename-only ultimate_manual.xlsx")
+        if not el.is_ultimate_path("jot_book.xlsx") or not el.is_ultimate_path("all-test.xlsx"):
+            errors.append("is_ultimate_path must match jot / all-test filename tokens")
+        if el.is_ultimate_path(Path("RS1GT34_Lab_Report_SOT23-5.xlsx")):
+            errors.append("is_ultimate_path must not flag golden Lab_Report")
+        jot = ctx.workbook_dir() / "ultimate_manual.xlsx"
+        extra = _WB()
+        extra.save(jot)
+        extra.close()
+        names_g = sorted(p.name for p in el.golden_xlsx(ctx.workbook_dir()))
+        if any(el.is_ultimate_path(Path(n)) for n in names_g):
+            errors.append("golden_xlsx must exclude ultimate_manual")
+        if jot.name in names_g:
+            errors.append("golden_xlsx listed ultimate_manual as a Version book")
+        third = el.write_path_b_workbook(ctx=ctx, model=m, report=report)
+        if el.is_ultimate_path(third["excel"]):
+            errors.append("golden_auto write must not target ultimate_manual")
+        if Path(third["excel"]).resolve() == jot.resolve():
+            errors.append("auto write path == ultimate")
+        fill3 = fill_workbook_from_report(report=report, ctx=ctx)
+        if fill3.get("status") == "ultimate":
+            errors.append(f"fill_workbook must not treat jot as dest when golden exists, got {fill3}")
+        if el.is_ultimate_path(str(fill3.get("excel") or "")):
+            errors.append("fill_workbook Path B must not write ultimate_manual")
+        names4 = sorted(p.name for p in el.golden_xlsx(ctx.workbook_dir()))
+        if len(names4) != 1:
+            errors.append(f"jot beside golden must not become a second Version book, got {names4}")
+        try:
+            el.coerce_golden_auto_lab_report(ctx, str(jot))
+            errors.append("coerce_golden_auto_lab_report must FAIL when proposed path is ultimate")
+        except el.UltimateWorkbook:
+            pass
+        except Exception as exc:
+            errors.append(
+                f"ultimate proposed path must raise UltimateWorkbook, got {type(exc).__name__}: {exc}"
+            )
+        class _SheetCtx:
+            def __init__(self, inner):
+                self._inner = inner
+                self.model = inner.model
+                self.package = inner.package
+                self.part_key = inner.part_key
+                self.sample_size = inner.sample_size
+            def workbook_dir(self):
+                return ctx.workbook_dir()
+            def manifest_dir(self):
+                return ctx.manifest_dir()
+            def lab_report_path(self):
+                return ctx.lab_report_path()
+            def load_sheet_map(self):
+                return {"workbook": {"path": "../workbook/ultimate_manual.xlsx"}}
+        mapped = _SheetCtx(ctx)
+        dest_mapped = el.canonical_workbook_path(mapped, m)
+        if el.is_ultimate_path(dest_mapped):
+            errors.append("sheet_map ultimate path must not become golden_auto dest")
+        bound = el.bind_golden_auto(ctx, m)
+        if not bound or el.is_ultimate_path(bound):
+            errors.append("bind_golden_auto must return Version golden, not ultimate")
     except Exception as exc:
         errors.append(f"excel lock SIM: {type(exc).__name__}: {exc}")
     finally:

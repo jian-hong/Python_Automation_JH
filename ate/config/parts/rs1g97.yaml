@@ -212,7 +212,9 @@ product_model:
     datalog: sessions/datalog.md
     records: "{test}/DUT_n/records/"
     attach: "{test}/DUT_n/"
-  workbook_policy: one_per_version_overwrite
+  workbook_policy:
+    golden_auto: one_per_version_overwrite
+    ultimate_manual: never_auto_write
   excel_plots:
     series:
       - vtplus_vs_vcc

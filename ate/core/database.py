@@ -176,16 +176,32 @@ class DbContext:
         return self.manifest_dir() / "test_params.yaml"
 
     def lab_report_path(self) -> Path:
+        # Path B: Continue/START bind fill/plot to golden_auto Version path only.
+        try:
+            from ate.tests.logic.excel_lock import bind_golden_auto
+
+            bound = bind_golden_auto(self)
+            if bound:
+                return Path(bound)
+        except Exception:
+            pass
         # Prefer sheet_map workbook path; else first xlsx in workbook/; else part yaml.
         sm = self.load_sheet_map()
         rel = ((sm.get("workbook") or {}) if isinstance(sm, dict) else {}).get("path")
         if rel:
             candidate = (self.manifest_dir() / str(rel)).resolve()
             if candidate.is_file():
-                return candidate
+                from ate.tests.logic.excel_lock import is_ultimate_path
+
+                if not is_ultimate_path(candidate):
+                    return candidate
         wb = self.workbook_dir()
         if wb.is_dir():
-            xlsx = sorted(wb.glob("*.xlsx"))
+            from ate.tests.logic.excel_lock import is_ultimate_path
+
+            xlsx = sorted(
+                p for p in wb.glob("*.xlsx") if p.is_file() and not is_ultimate_path(p)
+            )
             if xlsx:
                 return xlsx[0]
         return wb / f"{self.model}_Lab_Report_{self.package}.xlsx"

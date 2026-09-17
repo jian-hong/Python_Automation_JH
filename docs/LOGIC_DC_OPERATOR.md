@@ -19,7 +19,7 @@ Paste this tree under the campaign. Launch with **START.bat** in this folder (zi
 ```
 #Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/
   START.bat                 # copy-ready: same START.bat as zip root
-  workbook/                 # lab xlsx (Import xlsx / Create folders)
+  workbook/                 # golden_auto lab xlsx (never ultimate_manual)
   _manifest/sheet_map.yaml  # folder <-> sheet <-> paste anchors
   _manifest/test_params.yaml
   sessions/report.json
@@ -112,18 +112,19 @@ Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/
 
 ## Excel path -- never invent cells
 
-**Policy:** one workbook per campaign Version. `workbook_policy: one_per_version_overwrite`. Same session always writes/overwrites that same xlsx under:
+**Split:** two books, two jobs.
 
-`#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`
+- **golden_auto** = the chosen campaign Version `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`. `workbook_policy.golden_auto: one_per_version_overwrite`. Continue / Open Session / START / Fill Excel always overwrite-in-place **that** book. JSON->Excel from card-backed field ids only. Plots as already specified. Setup shows CONFIRMED/UNCONFIRMED.
+- **ultimate_manual** = a separate all-test jot workbook. `workbook_policy.ultimate_manual: never_auto_write`. NEVER the auto target. Do not write Path B auto runs into ultimate. Do not invent columns.
 
-Never create an orphan second book (`_filled.xlsx` or another name). If Excel has the file locked, Fill Excel **FAIL**s (orphan) -- do not save a second path.
+Same session always overwrites the same golden_auto xlsx. Never an orphan second Version book (`_filled.xlsx` or another golden name). If Excel has the golden file locked, Fill Excel **FAIL**s (orphan) -- do not save a second path. If the auto dest is the jot book, Fill Excel **FAIL**s (`ultimate`).
 
 Campaign tree (same copy-ready Version folder as above):
 
 ```
 #Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/
   START.bat
-  workbook/                 # the one lab xlsx (overwrite, never a second book)
+  workbook/                 # golden_auto lab xlsx (overwrite-in-place)
   _manifest/sheet_map.yaml  # OpAmp / imported VOX paste anchors
   _manifest/test_params.yaml
   sessions/report.json
@@ -131,7 +132,7 @@ Campaign tree (same copy-ready Version folder as above):
   {test}/DUT_n/records/
 ```
 
-Record path after a run is still: that workbook + `sessions/report.json` + `{test}/DUT_n/records/` + STS datalog.
+Record path after a run is still: that golden_auto workbook + `sessions/report.json` + `{test}/DUT_n/records/` + STS datalog. The jot book is outside this auto path.
 
 ### Path B (RS1G97 / RS1G126 / RS1GT34)
 
@@ -153,7 +154,7 @@ Auto plots when series data exists (from those headers):
 
 Series ids only: `vih_vs_vcc`, `vil_vs_vcc`, `icc_vs_vcc`, `voh_at_ioh`, `vol_at_iol`, `ii_vs_vcc`, `ioz_vs_vcc` if OE; `vtplus_vs_vcc` / `vtminus_vs_vcc` / `dvt_vs_vcc` if Schmitt; `delta_icc_vs_vcc` only if enabled+mapped.
 
-**Results -> Fill Excel numbers** on Path B overwrites the one Version xlsx (`write_path_b_workbook`). `check_logic_dc` FAIL-closes an orphan second xlsx, or an enabled test with series data but no `excel_plots` binding.
+**Results -> Fill Excel numbers** on Path B overwrites the one Version **golden_auto** xlsx (`write_path_b_workbook`). Continue / Open Session bind fill/plot to that Version path only. `check_logic_dc` FAIL-closes an auto write path that equals **ultimate_manual**, an orphan second Version xlsx, invented columns, or an enabled test with series data but no `excel_plots` binding.
 
 RS1GT34 `excel_plots.status` stays **UNCONFIRMED until JH CONFIRM** -- numbers not greenable.
 
@@ -189,7 +190,7 @@ Zip operators: `START.bat` (from `ATE_Console_Try_*.zip` or the copy-ready Versi
 
 - UI: `http://127.0.0.1:5174`
 - Worker JSON-RPC: `http://127.0.0.1:8766` (not 8765)
-- After `git pull` / zip refresh: **Ctrl+F5**
+- After `git pull` / zip refresh: **Ctrl+F5** (`app.js?v=20260917logicdc11`)
 - After `ate/tests/**` / worker changes: idle-restart worker (`restart_ate_worker.bat`), not mid-run, then Ctrl+F5
 
 Pick a **person** (not All) -> Apply campaign -> Discover -> Open Session -> tick tests -> START.
@@ -206,7 +207,7 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 4. Tick Path B DC: `input_threshold` (and/or `vth`), `icc`, `delta_icc`, `ii`, `voh`, `vol`. 126 also tick `ioz`. 97 must **not** tick `ioz` / `ioff`.
 5. START (not DEMO). Confirm an unstable DMM **settle timeout hard-FAIL**s (RuntimeError / FAIL) when `stable_eps_A` is grounded, not a last-reading PASS. Recipe timeout 2.0 s. Null `stable_eps_A` is NON_TIGHT (wait `settle_s` once); do not invent uA. Tight-settle claims stay FAIL-closed until overlay/panel sets `stable_eps_A`.
 6. On a stable bench: Results / `report.json` -- **VOH >= min** vs CONFIRMED `voh_table` / limits (`min_only`); **VOL <= max** vs CONFIRMED `vol_table` (`max_only`). Do not invent extra loads. After run, Continue shows save paths (`workbook/` + `sessions/report.json` + STS datalog + `{test}/DUT_n/records/`). On FAIL, attach photo to `{test}/DUT_n/`.
-7. Fill Excel: Path B overwrites the one Version xlsx (`excel_plots` / `one_per_version_overwrite`). Never an orphan second book. Imported VOX still uses sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
+7. Fill Excel: Path B overwrites the Version **golden_auto** xlsx (`excel_plots` / `golden_auto: one_per_version_overwrite`). Never write **ultimate_manual**. Never an orphan second Version book. Imported VOX still uses sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
 
 **RS1G97 extra**
 

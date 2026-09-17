@@ -1,9 +1,14 @@
-"""Path B Excel lock: one Version workbook, card-backed plots only.
+"""Path B Excel lock: golden_auto Version book vs ultimate_manual jot.
 
-Never invent sheet cells (no G16-style paste). Headers come from Path B
-runner row keys. Regex only detects plottable series on those headers.
-workbook_policy one_per_version_overwrite: same session overwrites the same
-xlsx. A second file in workbook/ is an orphan FAIL.
+golden_auto = chosen campaign Version
+`#Test_Database/.../{Version_N}/workbook/` -- Continue/START overwrite-in-place.
+JSON->Excel from card-backed field ids only. Never invent columns.
+
+ultimate_manual = separate all-test jot workbook -- NEVER the auto target.
+workbook_policy.golden_auto: one_per_version_overwrite
+workbook_policy.ultimate_manual: never_auto_write
+
+A second golden file in Version workbook/ is an orphan FAIL.
 """
 from __future__ import annotations
 
@@ -15,6 +20,13 @@ from typing import Any
 from ate.tests.logic.product_model import ProductModel, icc_pins
 
 WORKBOOK_POLICY = "one_per_version_overwrite"
+ULTIMATE_POLICY = "never_auto_write"
+
+# Filename / folder tokens that mark the jot book. Do not write auto runs there.
+_ULTIMATE_RX = re.compile(
+    r"(ultimate(_?manual)?|(^|[^a-z0-9])jot([^a-z0-9]|$)|all[-_]?test)",
+    re.I,
+)
 
 # Card-backed series ids. Do not add noise / GBW / invented plots.
 ALLOWED_SERIES = frozenset(
@@ -99,21 +111,61 @@ _X_FOR_SERIES = {
 
 
 class OrphanWorkbook(RuntimeError):
-    """A run would create or leave a second xlsx under workbook/."""
+    """A run would create or leave a second golden xlsx under workbook/."""
+
+
+class UltimateWorkbook(RuntimeError):
+    """Auto write targeted the ultimate_manual jot book."""
+
+
+def workbook_policy_map(model: ProductModel | None) -> dict[str, str]:
+    if model is None:
+        return {}
+    raw = getattr(model, "workbook_policy", None)
+    if isinstance(raw, dict):
+        return {
+            str(k).strip(): str(v or "").strip()
+            for k, v in raw.items()
+            if str(k).strip()
+        }
+    if isinstance(raw, str) and raw.strip():
+        return {"golden_auto": raw.strip()}
+    plots = getattr(model, "excel_plots", None)
+    if isinstance(plots, dict):
+        nested = plots.get("policy") or plots.get("workbook_policy")
+        if isinstance(nested, dict):
+            return {
+                str(k).strip(): str(v or "").strip()
+                for k, v in nested.items()
+                if str(k).strip()
+            }
+        if nested not in (None, ""):
+            return {"golden_auto": str(nested).strip()}
+    return {}
+
+
+def golden_auto_policy(model: ProductModel | None) -> str:
+    return str(workbook_policy_map(model).get("golden_auto") or "").strip()
+
+
+def ultimate_manual_policy(model: ProductModel | None) -> str:
+    return str(workbook_policy_map(model).get("ultimate_manual") or "").strip()
 
 
 def workbook_policy(model: ProductModel | None) -> str:
-    if model is None:
-        return ""
-    raw = str(getattr(model, "workbook_policy", "") or "").strip()
-    if raw:
-        return raw
-    plots = getattr(model, "excel_plots", None)
-    if isinstance(plots, dict):
-        p = str(plots.get("policy") or plots.get("workbook_policy") or "").strip()
-        if p:
-            return p
-    return ""
+    """golden_auto token. Nested map is the schema; string is legacy."""
+    return golden_auto_policy(model)
+
+
+def is_ultimate_path(path: Path | str | None) -> bool:
+    """True if this xlsx/folder is the jot / ultimate_manual book."""
+    if path is None:
+        return False
+    text = str(path).replace("\\", "/")
+    p = Path(text)
+    chunks = [text, p.name, p.stem]
+    chunks.extend(str(x) for x in p.parts)
+    return any(_ULTIMATE_RX.search(str(c)) for c in chunks if c)
 
 
 def excel_plots_status(model: ProductModel | None) -> str:
@@ -129,7 +181,25 @@ def uses_excel_lock(model: ProductModel | None) -> bool:
     if model is None:
         return False
     plots = normalize_excel_plots(model)
-    return workbook_policy(model) == WORKBOOK_POLICY or bool(plots)
+    return golden_auto_policy(model) == WORKBOOK_POLICY or bool(plots)
+
+
+def policy_errors(model: ProductModel | None) -> list[str]:
+    if model is None or not uses_excel_lock(model):
+        return []
+    errors: list[str] = []
+    part = str(getattr(model, "part", "") or "")
+    ga = golden_auto_policy(model)
+    um = ultimate_manual_policy(model)
+    if ga != WORKBOOK_POLICY:
+        errors.append(
+            f"{part}: workbook_policy.golden_auto must be {WORKBOOK_POLICY!r}, got {ga!r}"
+        )
+    if um != ULTIMATE_POLICY:
+        errors.append(
+            f"{part}: workbook_policy.ultimate_manual must be {ULTIMATE_POLICY!r}, got {um!r}"
+        )
+    return errors
 
 
 def normalize_excel_plots(model: ProductModel | None) -> list[dict[str, str]]:
@@ -281,6 +351,7 @@ def binding_errors(
                     errors.append(
                         f"{model.part}: series data for {sid} but excel_plots has no binding"
                     )
+    errors.extend(policy_errors(model))
     return errors
 
 
@@ -296,7 +367,13 @@ def list_xlsx(workbook_dir: Path) -> list[Path]:
     return sorted(p for p in workbook_dir.glob("*.xlsx") if p.is_file() and not p.name.startswith("~$"))
 
 
+def golden_xlsx(workbook_dir: Path) -> list[Path]:
+    """Version golden_auto files only. ultimate_manual jot books are excluded."""
+    return [p for p in list_xlsx(workbook_dir) if not is_ultimate_path(p)]
+
+
 def canonical_workbook_path(ctx: Any, model: ProductModel | None = None) -> Path:
+    """golden_auto dest under Version workbook/. Never the jot book."""
     wb_dir = Path(ctx.workbook_dir())
     sm: dict[str, Any] = {}
     load_sm = getattr(ctx, "load_sheet_map", None)
@@ -310,23 +387,59 @@ def canonical_workbook_path(ctx: Any, model: ProductModel | None = None) -> Path
         rel = str(block.get("path") or "").strip()
     dest: Path | None = None
     if rel:
-        dest = (ctx.manifest_dir() / rel).resolve()
-    existing = list_xlsx(wb_dir)
+        candidate = (ctx.manifest_dir() / rel).resolve()
+        if not is_ultimate_path(candidate):
+            dest = candidate
+    existing = golden_xlsx(wb_dir)
     if dest is None:
         if len(existing) == 1:
             dest = existing[0].resolve()
         else:
             dest = (wb_dir / default_workbook_name(ctx)).resolve()
+    if is_ultimate_path(dest):
+        dest = (wb_dir / default_workbook_name(ctx)).resolve()
     return dest
 
 
 def orphan_xlsx(ctx: Any, dest: Path) -> list[Path]:
+    """Second Version golden book. ultimate_manual files are not golden orphans."""
     dest_r = dest.resolve()
     extras: list[Path] = []
-    for p in list_xlsx(Path(ctx.workbook_dir())):
+    for p in golden_xlsx(Path(ctx.workbook_dir())):
         if p.resolve() != dest_r:
             extras.append(p)
     return extras
+
+
+def bind_golden_auto(ctx: Any, model: ProductModel | None = None) -> str:
+    """Continue/Open Session / Fill Excel bind to golden_auto Version path only."""
+    if model is None:
+        from ate.tests.logic.product_model import has_product_model, load_product_model
+
+        key = str(getattr(ctx, "part_key", "") or "").strip().lower()
+        if not key or not has_product_model(key):
+            return ""
+        model = load_product_model(key)
+    if not uses_excel_lock(model):
+        return ""
+    dest = canonical_workbook_path(ctx, model)
+    if is_ultimate_path(dest):
+        raise UltimateWorkbook(
+            f"auto write path is ultimate_manual (never_auto_write): {dest}"
+        )
+    return str(dest)
+
+
+def coerce_golden_auto_lab_report(ctx: Any, proposed: str = "") -> str:
+    """Overwrite-in-place the Version golden. Refuse ultimate_manual."""
+    bound = bind_golden_auto(ctx)
+    if not bound:
+        return str(proposed or "").strip()
+    if proposed and is_ultimate_path(proposed):
+        raise UltimateWorkbook(
+            f"refusing Path B auto write to ultimate_manual {proposed}"
+        )
+    return bound
 
 
 def _dut_n(model: ProductModel, ctx: Any) -> int:
@@ -343,6 +456,59 @@ def _dut_n(model: ProductModel, ctx: Any) -> int:
 
 
 _SKIP_EXTRA = frozenset({"vector", "fix", "status", "note", "y_expect"})
+_ALLOWED_HEADERS = frozenset(
+    {
+        "DUT",
+        "PIN",
+        "VCC",
+        "VT+",
+        "VT-",
+        "HYSTERESIS_V",
+        "VIH",
+        "VIL",
+        "VIH_min_V",
+        "VIL_max_V",
+        "ICC_uA",
+        "NEAR_PIN",
+        "NEAR_V",
+        "OTHERS",
+        "VI",
+        "II_uA",
+        "id",
+        "IOH_A",
+        "IOL_A",
+        "Vref",
+        "Measured",
+        "Spec_min",
+        "Spec_max",
+        "Result",
+        "mode",
+        "pass_mode",
+        "VOH",
+        "VOL",
+        "OE",
+        "VOUT",
+        "IOZ_uA",
+        "DELTA_ICC_uA",
+        "vcc_owner",
+        "field",
+        "value",
+    }
+)
+_IN_PIN_RX = re.compile(r"^IN_[A-Za-z0-9]+$")
+
+
+def header_allowed(name: str) -> bool:
+    k = str(name or "").strip()
+    if not k or k in _SKIP_EXTRA:
+        return False
+    if k in _ALLOWED_HEADERS:
+        return True
+    return bool(_IN_PIN_RX.match(k))
+
+
+def invented_headers(headers: list[str]) -> list[str]:
+    return [str(h) for h in headers if str(h or "").strip() and not header_allowed(str(h))]
 
 
 def _headers_for(test_id: str, model: ProductModel, sample_row: dict[str, Any] | None) -> list[str]:
@@ -371,7 +537,7 @@ def _headers_for(test_id: str, model: ProductModel, sample_row: dict[str, Any] |
     if isinstance(sample_row, dict):
         for key in sample_row.keys():
             k = str(key)
-            if k not in cols and k not in _SKIP_EXTRA:
+            if k not in cols and header_allowed(k):
                 extra.append(k)
     return cols + extra
 
@@ -477,7 +643,9 @@ def _write_setup(ws: Any, model: ProductModel) -> None:
         ("isolation_status", model.isolation_status),
         ("schmitt", model.schmitt),
         ("oe", model.oe_mode),
-        ("workbook_policy", workbook_policy(model) or WORKBOOK_POLICY),
+        ("workbook_policy", workbook_policy_map(model) or {"golden_auto": WORKBOOK_POLICY}),
+        ("golden_auto", golden_auto_policy(model) or WORKBOOK_POLICY),
+        ("ultimate_manual", ultimate_manual_policy(model) or ULTIMATE_POLICY),
         ("vcc_list", list(model.vcc_list)),
         ("vcc_grid", dict(model.vcc_grid or {})),
         ("pass_mode", dict(model.pass_mode)),
@@ -603,6 +771,9 @@ def _write_test_sheet(
     rows = _steps_rows(report, test_ids)
     sample = rows[0] if rows else None
     headers = _headers_for(primary, model, sample)
+    bad = invented_headers(headers)
+    if bad:
+        raise RuntimeError(f"invented columns {bad} (card-backed runner ids only)")
     for c, name in enumerate(headers, start=1):
         ws.cell(1, c, name)
     body = rows or _template_body(primary, model, ctx)
@@ -624,17 +795,20 @@ def write_path_b_workbook(
     report: dict[str, Any] | None = None,
     enabled: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Create or overwrite the one Version xlsx. Never writes a second book."""
-    if workbook_policy(model) and workbook_policy(model) != WORKBOOK_POLICY:
-        raise RuntimeError(
-            f"workbook_policy must be {WORKBOOK_POLICY!r}, got {workbook_policy(model)!r}"
-        )
+    """Create or overwrite the one Version golden_auto xlsx. Never writes ultimate_manual."""
+    errors = policy_errors(model)
+    if errors:
+        raise RuntimeError("; ".join(errors))
     if enabled is None:
         from ate.fixture.modes import enabled_tests_for_part
 
         key = str(getattr(ctx, "part_key", "") or "").strip().lower()
         enabled = list(enabled_tests_for_part(key) or [])
     dest = canonical_workbook_path(ctx, model)
+    if is_ultimate_path(dest):
+        raise UltimateWorkbook(
+            f"auto write path == ultimate_manual (never_auto_write): {dest}"
+        )
     if dest.name.endswith("_filled.xlsx") or dest.stem.endswith("_filled"):
         raise OrphanWorkbook(f"refusing orphan path {dest}")
     wb_dir = Path(ctx.workbook_dir())
@@ -642,8 +816,8 @@ def write_path_b_workbook(
     extras = orphan_xlsx(ctx, dest)
     if extras:
         raise OrphanWorkbook(
-            f"workbook/ has extra xlsx {sorted(p.name for p in extras)}; "
-            f"one_per_version_overwrite dest={dest.name}"
+            f"workbook/ has extra golden xlsx {sorted(p.name for p in extras)}; "
+            f"golden_auto dest={dest.name}"
         )
     from openpyxl import Workbook, load_workbook
 
@@ -687,19 +861,20 @@ def write_path_b_workbook(
             wb.save(dest)
         except PermissionError as exc:
             raise OrphanWorkbook(
-                f"xlsx locked at {dest}; one_per_version_overwrite refuses a second book"
+                f"xlsx locked at {dest}; golden_auto refuses a second book"
             ) from exc
         extras_after = orphan_xlsx(ctx, dest)
         if extras_after:
             raise OrphanWorkbook(
-                f"write created orphan xlsx {sorted(p.name for p in extras_after)}"
+                f"write created orphan golden xlsx {sorted(p.name for p in extras_after)}"
             )
         return {
             "filled": 1,
             "status": "ok",
             "excel": str(dest),
             "created": created,
-            "policy": WORKBOOK_POLICY,
+            "target": "golden_auto",
+            "policy": workbook_policy_map(model),
             "plots": plots,
         }
     finally:

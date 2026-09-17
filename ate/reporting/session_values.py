@@ -1,9 +1,9 @@
 """Fill campaign workbook number cells from living report.json.
 
-Path B (excel_plots + workbook_policy one_per_version_overwrite): create or
-overwrite the one Version xlsx. Never a second orphan book / _filled.xlsx.
-OpAmp / mapped families: sheet_map paste.values (measurement id -> cell,
-DUT list, or CHA/CHB grid). Skips FILL_ME. Does not run OpAmp golden on Path B.
+Path B golden_auto (workbook_policy.golden_auto one_per_version_overwrite):
+create or overwrite the Version xlsx. Never write ultimate_manual
+(never_auto_write). Never a second orphan golden book / _filled.xlsx.
+OpAmp / mapped families: sheet_map paste.values. Skips FILL_ME.
 """
 from __future__ import annotations
 
@@ -128,6 +128,7 @@ def fill_workbook_from_report(
         from ate.tests.logic.product_model import has_product_model, load_product_model
         from ate.tests.logic.excel_lock import (
             OrphanWorkbook,
+            UltimateWorkbook,
             uses_excel_lock,
             write_path_b_workbook,
         )
@@ -138,6 +139,14 @@ def fill_workbook_from_report(
             if uses_excel_lock(model):
                 try:
                     return write_path_b_workbook(ctx=c, model=model, report=doc)
+                except UltimateWorkbook as exc:
+                    return {
+                        "filled": 0,
+                        "skipped": 0,
+                        "status": "ultimate",
+                        "excel": str(path),
+                        "error": str(exc),
+                    }
                 except OrphanWorkbook as exc:
                     return {
                         "filled": 0,

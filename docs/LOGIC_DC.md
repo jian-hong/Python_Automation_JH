@@ -62,7 +62,9 @@ product_model:
   gaps: []                # honest UNSURE / PROVISIONAL notes
   # AE/FAE handoff (97/126): wire_map from CONFIRMED pins+pin_drive only.
   # settle_prompt (show wait). data_paths folder templates -- never invent nets/cells.
-  workbook_policy: one_per_version_overwrite
+  workbook_policy:
+    golden_auto: one_per_version_overwrite   # Version workbook/ overwrite-in-place
+    ultimate_manual: never_auto_write         # jot book -- never the auto target
   excel_plots:
     series: [vih_vs_vcc, vil_vs_vcc, icc_vs_vcc, voh_at_ioh, vol_at_iol, ii_vs_vcc]
     # ioz_vs_vcc only if OE; vtplus/vtminus/dvt if Schmitt; delta_icc_vs_vcc if enabled+mapped
@@ -83,7 +85,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126 use the CONFIRMED Full IOH/IOL grid (same table). RS1GT34 uses UNCONFIRMED DRAFT-card tables (100uA expanded onto merged `vcc_list`; high-load only at card-named VCC; not greenable). No invented extra loads. `check_logic_dc` FAIL-closes if `voh`/`vol` is enabled but the table has no rows. Unloaded only when the table is absent and the id is not enabled.
 - **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default. If `stable_eps_A` is set (panel / overlay), eps/N + hard timeout FAIL (never last-reading). If null: tight-settle claims stay FAIL-closed; honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle). Not a DC limit.
 - **AE/FAE Continue** -- every enabled Path B id surfaces `wire_map` (CONFIRMED pins + `pin_drive` only; never invent nets), stimulus, `settle_prompt` (show wait), measure + `pass_mode`, FAIL attach, then `data_paths` save folders. `check_logic_dc` FAIL-closes empty `wire_map` / missing `data_paths` on 97/126.
-- **Excel lock** -- `workbook_policy: one_per_version_overwrite`. One xlsx under `{Version_N}/workbook/`; same session overwrites it. Never an orphan second book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes a second xlsx path, or enabled series data with no plot binding. Do not invent columns. RS1GT34 `excel_plots.status` stays UNCONFIRMED.
+- **Excel lock** -- `workbook_policy.golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. `workbook_policy.ultimate_manual: never_auto_write` -- the all-test jot book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` stays UNCONFIRMED.
 
 ### TestSpec <-> OOP (Part / Pin / TruthTable / Isolation / Limit / Recipe)
 
@@ -150,7 +152,7 @@ python -m ate.core.check_specs_datalog
 python -m ate.core.check_ui_contract
 ```
 
-A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 stays UNCONFIRMED (DRAFT card). Enabled `voh`/`vol` without table rows FAIL the same gate. A Path B run that creates a second orphan xlsx, or an enabled test with series data but no `excel_plots` binding, FAIL the same gate.
+A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 stays UNCONFIRMED (DRAFT card). Enabled `voh`/`vol` without table rows FAIL the same gate. A Path B run that writes the **ultimate_manual** jot book, creates a second orphan Version xlsx, invents columns, or has enabled series data with no `excel_plots` binding, FAIL the same gate.
 
 ## Do not
 
@@ -163,5 +165,5 @@ A green check that never could fail is not a check. Do not claim bench PASS from
 - Invent `delta_offset_v=0.6` for RS1GT34 ICCT
 - Invent a uA `stable_eps_A` default, or reuse `stable_eps_V` as amps
 - Touch `family_ingest` / `FAMILY_PACKAGES` for a new RS1Gxx
-- Invent Excel cells / plot series / a second xlsx under `workbook/`
+- Invent Excel cells / plot series / a second Version xlsx, or auto-write the ultimate_manual jot book
 - Claim Verify PASS / Datasheet-signed from an UNCONFIRMED table

@@ -3320,6 +3320,9 @@ $("btn-open").onclick = async () => {
     sessionOpen = true;
     $("btn-start").disabled = false;
     log(`Session open ${JSON.stringify(m)}\n`);
+    if (m.golden_auto) {
+      log(`Excel golden_auto (never ultimate_manual): ${m.golden_auto}\n`);
+    }
     const need = ["MSO", "PSU", "AWG"];
     const miss = need.filter((k) => !m[k]);
     if (miss.length) {
@@ -4015,6 +4018,9 @@ function pollLoop() {
         log(`Excel fill: ${res.status || ""} filled=${res.filled || 0} plots=${res.plots || 0} ${res.excel || ""} ${res.policy || ""}\n`);
         if (res.status === "orphan") {
           alert(`Excel orphan FAIL: ${res.error || "second xlsx under workbook/"}`);
+        }
+        if (res.status === "ultimate") {
+          alert(`Excel ultimate_manual FAIL: ${res.error || "never auto-write the jot book"}`);
         }
         if ($("results-db-hint")) {
           $("results-db-hint").textContent = `Excel ${res.status}: ${res.excel || ""} (${res.filled || 0} cells)`;
