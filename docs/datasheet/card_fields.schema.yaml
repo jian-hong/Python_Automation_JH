@@ -284,3 +284,30 @@ fields:
     type: json
     editable: true
     deletable: true
+  - key: wire_map
+    oop: Pin
+    type: json
+    editable: true
+    deletable: true
+    label: "wire_map (CONFIRMED pins + pin_drive only)"
+    note: >
+      PSU CH->pin, AWG CH->input, DMM->VCC or Y, SCOPE CH->Y/debug.
+      Human Continue after verify. Never invent nets.
+  - key: settle_prompt
+    oop: Recipe
+    type: json
+    editable: true
+    deletable: true
+    label: settle_prompt (show wait)
+    note: >
+      Voltage eps/N; current NON_TIGHT if stable_eps_A null, else tight
+      eps/N + timeout hard-FAIL.
+  - key: data_paths
+    oop: Part
+    type: json
+    editable: true
+    deletable: true
+    label: data_paths (folder templates)
+    note: >
+      Folder templates only. Never invent Excel cells.
+      excel / report / datalog / records required.

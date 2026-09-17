@@ -5,7 +5,7 @@ Keywords: path-b, logic-dc, product_model, isolation, rs1g97, rs1g08, rs1g126, i
 
 ## main_idea
 
-One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_model` YAML. 2-input AND (RS1G08) and 3-input RS1G97 share the same TestSpec.run. Isolation is derived from truth_table (Y tracks swept pin; invert only if no track combo -- See Lim algorithm, not per-SKU hardcodes). ICC corners = 2^n. Version overlay `_manifest/test_params.yaml`. pass_mode first-class (range / min-only / max-only / fail-open / unspec). RS1G97 / RS1G126 truth_table + isolation are CONFIRMED (Jian Hong 2026-09-17). C-track A:H B:L is unlocked at run. STANDARD FORMAT checklist is `#add-test-format` on Setup Test program (Path A/B/C). `#panel-logic-dc` visualises enabled tests, recipe, card_fields (OOP assign/edit/delete), truth table, isolation, ICC corners, limits+pass_mode. Add SKU: `docs/LOGIC_DC.md`. Operator bench: `docs/LOGIC_DC_OPERATOR.md` (DEMO/SIM is not a reproduce; Excel cells only from sheet_map / campaign_outline). See Lim wrap is `seelim_dc.py` locator only. OOP schema: `docs/datasheet/card_fields.schema.yaml`. Runnable lock: every enabled_tests id must have TestSpec.run callable.
+One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_model` YAML. 2-input AND (RS1G08) and 3-input RS1G97 share the same TestSpec.run. Isolation is derived from truth_table (Y tracks swept pin; invert only if no track combo -- See Lim algorithm, not per-SKU hardcodes). ICC corners = 2^n. Version overlay `_manifest/test_params.yaml`. pass_mode first-class (range / min-only / max-only / fail-open / unspec). RS1G97 / RS1G126 truth_table + isolation are CONFIRMED (Jian Hong 2026-09-17). C-track A:H B:L is unlocked at run. STANDARD FORMAT checklist is `#add-test-format` on Setup Test program (Path A/B/C). `#panel-logic-dc` visualises enabled tests, recipe, card_fields (OOP assign/edit/delete including wire_map / settle_prompt / data_paths), truth table, isolation, ICC corners, limits+pass_mode. Add SKU: `docs/LOGIC_DC.md`. Operator bench: `docs/LOGIC_DC_OPERATOR.md` (DEMO/SIM is not a reproduce; Excel cells only from sheet_map / campaign_outline). See Lim wrap is `seelim_dc.py` locator only. OOP schema: `docs/datasheet/card_fields.schema.yaml`. Runnable lock: every enabled_tests id must have TestSpec.run callable. AE/FAE Continue: wire_map from CONFIRMED pins+pin_drive only (never invent nets); settle_prompt show wait; data_paths folder templates; FAIL attach `{test}/DUT_n/`.
 
 ## traps
 
@@ -27,6 +27,8 @@ One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_mo
 - enabled_tests must map to a registered TestSpec with callable run (check_logic_dc runnable gate). No stub.
 - Panel save keys come from docs/datasheet/card_fields.schema.yaml. PaddleOCR path; do not install Baidu unless asked. See Lim/Ariff are read-only refs.
 - Operator Excel: never invent cells. Fill Excel = campaign sheet_map paste.values; known Logic VOX/ICC cells only from campaign_outline.py when those sheets exist.
+- AE/FAE wire_map only from CONFIRMED pins + pin_drive. PSU CH2 is pin Y use=load (existing VOH/VOL fixture), not a new net. SCOPE CH1 is output_pin Y (debug capture), not IN+/VOUT. check_logic_dc FAIL-closes empty wire_map / missing data_paths on 97/126 only (not rs1g08).
+- runner pause_hook must accept checklist= so Logic Continue is not OpAmp IN+/VOUT. Do not wrap TestSpec.run at _register (th.run is ldc._run_input_threshold).
 
 ## cite
 
@@ -40,3 +42,6 @@ docs/LOGIC_DC_OPERATOR.md
 docs/datasheet/card_fields.schema.yaml
 ate/ui/web/index.html
 ate/config/parts/rs1g97.yaml
+ate/config/parts/rs1g126.yaml
+ate/tests/logic/wraps.py
+ate/core/runner.py

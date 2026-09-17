@@ -47,6 +47,9 @@ from ate.tests.logic.product_model import (
     load_product_model,
     logic_volts,
     lookup_pass_mode,
+    operator_pause,
+    path_b_handoff,
+    resolve_data_paths,
     vectors_for_output,
 )
 
@@ -62,11 +65,8 @@ def _require(instr, *names: str) -> None:
         raise RuntimeError(f"Missing instruments: {', '.join(missing)}")
 
 
-def _pause(params: Any, title: str) -> bool:
-    hook = getattr(params, "pause_hook", None)
-    if hook is None:
-        return True
-    return bool(hook(title))
+def _pause(params: Any, title: str, checklist: Optional[list[str]] = None) -> bool:
+    return operator_pause(params, title, checklist)
 
 
 def _campaign_overlay() -> dict[str, Any]:
@@ -182,6 +182,9 @@ def _finish(model: ProductModel, test_id: str, payload: dict[str, Any]) -> dict[
                 row["Result"] = "UNCONFIRMED"
             row.setdefault("status", model.truth_table_status or "UNCONFIRMED")
     tid = str(test_id or "").strip().lower()
+    paths = resolve_data_paths(model, tid)
+    if paths:
+        data["data_paths"] = paths
     if tid in _CURRENT_SETTLE_IDS:
         settle = _current_settle_tag(model)
         data["settle"] = settle
@@ -545,80 +548,81 @@ def _sweep_threshold(
 def _run_input_threshold(instr, params: Any) -> dict[str, Any]:
     _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
-    ilim = _current_limit(params, model)
-    vccs = _vcc_corners(params, model)
-    schmitt = bool(model.schmitt)
-    rows: list[dict[str, Any]] = []
-    try:
-        for vcc in vccs:
-            _power_vcc(instr, vcc, ilim)
-            for pin in model.logic_inputs:
-                pats = isolation_for_run(model, pin)
-                if not pats:
-                    rows.append(
-                        {
+    with path_b_handoff(params, model, "input_threshold"):
+        ilim = _current_limit(params, model)
+        vccs = _vcc_corners(params, model)
+        schmitt = bool(model.schmitt)
+        rows: list[dict[str, Any]] = []
+        try:
+            for vcc in vccs:
+                _power_vcc(instr, vcc, ilim)
+                for pin in model.logic_inputs:
+                    pats = isolation_for_run(model, pin)
+                    if not pats:
+                        rows.append(
+                            {
+                                "VCC": vcc,
+                                "PIN": pin,
+                                "status": "UNSURE",
+                                "note": "no isolation pattern (unused ties not in YAML / not derivable)",
+                            }
+                        )
+                        continue
+                    for pat in pats:
+                        rising_first = pattern_rising_first(pat)
+                        rise = _sweep_threshold(
+                            instr, model=model, vcc=vcc, ilim=ilim, pattern=pat, rising=True
+                        )
+                        fall = _sweep_threshold(
+                            instr, model=model, vcc=vcc, ilim=ilim, pattern=pat, rising=False
+                        )
+                        if not rising_first:
+                            # invert / VIL reverse: still record both; VIL is falling-vin
+                            pass
+                        hyst = None
+                        if rise is not None and fall is not None:
+                            hyst = round(float(rise) - float(fall), 4)
+                        rec: dict[str, Any] = {
                             "VCC": vcc,
                             "PIN": pin,
-                            "status": "UNSURE",
-                            "note": "no isolation pattern (unused ties not in YAML / not derivable)",
+                            "fix": dict(pat.fix),
+                            "y_expect": pat.y_expect,
                         }
-                    )
-                    continue
-                for pat in pats:
-                    rising_first = pattern_rising_first(pat)
-                    rise = _sweep_threshold(
-                        instr, model=model, vcc=vcc, ilim=ilim, pattern=pat, rising=True
-                    )
-                    fall = _sweep_threshold(
-                        instr, model=model, vcc=vcc, ilim=ilim, pattern=pat, rising=False
-                    )
-                    if not rising_first:
-                        # invert / VIL reverse: still record both; VIL is falling-vin
-                        pass
-                    hyst = None
-                    if rise is not None and fall is not None:
-                        hyst = round(float(rise) - float(fall), 4)
-                    rec: dict[str, Any] = {
-                        "VCC": vcc,
-                        "PIN": pin,
-                        "fix": dict(pat.fix),
-                        "y_expect": pat.y_expect,
-                    }
-                    if schmitt:
-                        rec["VT+"] = rise
-                        rec["VT-"] = fall
-                        rec["HYSTERESIS_V"] = hyst
-                    else:
-                        rec["VIH"] = rise
-                        rec["VIL"] = fall
-                        rec["HYSTERESIS_V"] = hyst
-                    rows.append(rec)
-    finally:
-        _power_down(instr)
-    if not rows:
-        raise RuntimeError("input_threshold: no isolation rows measured")
-    last = rows[-1]
-    if schmitt:
-        summary = f"VTH n={len(rows)} last VT+={last.get('VT+')} VT-={last.get('VT-')}"
-        meas = []
-        vt_p = [r.get("VT+") for r in rows if r.get("VT+") is not None]
-        vt_m = [r.get("VT-") for r in rows if r.get("VT-") is not None]
-        if vt_p:
-            meas.append(_meas(model, "VTPLUS_V", vt_p[-1], "V", test_id="input_threshold"))
-        if vt_m:
-            meas.append(_meas(model, "VTMINUS_V", vt_m[-1], "V", test_id="input_threshold"))
-    else:
-        summary = f"VTH n={len(rows)} last VIH={last.get('VIH')} VIL={last.get('VIL')}"
-        meas = []
-        if last.get("VIH") is not None:
-            meas.append(_meas(model, "VIH_V", last["VIH"], "V", test_id="input_threshold"))
-        if last.get("VIL") is not None:
-            meas.append(_meas(model, "VIL_V", last["VIL"], "V", test_id="input_threshold"))
-    return _finish(
-        model,
-        "input_threshold",
-        {"summary": summary, "data": {"rows": rows, "schmitt": schmitt}, "measurements": meas},
-    )
+                        if schmitt:
+                            rec["VT+"] = rise
+                            rec["VT-"] = fall
+                            rec["HYSTERESIS_V"] = hyst
+                        else:
+                            rec["VIH"] = rise
+                            rec["VIL"] = fall
+                            rec["HYSTERESIS_V"] = hyst
+                        rows.append(rec)
+        finally:
+            _power_down(instr)
+        if not rows:
+            raise RuntimeError("input_threshold: no isolation rows measured")
+        last = rows[-1]
+        if schmitt:
+            summary = f"VTH n={len(rows)} last VT+={last.get('VT+')} VT-={last.get('VT-')}"
+            meas = []
+            vt_p = [r.get("VT+") for r in rows if r.get("VT+") is not None]
+            vt_m = [r.get("VT-") for r in rows if r.get("VT-") is not None]
+            if vt_p:
+                meas.append(_meas(model, "VTPLUS_V", vt_p[-1], "V", test_id="input_threshold"))
+            if vt_m:
+                meas.append(_meas(model, "VTMINUS_V", vt_m[-1], "V", test_id="input_threshold"))
+        else:
+            summary = f"VTH n={len(rows)} last VIH={last.get('VIH')} VIL={last.get('VIL')}"
+            meas = []
+            if last.get("VIH") is not None:
+                meas.append(_meas(model, "VIH_V", last["VIH"], "V", test_id="input_threshold"))
+            if last.get("VIL") is not None:
+                meas.append(_meas(model, "VIL_V", last["VIL"], "V", test_id="input_threshold"))
+        return _finish(
+            model,
+            "input_threshold",
+            {"summary": summary, "data": {"rows": rows, "schmitt": schmitt}, "measurements": meas},
+        )
 
 
 def pattern_rising_first(pat: IsolationPattern) -> bool:
@@ -629,41 +633,38 @@ def _run_icc(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE ICC: DMM-on-VCC (series with PSU CH1 / DUT VCC).
     _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
-    ilim = _current_limit(params, model)
-    pins = icc_pins(model)
-    corners = iter_logic_corners(pins)
-    vccs = _vcc_corners(params, model)
-    _pause(
-        params,
-        f"ICC: DMM in series with VCC (PSU CH1). {len(corners)} input corners x {len(vccs)} VCC. Continue.",
-    )
-    rows: list[dict[str, Any]] = []
-    try:
-        for vcc in vccs:
-            _power_vcc(instr, vcc, ilim)
-            _wait_settled_current_ua(instr.dmm, model)
-            any_ok = False
-            for vec in corners:
-                _apply_levels(instr, model, vec, vcc, ilim)
-                i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
-                rec = {"VCC": vcc, "ICC_uA": i_ua}
-                rec.update({f"IN_{k}": v for k, v in vec.items()})
-                rows.append(rec)
-                any_ok = True
-            if not any_ok:
-                raise RuntimeError(f"icc: no corners at VCC={vcc}")
-    finally:
-        _power_down(instr)
-    mx = max((abs(float(r["ICC_uA"])) for r in rows), default=0.0)
-    return _finish(
-        model,
-        "icc",
-        {
-            "summary": f"ICC n={len(rows)} max={mx:.3f} uA ({len(pins)} pins, 2^{len(pins)} corners)",
-            "data": {"rows": rows, "instrument_sense": "DMM-on-VCC"},
-            "measurements": [_meas(model, "ICC_uA", mx, "uA", test_id="icc")],
-        },
-    )
+    with path_b_handoff(params, model, "icc"):
+        ilim = _current_limit(params, model)
+        pins = icc_pins(model)
+        corners = iter_logic_corners(pins)
+        vccs = _vcc_corners(params, model)
+        rows: list[dict[str, Any]] = []
+        try:
+            for vcc in vccs:
+                _power_vcc(instr, vcc, ilim)
+                _wait_settled_current_ua(instr.dmm, model)
+                any_ok = False
+                for vec in corners:
+                    _apply_levels(instr, model, vec, vcc, ilim)
+                    i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
+                    rec = {"VCC": vcc, "ICC_uA": i_ua}
+                    rec.update({f"IN_{k}": v for k, v in vec.items()})
+                    rows.append(rec)
+                    any_ok = True
+                if not any_ok:
+                    raise RuntimeError(f"icc: no corners at VCC={vcc}")
+        finally:
+            _power_down(instr)
+        mx = max((abs(float(r["ICC_uA"])) for r in rows), default=0.0)
+        return _finish(
+            model,
+            "icc",
+            {
+                "summary": f"ICC n={len(rows)} max={mx:.3f} uA ({len(pins)} pins, 2^{len(pins)} corners)",
+                "data": {"rows": rows, "instrument_sense": "DMM-on-VCC"},
+                "measurements": [_meas(model, "ICC_uA", mx, "uA", test_id="icc")],
+            },
+        )
 
 
 def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
@@ -677,113 +678,121 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
             "Do not invent; add it to product_model YAML."
         )
     offset_v = float(offset)
-    ilim = _current_limit(params, model)
-    vccs = _vcc_corners(params, model, "delta_vcc_list")
-    vmin = model.recipe.get("delta_vcc_min")
-    if vmin is not None:
-        vccs = [v for v in vccs if v + 1e-9 >= float(vmin)]
-        if not vccs:
-            raise RuntimeError(
-                "delta_icc: no vcc_list points at/above recipe.delta_vcc_min"
-            )
-    pins = list(model.logic_inputs)
-    if model.has_oe() and model.oe_pin:
-        # dICC is one input at VCC-0.6, others at rail. Include OE as a rail pin.
-        if model.oe_pin not in pins:
-            pins.append(model.oe_pin)
-    rows: list[dict[str, Any]] = []
-    try:
-        for vcc in vccs:
-            _power_vcc(instr, vcc, ilim)
-            _wait_settled_current_ua(instr.dmm, model)
-            for near in pins:
-                for others_high in (True, False):
-                    levels: dict[str, Any] = {}
-                    for p in pins:
-                        if p == near:
-                            continue
-                        levels[p] = "H" if others_high else "L"
-                    if model.has_oe() and model.oe_pin not in levels:
-                        levels[model.oe_pin] = model.oe_active_level()
-                    _apply_levels(instr, model, levels, vcc, ilim)
-                    _wait_settled_current_ua(instr.dmm, model, setup=False)
-                    near_v = max(0.0, vcc - offset_v)
-                    drive = model.pin_drive.get(near)
-                    if drive is None:
-                        raise RuntimeError(f"delta_icc: no pin_drive for {near}")
-                    _apply_pin(instr, drive, near_v, ilim)
-                    i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
-                    rows.append(
-                        {
-                            "VCC": vcc,
-                            "NEAR_PIN": near,
-                            "NEAR_V": near_v,
-                            "OTHERS": "H" if others_high else "L",
-                            "ICC_uA": i_ua,
-                        }
-                    )
-    finally:
-        _power_down(instr)
-    if not rows:
-        raise RuntimeError("delta_icc: no points")
-    mx = max(abs(float(r["ICC_uA"])) for r in rows)
-    return _finish(
-        model,
-        "delta_icc",
-        {
-            "summary": f"DeltaICC n={len(rows)} max={mx:.3f} uA offset={offset_v} V",
-            "data": {"rows": rows, "instrument_sense": "DMM-on-VCC"},
-            "measurements": [_meas(model, "DELTA_ICC_uA", mx, "uA", test_id="delta_icc")],
-        },
-    )
+    with path_b_handoff(params, model, "delta_icc"):
+        ilim = _current_limit(params, model)
+        vccs = _vcc_corners(params, model, "delta_vcc_list")
+        vmin = model.recipe.get("delta_vcc_min")
+        if vmin is not None:
+            vccs = [v for v in vccs if v + 1e-9 >= float(vmin)]
+            if not vccs:
+                raise RuntimeError(
+                    "delta_icc: no vcc_list points at/above recipe.delta_vcc_min"
+                )
+        pins = list(model.logic_inputs)
+        if model.has_oe() and model.oe_pin:
+            # dICC is one input at VCC-0.6, others at rail. Include OE as a rail pin.
+            if model.oe_pin not in pins:
+                pins.append(model.oe_pin)
+        rows: list[dict[str, Any]] = []
+        try:
+            for vcc in vccs:
+                _power_vcc(instr, vcc, ilim)
+                _wait_settled_current_ua(instr.dmm, model)
+                for near in pins:
+                    for others_high in (True, False):
+                        levels: dict[str, Any] = {}
+                        for p in pins:
+                            if p == near:
+                                continue
+                            levels[p] = "H" if others_high else "L"
+                        if model.has_oe() and model.oe_pin not in levels:
+                            levels[model.oe_pin] = model.oe_active_level()
+                        _apply_levels(instr, model, levels, vcc, ilim)
+                        _wait_settled_current_ua(instr.dmm, model, setup=False)
+                        near_v = max(0.0, vcc - offset_v)
+                        drive = model.pin_drive.get(near)
+                        if drive is None:
+                            raise RuntimeError(f"delta_icc: no pin_drive for {near}")
+                        _apply_pin(instr, drive, near_v, ilim)
+                        i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
+                        rows.append(
+                            {
+                                "VCC": vcc,
+                                "NEAR_PIN": near,
+                                "NEAR_V": near_v,
+                                "OTHERS": "H" if others_high else "L",
+                                "ICC_uA": i_ua,
+                            }
+                        )
+        finally:
+            _power_down(instr)
+        if not rows:
+            raise RuntimeError("delta_icc: no points")
+        mx = max(abs(float(r["ICC_uA"])) for r in rows)
+        return _finish(
+            model,
+            "delta_icc",
+            {
+                "summary": f"DeltaICC n={len(rows)} max={mx:.3f} uA offset={offset_v} V",
+                "data": {"rows": rows, "instrument_sense": "DMM-on-VCC"},
+                "measurements": [_meas(model, "DELTA_ICC_uA", mx, "uA", test_id="delta_icc")],
+            },
+        )
 
 
 def _run_ii(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE II: DMM in series with the swept input; force VI.
     _require(instr, "PSU", "AWG", "DMM")
     model = _model(params)
-    ilim = _current_limit(params, model)
-    vccs = _vcc_corners(params, model, "ii_vcc_list")
-    rows: list[dict[str, Any]] = []
-    try:
-        for pin in model.logic_inputs:
-            vmax = None
-            for vcc in vccs:
-                vmax = _vmax_for_ii(model, vcc)
-                if not _pause(
-                    params,
-                    f"II: DMM in series with input {pin} (VI=0 and VI={vmax} V). "
-                    "Other inputs at rail. Continue.",
-                ):
-                    raise RuntimeError(f"ii: operator stopped before pin {pin}")
-                _power_vcc(instr, vcc, ilim)
-                _wait_settled_current_ua(instr.dmm, model)
-                others = {p: "H" for p in model.logic_inputs if p != pin}
-                if model.has_oe():
-                    others[model.oe_pin] = model.oe_active_level()
-                _apply_levels(instr, model, others, vcc, ilim)
-                _wait_settled_current_ua(instr.dmm, model, setup=False)
-                drive = model.pin_drive.get(pin)
-                if drive is None:
-                    raise RuntimeError(f"ii: no pin_drive for {pin}")
-                for vi in (0.0, float(vmax)):
-                    _apply_pin(instr, drive, vi, ilim)
-                    i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
-                    rows.append({"VCC": vcc, "PIN": pin, "VI": vi, "II_uA": i_ua})
-    finally:
-        _power_down(instr)
-    if not rows:
-        raise RuntimeError("ii: no points")
-    mx = max(abs(float(r["II_uA"])) for r in rows)
-    return _finish(
-        model,
-        "ii",
-        {
-            "summary": f"II n={len(rows)} max_abs={mx:.3f} uA",
-            "data": {"rows": rows, "instrument_sense": "DMM-series-input"},
-            "measurements": [_meas(model, "II_uA", mx, "uA", test_id="ii")],
-        },
-    )
+    with path_b_handoff(params, model, "ii"):
+        ilim = _current_limit(params, model)
+        vccs = _vcc_corners(params, model, "ii_vcc_list")
+        rows: list[dict[str, Any]] = []
+        try:
+            for pin in model.logic_inputs:
+                vmax = None
+                for vcc in vccs:
+                    vmax = _vmax_for_ii(model, vcc)
+                    if not _pause(
+                        params,
+                        f"II: DMM in series with input {pin} (VI=0 and VI={vmax} V). "
+                        "Other inputs at rail. Continue.",
+                        [
+                            f"DMM series input {pin} (CONFIRMED pin; do not invent nets)",
+                            f"VI=0 and VI={vmax} V",
+                            "Other inputs at rail",
+                            "Then Continue",
+                        ],
+                    ):
+                        raise RuntimeError(f"ii: operator stopped before pin {pin}")
+                    _power_vcc(instr, vcc, ilim)
+                    _wait_settled_current_ua(instr.dmm, model)
+                    others = {p: "H" for p in model.logic_inputs if p != pin}
+                    if model.has_oe():
+                        others[model.oe_pin] = model.oe_active_level()
+                    _apply_levels(instr, model, others, vcc, ilim)
+                    _wait_settled_current_ua(instr.dmm, model, setup=False)
+                    drive = model.pin_drive.get(pin)
+                    if drive is None:
+                        raise RuntimeError(f"ii: no pin_drive for {pin}")
+                    for vi in (0.0, float(vmax)):
+                        _apply_pin(instr, drive, vi, ilim)
+                        i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
+                        rows.append({"VCC": vcc, "PIN": pin, "VI": vi, "II_uA": i_ua})
+        finally:
+            _power_down(instr)
+        if not rows:
+            raise RuntimeError("ii: no points")
+        mx = max(abs(float(r["II_uA"])) for r in rows)
+        return _finish(
+            model,
+            "ii",
+            {
+                "summary": f"II n={len(rows)} max_abs={mx:.3f} uA",
+                "data": {"rows": rows, "instrument_sense": "DMM-series-input"},
+                "measurements": [_meas(model, "II_uA", mx, "uA", test_id="ii")],
+            },
+        )
 
 
 def _voh_vol_table(part_key: str, which: str) -> list[dict[str, Any]]:
@@ -829,86 +838,87 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
     model = _model(params)
     if getattr(instr, "gen", None) is None:
         raise RuntimeError("Missing instruments: AWG")
-    ilim = _current_limit(params, model)
-    key = str(getattr(params, "part", "") or "").lower()
-    table = _voh_vol_table(key, "voh")
-    rows: list[dict[str, Any]] = []
-    meas: list[dict[str, Any]] = []
-    try:
-        # Loaded IOH hook only when a table already exists (do not invent IOH).
-        # No table: unloaded all-high VOH (limits unspec unless limits yaml has them).
-        if table:
-            from psu_setup import power_off, power_on_protected
+    with path_b_handoff(params, model, "voh"):
+        ilim = _current_limit(params, model)
+        key = str(getattr(params, "part", "") or "").lower()
+        table = _voh_vol_table(key, "voh")
+        rows: list[dict[str, Any]] = []
+        meas: list[dict[str, Any]] = []
+        try:
+            # Loaded IOH hook only when a table already exists (do not invent IOH).
+            # No table: unloaded all-high VOH (limits unspec unless limits yaml has them).
+            if table:
+                from psu_setup import power_off, power_on_protected
 
-            vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
-            for entry in table:
-                vcc = float(entry["vcc"])
-                spec = entry.get("spec_min")
-                ioh = entry.get("ioh_a")
-                if spec is None or ioh is None:
-                    rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "voh_table row missing spec/ioh"})
-                    continue
-                vref = entry.get("vref")
-                if vref is None:
-                    vref = 0.0  # fixture sink rail; not a datasheet Vref
-                _power_vcc(instr, vcc, ilim)
-                _apply_y_vector(instr, model, True, vcc, ilim)
-                _wait_settled_voltage(instr.dmm, model)
-                if vplus is not None:
-                    power_on_protected(instr.psu, 3, float(vplus), ilim)
-                power_on_protected(instr.psu, 2, float(vref), abs(float(ioh)), ocp=max(0.05, abs(float(ioh)) * 1.2))
-                measured = _wait_settled_voltage(instr.dmm, model, setup=False)
-                ok = measured >= float(spec)
-                mid = str(entry.get("id") or f"VOH_{str(vcc).replace('.', 'p')}V")
-                rows.append(
-                    {
-                        "id": mid,
+                vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
+                for entry in table:
+                    vcc = float(entry["vcc"])
+                    spec = entry.get("spec_min")
+                    ioh = entry.get("ioh_a")
+                    if spec is None or ioh is None:
+                        rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "voh_table row missing spec/ioh"})
+                        continue
+                    vref = entry.get("vref")
+                    if vref is None:
+                        vref = 0.0  # fixture sink rail; not a datasheet Vref
+                    _power_vcc(instr, vcc, ilim)
+                    _apply_y_vector(instr, model, True, vcc, ilim)
+                    _wait_settled_voltage(instr.dmm, model)
+                    if vplus is not None:
+                        power_on_protected(instr.psu, 3, float(vplus), ilim)
+                    power_on_protected(instr.psu, 2, float(vref), abs(float(ioh)), ocp=max(0.05, abs(float(ioh)) * 1.2))
+                    measured = _wait_settled_voltage(instr.dmm, model, setup=False)
+                    ok = measured >= float(spec)
+                    mid = str(entry.get("id") or f"VOH_{str(vcc).replace('.', 'p')}V")
+                    rows.append(
+                        {
+                            "id": mid,
+                            "VCC": vcc,
+                            "IOH_A": float(ioh),
+                            "Vref": float(vref),
+                            "Measured": measured,
+                            "Spec_min": float(spec),
+                            "Result": "PASS" if ok else "FAIL",
+                            "mode": "loaded",
+                            "pass_mode": "min_only",
+                        }
+                    )
+                    meas.append(_meas(model, mid, measured, "V", test_id="voh"))
+                    power_off(instr.psu)
+                    time.sleep(0.3)
+            else:
+                for vcc in _vcc_corners(params, model):
+                    _power_vcc(instr, vcc, ilim)
+                    vec = _apply_y_vector(instr, model, True, vcc, ilim)
+                    vout = _wait_settled_voltage(instr.dmm, model)
+                    rec = {
                         "VCC": vcc,
-                        "IOH_A": float(ioh),
-                        "Vref": float(vref),
-                        "Measured": measured,
-                        "Spec_min": float(spec),
-                        "Result": "PASS" if ok else "FAIL",
-                        "mode": "loaded",
-                        "pass_mode": "min_only",
+                        "VOH": vout,
+                        "vector": {k: v for k, v in vec.items() if k != "_status"},
+                        "mode": "unloaded",
                     }
-                )
-                meas.append(_meas(model, mid, measured, "V", test_id="voh"))
-                power_off(instr.psu)
-                time.sleep(0.3)
-        else:
-            for vcc in _vcc_corners(params, model):
-                _power_vcc(instr, vcc, ilim)
-                vec = _apply_y_vector(instr, model, True, vcc, ilim)
-                vout = _wait_settled_voltage(instr.dmm, model)
-                rec = {
-                    "VCC": vcc,
-                    "VOH": vout,
-                    "vector": {k: v for k, v in vec.items() if k != "_status"},
-                    "mode": "unloaded",
-                }
-                if vec.get("_status"):
-                    rec["status"] = vec["_status"]
-                rows.append(rec)
-                tag = str(vcc).replace(".", "p")
-                meas.append(_meas(model, f"VOH_{tag}V", vout, "V", test_id="voh"))
-    finally:
-        _power_down(instr)
-    if not rows:
-        raise RuntimeError("voh: no points (no vcc_list / table)")
-    return _finish(
-        model,
-        "voh",
-        {
-            "summary": f"VOH n={len(rows)} last={rows[-1].get('VOH', rows[-1].get('Measured'))}",
-            "data": {
-                "rows": rows,
-                "limits": "existing yaml / voh_table only; else unspec",
-                "instrument_sense": "force-Y / DMM-sense-Vout",
+                    if vec.get("_status"):
+                        rec["status"] = vec["_status"]
+                    rows.append(rec)
+                    tag = str(vcc).replace(".", "p")
+                    meas.append(_meas(model, f"VOH_{tag}V", vout, "V", test_id="voh"))
+        finally:
+            _power_down(instr)
+        if not rows:
+            raise RuntimeError("voh: no points (no vcc_list / table)")
+        return _finish(
+            model,
+            "voh",
+            {
+                "summary": f"VOH n={len(rows)} last={rows[-1].get('VOH', rows[-1].get('Measured'))}",
+                "data": {
+                    "rows": rows,
+                    "limits": "existing yaml / voh_table only; else unspec",
+                    "instrument_sense": "force-Y / DMM-sense-Vout",
+                },
+                "measurements": meas,
             },
-            "measurements": meas,
-        },
-    )
+        )
 
 
 def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
@@ -917,84 +927,85 @@ def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
     model = _model(params)
     if getattr(instr, "gen", None) is None:
         raise RuntimeError("Missing instruments: AWG")
-    ilim = _current_limit(params, model)
-    key = str(getattr(params, "part", "") or "").lower()
-    table = _voh_vol_table(key, "vol")
-    rows: list[dict[str, Any]] = []
-    meas: list[dict[str, Any]] = []
-    try:
-        if table:
-            from psu_setup import power_off, power_on_protected
+    with path_b_handoff(params, model, "vol"):
+        ilim = _current_limit(params, model)
+        key = str(getattr(params, "part", "") or "").lower()
+        table = _voh_vol_table(key, "vol")
+        rows: list[dict[str, Any]] = []
+        meas: list[dict[str, Any]] = []
+        try:
+            if table:
+                from psu_setup import power_off, power_on_protected
 
-            vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
-            for entry in table:
-                vcc = float(entry["vcc"])
-                spec = entry.get("spec_max")
-                iol = entry.get("iol_a")
-                if spec is None or iol is None:
-                    rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "vol_table row missing spec/iol"})
-                    continue
-                vref = entry.get("vref")
-                if vref is None:
-                    vref = vcc  # fixture source rail; not a datasheet Vref
-                _power_vcc(instr, vcc, ilim)
-                _apply_y_vector(instr, model, False, vcc, ilim)
-                _wait_settled_voltage(instr.dmm, model)
-                power_on_protected(instr.psu, 2, float(vref), abs(float(iol)), ocp=max(0.05, abs(float(iol)) * 1.2))
-                if vplus is not None:
-                    power_on_protected(instr.psu, 3, float(vplus), ilim)
-                measured = _wait_settled_voltage(instr.dmm, model, setup=False)
-                ok = measured <= float(spec)
-                mid = str(entry.get("id") or f"VOL_{str(vcc).replace('.', 'p')}V")
-                rows.append(
-                    {
-                        "id": mid,
+                vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
+                for entry in table:
+                    vcc = float(entry["vcc"])
+                    spec = entry.get("spec_max")
+                    iol = entry.get("iol_a")
+                    if spec is None or iol is None:
+                        rows.append({"VCC": vcc, "status": "PROVISIONAL", "note": "vol_table row missing spec/iol"})
+                        continue
+                    vref = entry.get("vref")
+                    if vref is None:
+                        vref = vcc  # fixture source rail; not a datasheet Vref
+                    _power_vcc(instr, vcc, ilim)
+                    _apply_y_vector(instr, model, False, vcc, ilim)
+                    _wait_settled_voltage(instr.dmm, model)
+                    power_on_protected(instr.psu, 2, float(vref), abs(float(iol)), ocp=max(0.05, abs(float(iol)) * 1.2))
+                    if vplus is not None:
+                        power_on_protected(instr.psu, 3, float(vplus), ilim)
+                    measured = _wait_settled_voltage(instr.dmm, model, setup=False)
+                    ok = measured <= float(spec)
+                    mid = str(entry.get("id") or f"VOL_{str(vcc).replace('.', 'p')}V")
+                    rows.append(
+                        {
+                            "id": mid,
+                            "VCC": vcc,
+                            "IOL_A": float(iol),
+                            "Vref": float(vref),
+                            "Measured": measured,
+                            "Spec_max": float(spec),
+                            "Result": "PASS" if ok else "FAIL",
+                            "mode": "loaded",
+                            "pass_mode": "max_only",
+                        }
+                    )
+                    meas.append(_meas(model, mid, measured, "V", test_id="vol"))
+                    power_off(instr.psu)
+                    time.sleep(0.3)
+            else:
+                for vcc in _vcc_corners(params, model):
+                    _power_vcc(instr, vcc, ilim)
+                    vec = _apply_y_vector(instr, model, False, vcc, ilim)
+                    vout = _wait_settled_voltage(instr.dmm, model)
+                    rec = {
                         "VCC": vcc,
-                        "IOL_A": float(iol),
-                        "Vref": float(vref),
-                        "Measured": measured,
-                        "Spec_max": float(spec),
-                        "Result": "PASS" if ok else "FAIL",
-                        "mode": "loaded",
-                        "pass_mode": "max_only",
+                        "VOL": vout,
+                        "vector": {k: v for k, v in vec.items() if k != "_status"},
+                        "mode": "unloaded",
                     }
-                )
-                meas.append(_meas(model, mid, measured, "V", test_id="vol"))
-                power_off(instr.psu)
-                time.sleep(0.3)
-        else:
-            for vcc in _vcc_corners(params, model):
-                _power_vcc(instr, vcc, ilim)
-                vec = _apply_y_vector(instr, model, False, vcc, ilim)
-                vout = _wait_settled_voltage(instr.dmm, model)
-                rec = {
-                    "VCC": vcc,
-                    "VOL": vout,
-                    "vector": {k: v for k, v in vec.items() if k != "_status"},
-                    "mode": "unloaded",
-                }
-                if vec.get("_status"):
-                    rec["status"] = vec["_status"]
-                rows.append(rec)
-                tag = str(vcc).replace(".", "p")
-                meas.append(_meas(model, f"VOL_{tag}V", vout, "V", test_id="vol"))
-    finally:
-        _power_down(instr)
-    if not rows:
-        raise RuntimeError("vol: no points")
-    return _finish(
-        model,
-        "vol",
-        {
-            "summary": f"VOL n={len(rows)} last={rows[-1].get('VOL', rows[-1].get('Measured'))}",
-            "data": {
-                "rows": rows,
-                "limits": "existing yaml / vol_table only; else unspec",
-                "instrument_sense": "force-Y / DMM-sense-Vout",
+                    if vec.get("_status"):
+                        rec["status"] = vec["_status"]
+                    rows.append(rec)
+                    tag = str(vcc).replace(".", "p")
+                    meas.append(_meas(model, f"VOL_{tag}V", vout, "V", test_id="vol"))
+        finally:
+            _power_down(instr)
+        if not rows:
+            raise RuntimeError("vol: no points")
+        return _finish(
+            model,
+            "vol",
+            {
+                "summary": f"VOL n={len(rows)} last={rows[-1].get('VOL', rows[-1].get('Measured'))}",
+                "data": {
+                    "rows": rows,
+                    "limits": "existing yaml / vol_table only; else unspec",
+                    "instrument_sense": "force-Y / DMM-sense-Vout",
+                },
+                "measurements": meas,
             },
-            "measurements": meas,
-        },
-    )
+        )
 
 
 def _run_ioz(instr, params: Any) -> dict[str, Any]:
@@ -1006,55 +1017,51 @@ def _run_ioz(instr, params: Any) -> dict[str, Any]:
         )
     # INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
     _require(instr, "PSU", "AWG", "DMM")
-    ilim = _current_limit(params, model)
-    vccs = _vcc_corners(params, model, "ioz_vcc_list")
-    vouts_raw = model.recipe.get("ioz_vout_list")
-    rows: list[dict[str, Any]] = []
-    _pause(
-        params,
-        f"IOZ: OE inactive ({model.oe_pin}={model.oe_inactive_level()}). "
-        "DMM in series with Y. Data don't-care. Continue.",
-    )
-    try:
-        for vcc in vccs:
-            _power_vcc(instr, vcc, ilim)
-            _wait_settled_current_ua(instr.dmm, model)
-            inactive = {model.oe_pin: model.oe_inactive_level()}
-            # data don't-care: one data vector is enough; do not invent extra
-            for p in model.logic_inputs:
-                inactive.setdefault(p, "L")
-            _apply_levels(instr, model, inactive, vcc, ilim)
-            _wait_settled_current_ua(instr.dmm, model, setup=False)
-            if isinstance(vouts_raw, list) and vouts_raw:
-                vouts = [float(x) for x in vouts_raw]
-            else:
-                vmax = _vmax_for_ii(model, vcc)
-                vouts = [0.0, float(vmax)]
-            for vo in vouts:
-                _force_psu(instr, 2, vo, ilim)
-                i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
-                rows.append(
-                    {
-                        "VCC": vcc,
-                        "OE": model.oe_inactive_level(),
-                        "VOUT": vo,
-                        "IOZ_uA": i_ua,
-                    }
-                )
-    finally:
-        _power_down(instr)
-    if not rows:
-        raise RuntimeError("ioz: no points")
-    mx = max(abs(float(r["IOZ_uA"])) for r in rows)
-    return _finish(
-        model,
-        "ioz",
-        {
-            "summary": f"IOZ n={len(rows)} max_abs={mx:.3f} uA",
-            "data": {"rows": rows, "instrument_sense": "DMM-series-Y / force-Vout"},
-            "measurements": [_meas(model, "IOZ_uA", mx, "uA", test_id="ioz")],
-        },
-    )
+    with path_b_handoff(params, model, "ioz"):
+        ilim = _current_limit(params, model)
+        vccs = _vcc_corners(params, model, "ioz_vcc_list")
+        vouts_raw = model.recipe.get("ioz_vout_list")
+        rows: list[dict[str, Any]] = []
+        try:
+            for vcc in vccs:
+                _power_vcc(instr, vcc, ilim)
+                _wait_settled_current_ua(instr.dmm, model)
+                inactive = {model.oe_pin: model.oe_inactive_level()}
+                # data don't-care: one data vector is enough; do not invent extra
+                for p in model.logic_inputs:
+                    inactive.setdefault(p, "L")
+                _apply_levels(instr, model, inactive, vcc, ilim)
+                _wait_settled_current_ua(instr.dmm, model, setup=False)
+                if isinstance(vouts_raw, list) and vouts_raw:
+                    vouts = [float(x) for x in vouts_raw]
+                else:
+                    vmax = _vmax_for_ii(model, vcc)
+                    vouts = [0.0, float(vmax)]
+                for vo in vouts:
+                    _force_psu(instr, 2, vo, ilim)
+                    i_ua = _wait_settled_current_ua(instr.dmm, model, setup=False)
+                    rows.append(
+                        {
+                            "VCC": vcc,
+                            "OE": model.oe_inactive_level(),
+                            "VOUT": vo,
+                            "IOZ_uA": i_ua,
+                        }
+                    )
+        finally:
+            _power_down(instr)
+        if not rows:
+            raise RuntimeError("ioz: no points")
+        mx = max(abs(float(r["IOZ_uA"])) for r in rows)
+        return _finish(
+            model,
+            "ioz",
+            {
+                "summary": f"IOZ n={len(rows)} max_abs={mx:.3f} uA",
+                "data": {"rows": rows, "instrument_sense": "DMM-series-Y / force-Vout"},
+                "measurements": [_meas(model, "IOZ_uA", mx, "uA", test_id="ioz")],
+            },
+        )
 
 
 def _run_icc_dispatch(instr, params: Any) -> dict[str, Any]:

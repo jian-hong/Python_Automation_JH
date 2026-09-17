@@ -10,7 +10,42 @@ Settle loop (this PR): recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005
 - Null `stable_eps_A`: tight-settle **claims** stay FAIL-closed. Honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle).
 - Ground `stable_eps_A` (amps) on the Logic DC panel overlay before claiming current settle-to-stable.
 
-`check_logic_dc` also FAIL-closes **enabled-but-unrunnable** ids: every part `enabled_tests` id must have a registered `TestSpec` with callable `run` (no stub).
+`check_logic_dc` also FAIL-closes **enabled-but-unrunnable** ids: every part `enabled_tests` id must have a registered `TestSpec` with callable `run` (no stub). Enabled 97/126 tests with empty `wire_map` or missing `data_paths` FAIL the same gate. Never invent nets.
+
+## Copy-ready Version folder
+
+Paste this tree under the campaign. Launch with **START.bat** in this folder (zip operators) or the zip root -- same console everywhere.
+
+```
+#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/
+  START.bat                 # copy-ready: same START.bat as zip root
+  workbook/                 # lab xlsx (Import xlsx / Create folders)
+  _manifest/sheet_map.yaml  # folder <-> sheet <-> paste anchors
+  _manifest/test_params.yaml
+  sessions/report.json
+  sessions/datalog.md        # STS datalog (also .html / .pdf)
+  {test}/DUT_n/records/
+  {test}/DUT_n/              # FAIL scope PNG / photo attach
+```
+
+Excel folder template (folders only -- never invent cells):
+
+`#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`
+
+`data_paths` on the 97/126 product_model (panel show/edit/delete): `excel` / `sessions/report.json` / `sessions/datalog.md` / `{test}/DUT_n/records/` / attach `{test}/DUT_n/`.
+
+## AE/FAE Continue (no-code)
+
+Every enabled Path B TestSpec run (DC in `logic_dc.py`, AC `tp`/`ten`/`tdis` in `wraps.py`) surfaces Continue prompts. `wire_map` comes from CONFIRMED `pins` + `pin_drive` only. Human Continue after verify. Never invent nets.
+
+1. **Wire map** -- PSU CH->pin, AWG CH->input, DMM->VCC or Y, SCOPE CH->Y/debug. From `product_model.wire_map`.
+2. **Stimulus** -- Vcc / force `pin_drive` / truth_table vector.
+3. **Settle** -- `settle_prompt` show wait. Voltage eps/N (`stable_eps_V`). Current: NON_TIGHT if `stable_eps_A` null, else tight eps/N + timeout hard-FAIL.
+4. **Measure + pass_mode**.
+5. **On FAIL** -- prompt scope capture / photo -> session attach path `{test}/DUT_n/`.
+6. **Save path shown** after run: Excel `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/` + `sessions/report.json` + STS datalog + `{test}/DUT_n/records/`.
+
+Panel: show / edit / delete `wire_map`, `settle_prompt`, `data_paths` (card_fields.schema.yaml). Cannot promote Datasheet-signed.
 
 ## TestSpec <-> OOP
 
@@ -30,7 +65,7 @@ See Lim (`seelim_dc.py` locator) and Ariff (`ariff_dc.py` RS1G08 `voh_load`) are
 
 ## DEMO / SIM -- enough (not a reproduce)
 
-Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrument physics.
+Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrument physics. Zip DEMO still starts from **START.bat**.
 
 1. Product-model schema load (`ate/config/parts/<key>.yaml` `product_model` / `logic_dc:`). Isolation derives from `truth_table` (Y tracks the swept pin; invert only if no track combo).
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
@@ -38,11 +73,11 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). Visual tables **Save Version overlay** write `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (vcc_list, pass_mode, `stable_eps_A`).
 5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4. Timeout SIM raises. **Not a reproduce claim.**
 
-DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure.
+DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure. START.bat is still how the zip console comes up.
 
 ## HUMAN + real instruments -- required to reproduce
 
-Reproduce Path B DC only with a human, Open Session, and live PSU + DMM + AWG wired to the DUT. Continue prompts (ICC / II / IOZ) are recable steps -- follow them. Fixture text is `fixture_modes.LOGIC.checklist` on the part yaml (Setup/Run checklist), not a second wiring table.
+Reproduce Path B DC only with a human, Open Session, and live PSU + DMM + AWG wired to the DUT. Launch **START.bat**, then Continue prompts (wire_map + ICC / II / IOZ recable) -- follow them. Fixture text is `fixture_modes.LOGIC.checklist` on the part yaml (Setup/Run checklist), not a second invented wiring table.
 
 After each PSU VCC switch and pin force: **PSU -> settle -> measure**. Voltage must hold `stable_n` inside `stable_eps_V`. Current: if `stable_eps_A` is set, hold `stable_n` inside **`stable_eps_A`** (amps) or **FAIL** on timeout. If `stable_eps_A` is null/missing, the runner does **not** reuse `stable_eps_V`; it waits `settle_s` once, measures, and tags `settle=NON_TIGHT` (not greenable as tight-settle). Tight-settle **claims** without `stable_eps_A` stay FAIL-closed. If the DMM never settles before `settle_timeout_s` on the tight path, the step **FAIL**s. Do not treat a timed-out last reading as PASS.
 
@@ -62,10 +97,11 @@ Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/
 
 ## Excel path -- never invent cells
 
-Campaign tree:
+Campaign tree (same copy-ready Version folder as above):
 
 ```
 #Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/
+  START.bat
   workbook/                 # lab xlsx (Import xlsx / Create folders)
   _manifest/sheet_map.yaml  # folder <-> sheet <-> paste anchors
   _manifest/test_params.yaml
@@ -93,12 +129,13 @@ The CONFIRMED 97/126 VOH/VOL Full grid (100uA + 4/8/16/24/32mA ids in part yaml)
 | Full START snapshot | `sessions/session_*.json` |
 | STS datalog | Results **Export STS datalog** -> `sessions/datalog.md` + `.html` + `.pdf` |
 | Per-step history | `{test_key}/DUT_n/records/{test_id}_{timestamp}.json` (append-only; never overwrite) |
+| FAIL attach | `{test}/DUT_n/` (scope PNG / phone photo from Continue) |
 
 Never dump the RUN-IC catalog into `#Test_Database`. Delete on Results **Run ledger** removes a session JSON only -- never the Version folder or workbook xlsx.
 
 ## Console
 
-Zip operators: `START.bat` (from `ATE_Console_Try_*.zip`). Clone PCs: `run_ate_app.bat`.
+Zip operators: `START.bat` (from `ATE_Console_Try_*.zip` or the copy-ready Version folder). Clone PCs: `run_ate_app.bat`.
 
 - UI: `http://127.0.0.1:5174`
 - Worker JSON-RPC: `http://127.0.0.1:8766` (not 8765)
@@ -109,16 +146,16 @@ Pick a **person** (not All) -> Apply campaign -> Discover -> Open Session -> tic
 
 ## Human-test checklist -- RS1G97 + RS1G126 (Path B)
 
-Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/tdis as AC -- do not treat them as this DC list).
+Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/tdis as AC -- do not treat them as this DC list). START.bat first.
 
 **Both parts**
 
-1. Console up (5174 / 8766). Person selected. Campaign `#Test_Database/Logic/RS1G97/...` or `.../RS1G126/...` applied.
+1. Console up via **START.bat** (5174 / 8766). Person selected. Campaign `#Test_Database/Logic/RS1G97/...` or `.../RS1G126/...` applied.
 2. Discover. **Open Session** (PSU + DMM + AWG present; DMM required at run for these ids).
-3. Run fixture checklist (part yaml `fixture_modes.LOGIC.checklist`). Wire DMM+PSU+AWG to that text. Continue when the runner asks to recable (ICC series-VCC vs II series-input vs IOZ series-Y vs VOH/VOL DMM-on-Y).
+3. Run fixture checklist (part yaml `fixture_modes.LOGIC.checklist`). Wire DMM+PSU+AWG to **wire_map** Continue (CONFIRMED pins + pin_drive only). Human Continue after verify. Recable when ICC series-VCC vs II series-input vs IOZ series-Y vs VOH/VOL DMM-on-Y.
 4. Tick Path B DC: `input_threshold` (and/or `vth`), `icc`, `delta_icc`, `ii`, `voh`, `vol`. 126 also tick `ioz`. 97 must **not** tick `ioz` / `ioff`.
 5. START (not DEMO). Confirm an unstable DMM **settle timeout hard-FAIL**s (RuntimeError / FAIL) when `stable_eps_A` is grounded, not a last-reading PASS. Recipe timeout 2.0 s. Null `stable_eps_A` is NON_TIGHT (wait `settle_s` once); do not invent uA. Tight-settle claims stay FAIL-closed until overlay/panel sets `stable_eps_A`.
-6. On a stable bench: Results / `report.json` -- **VOH >= min** vs CONFIRMED `voh_table` / limits (`min_only`); **VOL <= max** vs CONFIRMED `vol_table` (`max_only`). Do not invent extra loads.
+6. On a stable bench: Results / `report.json` -- **VOH >= min** vs CONFIRMED `voh_table` / limits (`min_only`); **VOL <= max** vs CONFIRMED `vol_table` (`max_only`). Do not invent extra loads. After run, Continue shows save paths (`workbook/` + `sessions/report.json` + STS datalog + `{test}/DUT_n/records/`). On FAIL, attach photo to `{test}/DUT_n/`.
 7. Fill Excel only via sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
 
 **RS1G97 extra**

@@ -19,21 +19,27 @@ from ate.core.specs import infer_pass_mode, judge_value, load_part_specs
 from ate.fixture.modes import enabled_tests_for_part
 from ate.tests.logic.product_model import (
     CARD_FIELDS_SCHEMA_PATH,
+    DATA_PATH_TEMPLATES,
     claimed_signed_without_datasheet,
     derive_isolation,
+    format_handoff_begin,
     has_product_model,
     isolation_for,
     isolation_for_run,
     is_datasheet_signed,
     is_unconfirmed_status,
     iter_logic_corners,
+    known_pin_names,
     load_card_fields_schema,
     load_part_yaml,
     load_product_model,
     lookup_pass_mode,
+    missing_data_path_keys,
     panel_save_keys,
+    pins_named_in_wire_map,
     sim_icc_plan,
     vectors_for_output,
+    wire_map_for_test,
 )
 
 _LOGIC_DC = Path(__file__).resolve().parents[1] / "tests" / "logic" / "logic_dc.py"
@@ -708,6 +714,22 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must note See Lim/Ariff as read-only refs")
     if "invent a ua" not in text.lower().replace("µ", "u"):
         errors.append("LOGIC_DC_OPERATOR.md must forbid inventing a uA current-settle epsilon")
+    if "wire_map" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must document wire_map Continue prompts")
+    if "data_paths" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must document data_paths")
+    if "invent nets" not in text.lower() and "invent a net" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must forbid inventing nets")
+    if "settle_prompt" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must document settle_prompt (show wait)")
+    if "Human Continue" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must say Human Continue after wire-map verify")
+    if "copy-ready" not in text.lower() and "copy ready" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must include a copy-ready Version folder")
+    if text.lower().count("start.bat") < 4:
+        errors.append("LOGIC_DC_OPERATOR.md must name START.bat everywhere (Version folder + DEMO + HUMAN + console + checklist)")
+    if "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must show Excel #Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/")
     if not re.search(r"HEAD SHA.*[`']?[0-9a-f]{7,40}", text, re.I | re.S):
         errors.append("LOGIC_DC_OPERATOR.md must list PR HEAD SHA")
     logic = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC.md"
@@ -845,7 +867,7 @@ def _panel_ok() -> list[str]:
         if str(schema.get("ocr", {}).get("engine") or "").lower() != "paddleocr":
             errors.append("card_fields.schema.yaml ocr.engine must be paddleocr")
         keys = panel_save_keys()
-        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt"):
+        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths"):
             if need not in keys:
                 errors.append(f"panel_save_keys missing {need}")
     except Exception as exc:
@@ -975,6 +997,79 @@ def _run_is_stub(run) -> str:
     return ""
 
 
+def _handoff_ok() -> list[str]:
+    """AE/FAE: every enabled 97/126 test has wire_map + data_paths. Never invent nets."""
+    errors: list[str] = []
+    wraps = Path(__file__).resolve().parents[1] / "tests" / "logic" / "wraps.py"
+    runner = Path(__file__).resolve().parents[1] / "core" / "runner.py"
+    for part in ("rs1g97", "rs1g126"):
+        m = load_product_model(part)
+        if m is None:
+            errors.append(f"{part} product_model missing for AE/FAE handoff")
+            continue
+        missing = missing_data_path_keys(m)
+        if missing:
+            errors.append(f"{part}: missing data_paths {missing}")
+        raw_paths = m.data_paths if isinstance(m.data_paths, dict) else {}
+        for key, tmpl in DATA_PATH_TEMPLATES.items():
+            got = str(raw_paths.get(key) or "").strip()
+            if got != tmpl:
+                errors.append(
+                    f"{part} data_paths.{key} must be {tmpl!r} (folder template; do not invent Excel cells)"
+                )
+        extra = pins_named_in_wire_map(m) - known_pin_names(m)
+        if extra:
+            errors.append(
+                f"{part} wire_map invents nets {sorted(extra)} (CONFIRMED pins only)"
+            )
+        enabled = [
+            str(x).strip()
+            for x in (enabled_tests_for_part(part) or [])
+            if str(x).strip()
+        ]
+        for tid in enabled:
+            try:
+                block = wire_map_for_test(m, tid)
+            except RuntimeError:
+                errors.append(f"{part}: enabled {tid} has empty wire_map")
+                continue
+            if not block:
+                errors.append(f"{part}: enabled {tid} has empty wire_map")
+        probe = "icc" if "icc" in enabled else (enabled[0] if enabled else "")
+        if probe:
+            try:
+                blob = "\n".join(format_handoff_begin(m, probe))
+            except RuntimeError as exc:
+                errors.append(f"{part} format_handoff_begin: {exc}")
+            else:
+                if "PSU CH1" not in blob or "Human Continue" not in blob:
+                    errors.append(f"{part} handoff must surface PSU CH->pin + Human Continue")
+                if "Stimulus" not in blob:
+                    errors.append(f"{part} handoff must surface Stimulus")
+                if "Settle" not in blob or "wait" not in blob.lower():
+                    errors.append(f"{part} handoff must surface Settle wait")
+                if "Measure" not in blob:
+                    errors.append(f"{part} handoff must surface Measure + pass_mode")
+                if "NON_TIGHT" not in blob and "tight" not in blob.lower():
+                    errors.append(f"{part} handoff settle must name NON_TIGHT or tight")
+    model_src = _MODEL.read_text(encoding="utf-8")
+    ldc_src = _LOGIC_DC.read_text(encoding="utf-8")
+    if "path_b_handoff" not in model_src:
+        errors.append("product_model must define path_b_handoff")
+    if "path_b_handoff" not in ldc_src:
+        errors.append("logic_dc.py must call path_b_handoff on Path B runs")
+    if not wraps.is_file() or "path_b_handoff" not in wraps.read_text(encoding="utf-8"):
+        errors.append("wraps.py must surface path_b_handoff for Path B AC ids")
+    runner_src = runner.read_text(encoding="utf-8") if runner.is_file() else ""
+    if "checklist=None" not in runner_src and "checklist = None" not in runner_src:
+        errors.append("runner pause_hook must accept checklist (Logic wire_map, not OpAmp-only)")
+    if "format_fail_lines" not in runner_src:
+        errors.append("runner FAIL popup must prompt scope capture / attach path")
+    if "do not invent nets" not in model_src.lower():
+        errors.append("product_model handoff must say do not invent nets")
+    return errors
+
+
 def _runnable_ok() -> list[str]:
     """Every enabled_tests id must have a registered TestSpec with callable run."""
     errors: list[str] = []
@@ -1021,6 +1116,7 @@ def check_logic_dc() -> list[str]:
     errors += _seelim_wrap_ok()
     errors += _registry_ok()
     errors += _runnable_ok()
+    errors += _handoff_ok()
     errors += _settle_loop_ok()
     errors += _operator_doc_ok()
     errors += _panel_ok()

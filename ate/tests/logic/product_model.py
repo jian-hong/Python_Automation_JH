@@ -9,6 +9,7 @@ See Lim goldens are not loaded here.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
@@ -180,6 +181,9 @@ class ProductModel:
     vcc_list_status: str = ""
     vcc_op_status: str = ""
     gaps: list[str] = field(default_factory=list)
+    wire_map: dict[str, Any] = field(default_factory=dict)
+    settle_prompt: dict[str, Any] = field(default_factory=dict)
+    data_paths: dict[str, Any] = field(default_factory=dict)
     raw: dict[str, Any] = field(default_factory=dict)
 
     def has_oe(self) -> bool:
@@ -780,6 +784,9 @@ def panel_payload(part_key: str) -> dict[str, Any]:
             name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
         },
         "dc_limits": dict(model.dc_limits),
+        "wire_map": dict(model.wire_map),
+        "settle_prompt": dict(model.settle_prompt),
+        "data_paths": dict(model.data_paths),
         "card_fields": card_fields_for_panel(blob, model),
         "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }
@@ -865,6 +872,9 @@ def _lookup_card_value(blob: dict[str, Any], model: ProductModel, key: str) -> A
         "pin_drive": {
             name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
         },
+        "wire_map": dict(model.wire_map),
+        "settle_prompt": dict(model.settle_prompt),
+        "data_paths": dict(model.data_paths),
     }
     return attr_map.get(key)
 
@@ -1150,6 +1160,9 @@ def load_product_model(
         vcc_list_status=str(blob.get("vcc_list_status") or ""),
         vcc_op_status=str(blob.get("vcc_op_status") or "RANGE_METADATA"),
         gaps=_yaml_gaps(blob),
+        wire_map=_as_dict(blob.get("wire_map")),
+        settle_prompt=_as_dict(blob.get("settle_prompt")),
+        data_paths=_as_dict(blob.get("data_paths")),
         raw=blob,
     )
 
@@ -1309,6 +1322,402 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
             name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
         },
         "dc_limits": dict(model.dc_limits),
+        "wire_map": dict(model.wire_map),
+        "settle_prompt": dict(model.settle_prompt),
+        "data_paths": dict(model.data_paths),
         "card_fields": card_fields_for_panel(model.raw if isinstance(model.raw, dict) else {}, model),
         "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }
+
+
+# AE/FAE no-code handoff. Folder templates only -- never invent nets or Excel cells.
+DATA_PATH_REQUIRED = ("excel", "report", "datalog", "records")
+DATA_PATH_TEMPLATES = {
+    "excel": "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/",
+    "report": "sessions/report.json",
+    "datalog": "sessions/datalog.md",
+    "records": "{test}/DUT_n/records/",
+    "attach": "{test}/DUT_n/",
+}
+_CURRENT_HANDOFF_IDS = frozenset({"icc", "delta_icc", "ii", "ioz"})
+_VOLTAGE_HANDOFF_IDS = frozenset({"input_threshold", "vth", "voh", "vol"})
+_AC_HANDOFF_IDS = frozenset({"tp", "ten", "tdis"})
+
+
+def known_pin_names(model: ProductModel) -> set[str]:
+    return {str(p.name).strip().upper() for p in model.pins if str(p.name).strip()}
+
+
+def _wire_tests(model: ProductModel) -> dict[str, Any]:
+    wm = model.wire_map if isinstance(model.wire_map, dict) else {}
+    tests = wm.get("tests")
+    return tests if isinstance(tests, dict) else {}
+
+
+def wire_map_has_test(model: ProductModel, test_id: str) -> bool:
+    tid = str(test_id or "").strip().lower()
+    for key in _wire_tests(model):
+        if str(key).strip().lower() == tid:
+            return True
+    return False
+
+
+def _wire_block_nonempty(block: Any) -> bool:
+    if not isinstance(block, dict) or not block:
+        return False
+    for key in ("psu", "awg", "dmm", "scope", "gnd"):
+        val = block.get(key)
+        if val not in (None, "", [], {}):
+            return True
+    return False
+
+
+def wire_map_for_test(model: ProductModel, test_id: str) -> dict[str, Any]:
+    """Per-test wire map. Empty is FAIL-closed -- never invent nets."""
+    tid = str(test_id or "").strip().lower()
+    block: Any = None
+    for key, val in _wire_tests(model).items():
+        if str(key).strip().lower() == tid:
+            block = val
+            break
+    if not _wire_block_nonempty(block):
+        raise RuntimeError(
+            f"{tid}: empty wire_map (CONFIRMED pins + pin_drive only; do not invent nets)"
+        )
+    return dict(block)
+
+
+def missing_data_path_keys(model: ProductModel) -> list[str]:
+    raw = model.data_paths if isinstance(model.data_paths, dict) else {}
+    missing: list[str] = []
+    for key in DATA_PATH_REQUIRED:
+        val = raw.get(key)
+        if val is None or str(val).strip() == "":
+            missing.append(key)
+    return missing
+
+
+def _stable_eps_a_null(model: ProductModel) -> bool:
+    raw = (model.recipe or {}).get("stable_eps_A")
+    if raw is None:
+        return True
+    if isinstance(raw, str) and raw.strip().lower() in ("", "null", "none", "~", "nan"):
+        return True
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return True
+    if v != v:
+        return True
+    return v <= 0
+
+
+def _campaign_tokens(test_id: str = "", dut_index: Any = None) -> dict[str, str]:
+    tokens = {
+        "Component": "{Component}",
+        "Part": "{Part}",
+        "Package": "{Package}",
+        "Operator": "{Operator}",
+        "Version_N": "{Version_N}",
+        "test": str(test_id or "{test}") or "{test}",
+        "n": "n",
+    }
+    try:
+        from ate.core.database import get_context
+
+        ident = get_context().identity()
+    except Exception:
+        ident = {}
+    if isinstance(ident, dict):
+        if ident.get("component"):
+            tokens["Component"] = str(ident["component"])
+        if ident.get("part"):
+            tokens["Part"] = str(ident["part"])
+        if ident.get("package"):
+            tokens["Package"] = str(ident["package"])
+        if ident.get("operator"):
+            tokens["Operator"] = str(ident["operator"])
+        if ident.get("version"):
+            tokens["Version_N"] = str(ident["version"])
+    if dut_index not in (None, ""):
+        tokens["n"] = str(dut_index)
+    return tokens
+
+
+def resolve_data_paths(
+    model: ProductModel,
+    test_id: str = "",
+    dut_index: Any = None,
+) -> dict[str, str]:
+    """Fill folder templates. Never invent Excel cells."""
+    raw = dict(DATA_PATH_TEMPLATES)
+    if isinstance(model.data_paths, dict):
+        for key, val in model.data_paths.items():
+            if val is not None and str(val).strip() != "":
+                raw[str(key)] = val
+    tokens = _campaign_tokens(test_id, dut_index)
+    out: dict[str, str] = {}
+    dut_token = f"DUT_{tokens['n']}"
+    for key, tmpl in raw.items():
+        s = str(tmpl)
+        for name, val in tokens.items():
+            s = s.replace("{" + name + "}", val)
+        if tokens["n"] != "n":
+            s = s.replace("DUT_n", dut_token)
+        out[str(key)] = s
+    return out
+
+
+def attach_path_line(model: ProductModel, test_id: str, dut_index: Any = None) -> str:
+    paths = resolve_data_paths(model, test_id, dut_index)
+    return str(paths.get("attach") or paths.get("records") or "{test}/DUT_n/")
+
+
+def _fmt_pin_spec(spec: Any) -> str:
+    if isinstance(spec, dict):
+        pin = str(spec.get("pin") or "").strip().upper()
+        bits = [f"pin {pin}" if pin else "pin ?"]
+        if spec.get("number") not in (None, ""):
+            bits.append(f"pkg {spec.get('number')}")
+        if spec.get("role"):
+            bits.append(str(spec.get("role")))
+        if spec.get("use"):
+            bits.append(f"use {spec.get('use')}")
+        return ", ".join(bits)
+    text = str(spec or "").strip()
+    return f"pin {text.upper()}" if text else "pin ?"
+
+
+def _ch_lookup(block: dict[str, Any], ch: Any) -> Any:
+    if not isinstance(block, dict):
+        return None
+    key = str(ch or "").strip()
+    if key in block:
+        return block[key]
+    up = key.upper()
+    for k, val in block.items():
+        if str(k).strip().upper() == up:
+            return val
+    return None
+
+
+def format_wire_lines(model: ProductModel, test_id: str) -> list[str]:
+    """PSU CH->pin, AWG CH->input, DMM->VCC or Y, SCOPE CH->Y/debug."""
+    wm = model.wire_map if isinstance(model.wire_map, dict) else {}
+    block = wire_map_for_test(model, test_id)
+    lines = [
+        "Wire map (CONFIRMED pins + pin_drive only; do not invent nets)",
+    ]
+    psu = wm.get("psu") if isinstance(wm.get("psu"), dict) else {}
+    awg = wm.get("awg") if isinstance(wm.get("awg"), dict) else {}
+    for ch in _as_list(block.get("psu")):
+        spec = _ch_lookup(psu, ch)
+        lines.append(f"PSU {ch} -> {_fmt_pin_spec(spec)}")
+    for ch in _as_list(block.get("awg")):
+        spec = _ch_lookup(awg, ch)
+        lines.append(f"AWG {ch} -> {_fmt_pin_spec(spec)}")
+    gnd = wm.get("gnd")
+    if gnd:
+        lines.append(f"GND -> {_fmt_pin_spec(gnd)}")
+    dmm = block.get("dmm")
+    if isinstance(dmm, list):
+        pins = ", ".join(str(x).strip().upper() for x in dmm if str(x).strip())
+        lines.append(f"DMM -> {pins}")
+    elif dmm not in (None, ""):
+        lines.append(f"DMM -> {str(dmm).strip().upper()}")
+    scope = block.get("scope") if isinstance(block.get("scope"), dict) else {}
+    for ch, spec in scope.items():
+        lines.append(f"SCOPE {ch} -> {_fmt_pin_spec(spec)}")
+    lines.append("Human Continue after verify.")
+    return lines
+
+
+def format_stimulus_lines(model: ProductModel, test_id: str) -> list[str]:
+    tid = str(test_id or "").strip().lower()
+    drive = {
+        name: f"{dm.src.upper()} CH{dm.ch}" for name, dm in (model.pin_drive or {}).items()
+    }
+    lines = [
+        f"Stimulus: Vcc={list(model.vcc_list)}",
+        f"force pin_drive={drive}",
+    ]
+    if tid == "voh":
+        lines.append("truth_table vector: force Y=H (OE active if present)")
+    elif tid == "vol":
+        lines.append("truth_table vector: force Y=L (OE active if present)")
+    elif tid in ("input_threshold", "vth"):
+        lines.append("truth_table vector: isolation unused ties (Y tracks/invert)")
+    elif tid in ("icc", "delta_icc"):
+        lines.append("force: 2^n logic corners on ICC pins")
+    elif tid == "ii":
+        lines.append("force: swept input VI=0 and VI=max; others at rail")
+    elif tid == "ioz":
+        lines.append(
+            f"force: {model.oe_pin}={model.oe_inactive_level()} (data don't-care)"
+        )
+    elif tid in _AC_HANDOFF_IDS:
+        lines.append("AC wrap: Vcc from params; MSO on output_pin Y")
+    return lines
+
+
+def format_settle_lines(model: ProductModel, test_id: str) -> list[str]:
+    sp = model.settle_prompt if isinstance(model.settle_prompt, dict) else {}
+    wait = sp.get("wait", True)
+    voltage = str(
+        sp.get("voltage")
+        or "V eps/N: wait settle_s then stable_n within stable_eps_V; timeout hard-FAIL"
+    )
+    current_null = str(
+        sp.get("current_null")
+        or "I NON_TIGHT: wait settle_s once then measure (stable_eps_A null; not greenable as tight-settle)"
+    )
+    current_tight = str(
+        sp.get("current_tight")
+        or "I tight: wait settle_s then stable_n within stable_eps_A; timeout hard-FAIL"
+    )
+    tid = str(test_id or "").strip().lower()
+    lines = [f"Settle (show wait): wait={wait}"]
+    if tid in _CURRENT_HANDOFF_IDS:
+        lines.append(current_null if _stable_eps_a_null(model) else current_tight)
+    elif tid in _AC_HANDOFF_IDS:
+        lines.append("AC wrap: no Path B _wait_settled in wraps.py")
+        lines.append(voltage)
+        lines.append(current_null if _stable_eps_a_null(model) else current_tight)
+    else:
+        lines.append(voltage)
+    return lines
+
+
+def format_measure_lines(model: ProductModel, test_id: str) -> list[str]:
+    tid = str(test_id or "").strip().lower()
+    block = wire_map_for_test(model, tid)
+    dmm = block.get("dmm")
+    if isinstance(dmm, list):
+        sense = ", ".join(str(x).strip().upper() for x in dmm if str(x).strip())
+    elif dmm not in (None, ""):
+        sense = str(dmm).strip().upper()
+    else:
+        scope = block.get("scope") if isinstance(block.get("scope"), dict) else {}
+        sense = "MSO " + ", ".join(str(k) for k in scope) if scope else "see wire_map"
+    mode = lookup_pass_mode(model, tid, tid) or (model.pass_mode or {}).get(tid)
+    extra = []
+    if tid in ("voh",):
+        extra.append("voh=min_only")
+    elif tid in ("vol",):
+        extra.append("vol=max_only")
+    if mode:
+        extra.append(str(mode))
+    elif model.pass_mode:
+        extra.append(str(dict(model.pass_mode)))
+    return [f"Measure + pass_mode: DMM/MSO -> {sense}; {'; '.join(extra) if extra else 'unspec'}"]
+
+
+def format_save_lines(
+    model: ProductModel, test_id: str, dut_index: Any = None
+) -> list[str]:
+    paths = resolve_data_paths(model, test_id, dut_index)
+    return [
+        "Save path after run (folders only; do not invent Excel cells)",
+        f"Excel: {paths.get('excel')}",
+        f"report: {paths.get('report')}",
+        f"STS datalog: {paths.get('datalog')}",
+        f"records: {paths.get('records')}",
+    ]
+
+
+def format_fail_lines(
+    model: ProductModel,
+    test_id: str,
+    err: str,
+    dut_index: Any = None,
+) -> list[str]:
+    attach = attach_path_line(model, test_id, dut_index)
+    return [
+        f"FAIL: {str(err or '')[:160]}",
+        "Capture scope PNG or phone photo of the FAIL",
+        f"Attach path: {attach}",
+        "Then Continue (next DUT) or Abort",
+    ]
+
+
+def format_handoff_begin(model: ProductModel, test_id: str) -> list[str]:
+    lines: list[str] = []
+    lines.extend(format_wire_lines(model, test_id))
+    lines.extend(format_stimulus_lines(model, test_id))
+    lines.extend(format_settle_lines(model, test_id))
+    lines.extend(format_measure_lines(model, test_id))
+    return lines
+
+
+def pins_named_in_wire_map(model: ProductModel) -> set[str]:
+    """Pin names referenced by wire_map. Must be a subset of CONFIRMED pins."""
+    wm = model.wire_map if isinstance(model.wire_map, dict) else {}
+    names: set[str] = set()
+
+    def _add(spec: Any) -> None:
+        if isinstance(spec, dict):
+            pin = str(spec.get("pin") or "").strip().upper()
+            if pin:
+                names.add(pin)
+        elif isinstance(spec, str) and spec.strip():
+            names.add(spec.strip().upper())
+        elif isinstance(spec, list):
+            for item in spec:
+                _add(item)
+
+    for block_key in ("psu", "awg"):
+        block = wm.get(block_key)
+        if isinstance(block, dict):
+            for spec in block.values():
+                _add(spec)
+    _add(wm.get("gnd"))
+    for block in _wire_tests(model).values():
+        if not isinstance(block, dict):
+            continue
+        _add(block.get("dmm"))
+        scope = block.get("scope")
+        if isinstance(scope, dict):
+            for spec in scope.values():
+                _add(spec)
+    return names
+
+
+def operator_pause(params: Any, title: str, checklist: Optional[list[str]] = None) -> bool:
+    hook = getattr(params, "pause_hook", None) if params is not None else None
+    if hook is None:
+        return True
+    items = list(checklist or [])
+    try:
+        return bool(hook(title, checklist=items))
+    except TypeError:
+        return bool(hook(title))
+
+
+@contextmanager
+def path_b_handoff(params: Any, model: ProductModel, test_id: str):
+    """Continue prompts: wire, stimulus, settle, measure; FAIL attach; save path."""
+    tid = str(test_id or "").strip().lower()
+    if not wire_map_has_test(model, tid):
+        yield
+        return
+    begin = format_handoff_begin(model, tid)
+    if not operator_pause(params, f"Path B {tid}: verify wire map then Continue", begin):
+        raise RuntimeError(f"{tid}: operator aborted wire-map verify")
+    try:
+        yield
+    except Exception as exc:
+        dut = getattr(params, "unit_index", None) if params is not None else None
+        operator_pause(
+            params,
+            f"Path B {tid} FAIL: capture scope/photo",
+            format_fail_lines(model, tid, str(exc), dut),
+        )
+        raise
+    else:
+        dut = getattr(params, "unit_index", None) if params is not None else None
+        operator_pause(
+            params,
+            f"Path B {tid}: save paths",
+            format_save_lines(model, tid, dut),
+        )
+

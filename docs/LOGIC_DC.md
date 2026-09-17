@@ -54,6 +54,8 @@ product_model:
     stable_eps_A: null  # current: null = NON_TIGHT (wait settle_s once); set amps for eps/N; do not invent uA
     delta_offset_v: 0.6   # dICC; omit if datasheet has no dICC
   gaps: []                # honest UNSURE / PROVISIONAL notes
+  # AE/FAE handoff (97/126): wire_map from CONFIRMED pins+pin_drive only.
+  # settle_prompt (show wait). data_paths folder templates -- never invent nets/cells.
 ```
 
 Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_list`; `threshold_isolation: [{sweep, hold, y_tracks}]`. Shared runner: `ate/tests/logic/logic_dc.py` (import-format alias `ate/tests/logic/dc.py` -- not a second fork).
@@ -69,6 +71,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`.
 - **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126 use the CONFIRMED Full IOH/IOL grid (same table). No invented extra loads. Unloaded only when the table is absent.
 - **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default. If `stable_eps_A` is set (panel / overlay), eps/N + hard timeout FAIL (never last-reading). If null: tight-settle claims stay FAIL-closed; honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle). Not a DC limit.
+- **AE/FAE Continue** -- every enabled Path B id surfaces `wire_map` (CONFIRMED pins + `pin_drive` only; never invent nets), stimulus, `settle_prompt` (show wait), measure + `pass_mode`, FAIL attach, then `data_paths` save folders. `check_logic_dc` FAIL-closes empty `wire_map` / missing `data_paths` on 97/126.
 
 ### TestSpec <-> OOP (Part / Pin / TruthTable / Isolation / Limit / Recipe)
 

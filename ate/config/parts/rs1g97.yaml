@@ -148,6 +148,70 @@ product_model:
     ii: {spec_id: II_uA, limit_mode: max_only}
     voh: {status: CONFIRMED, note: "wired CONFIRMED Full IOH grid; PSU CH2 Y-load"}
     vol: {status: CONFIRMED, note: "wired CONFIRMED Full IOL grid; PSU CH2 Y-load"}
+  # AE/FAE handoff. From CONFIRMED pins + pin_drive only. Never invent nets.
+  wire_map:
+    source: pins+pin_drive
+    status: CONFIRMED
+    note: "From CONFIRMED pins + pin_drive. PSU CH1=VCC (role vcc). PSU CH2=Y-load (CONFIRMED VOH/VOL fixture). Do not invent nets."
+    psu:
+      CH1: {pin: VCC, number: 5, role: vcc}
+      CH2: {pin: Y, number: 4, role: output, use: load}
+      CH3: {pin: C, number: 6, role: input}
+    awg:
+      CH1: {pin: A, number: 3, role: input}
+      CH2: {pin: B, number: 1, role: input}
+    gnd: {pin: GND, number: 2, role: gnd}
+    tests:
+      tp:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      input_threshold:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      vth:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      icc:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      delta_icc:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      ii:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: [A, B, C]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      voh:
+        psu: [CH1, CH2, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      vol:
+        psu: [CH1, CH2, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+  settle_prompt:
+    wait: true
+    voltage: "V eps/N: wait settle_s then stable_n within stable_eps_V; timeout hard-FAIL"
+    current_null: "I NON_TIGHT: wait settle_s once then measure (stable_eps_A null; not greenable as tight-settle)"
+    current_tight: "I tight: wait settle_s then stable_n within stable_eps_A; timeout hard-FAIL"
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
   # Datasheet §4 FUNCTION TABLE (A B C -> Y). CONFIRMED Jian Hong 2026-09-17.
   # LLL->L HLL->L LHL->H HHL->H LLH->L HLH->H LHH->L HHH->H
   truth_table:
