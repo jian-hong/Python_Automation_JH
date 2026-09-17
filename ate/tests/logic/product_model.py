@@ -319,6 +319,36 @@ def has_product_model(part_key: str) -> bool:
     return bool(blob.get("logic_inputs") or blob.get("pins") or blob.get("truth_table"))
 
 
+def _raw_blob(model: Any) -> dict[str, Any]:
+    if isinstance(model, dict):
+        return model
+    raw = getattr(model, "raw", None)
+    return raw if isinstance(raw, dict) else {}
+
+
+def is_open_drain(model: Any) -> bool:
+    """Open-drain: VOH skip. Y=Z is output OFF, not OE-gated IOZ. No part-name ifs."""
+    raw = _raw_blob(model)
+    ot = str(raw.get("output_type") or raw.get("output_kind") or "").strip().lower()
+    ot = ot.replace("-", "_").replace(" ", "_")
+    return ot in ("open_drain", "opendrain", "od")
+
+
+def is_sequential(model: Any) -> bool:
+    """Shift-register / sequential: not combinational 2^n gate ICC. No part-name ifs."""
+    raw = _raw_blob(model)
+    pc = str(raw.get("product_class") or "").strip().lower().replace("-", "_")
+    recipe = getattr(model, "recipe", None)
+    if not isinstance(recipe, dict):
+        recipe = raw.get("recipe") if isinstance(raw.get("recipe"), dict) else {}
+    runner = str((recipe or {}).get("runner") or "").strip().lower().replace("-", "_")
+    if "sequential" in pc or "shift_register" in pc:
+        return True
+    if runner.startswith("sequential") or "shift_register" in runner:
+        return True
+    return False
+
+
 def _pins(blob: dict[str, Any]) -> list[Pin]:
     out: list[Pin] = []
     for row in _as_list(blob.get("pins")):
@@ -608,10 +638,12 @@ def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, 
     if not isinstance(overlay, dict) or not overlay:
         return blob
     out = dict(blob)
+    overlay_set_vcc_list = False
     for key in ("vcc_list", "vcc_sweep_list", "vcc_sweep"):
         nums = _floats(overlay.get(key))
         if nums:
             out["vcc_list"] = nums
+            overlay_set_vcc_list = True
             break
     if overlay.get("logic_inputs"):
         out["logic_inputs"] = overlay["logic_inputs"]
@@ -647,6 +679,9 @@ def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, 
         out["gaps"] = overlay["gaps"]
     if isinstance(overlay.get("vcc_grid"), dict):
         out["vcc_grid"] = overlay["vcc_grid"]
+    elif overlay_set_vcc_list:
+        # Overlay vcc_list must win over YAML vcc_grid (scale SIM vcc_list: [3.3]).
+        out.pop("vcc_grid", None)
     if overlay.get("sample_size") is not None:
         out["sample_size"] = overlay["sample_size"]
     return out
@@ -746,7 +781,13 @@ def normalize_vcc_grid(raw: Any) -> dict[str, Any]:
         if vcc is None:
             continue
         vih, vil = _grid_limit_pair(row)
-        fixed.append({"vcc": _vcc_key(vcc), "VIH_min_V": vih, "VIL_max_V": vil})
+        item: dict[str, Any] = {"vcc": _vcc_key(vcc), "VIH_min_V": vih, "VIL_max_V": vil}
+        for k, val in row.items():
+            key = str(k)
+            if key in ("vcc", "VIH_min_V", "vih_min_v", "VIL_max_V", "vil_max_v"):
+                continue
+            item[key] = val
+        fixed.append(item)
     ranges: list[dict[str, Any]] = []
     for row in _as_list(raw.get("ranges")):
         if not isinstance(row, dict):
@@ -769,6 +810,20 @@ def normalize_vcc_grid(raw: Any) -> dict[str, Any]:
         label = str(row.get("label") or "").strip()
         if label:
             item["label"] = label
+        for k, val in row.items():
+            key = str(k)
+            if key in (
+                "start",
+                "stop",
+                "step",
+                "VIH_min_V",
+                "vih_min_v",
+                "VIL_max_V",
+                "vil_max_v",
+                "label",
+            ):
+                continue
+            item[key] = val
         ranges.append(item)
     out: dict[str, Any] = {
         "stimulus": stim or str(raw.get("stimulus") or "").strip(),
@@ -777,6 +832,9 @@ def normalize_vcc_grid(raw: Any) -> dict[str, Any]:
         "ranges": ranges,
         "status": str(raw.get("status") or "UNCONFIRMED").strip() or "UNCONFIRMED",
     }
+    kind = str(raw.get("kind") or "").strip()
+    if kind:
+        out["kind"] = kind
     return out
 
 
@@ -1475,7 +1533,12 @@ def logic_volts(level: Any, vcc: float) -> float:
 
 
 def icc_pins(model: ProductModel) -> list[str]:
-    """Data pins, plus OE when present (ICC over data x OE space)."""
+    """Data pins, plus OE when present (ICC over data x OE space).
+
+    Sequential shift registers are not combinational 2^n -- empty pin list.
+    """
+    if is_sequential(model):
+        return []
     pins = list(model.logic_inputs)
     if model.has_oe() and model.oe_pin and model.oe_pin not in pins:
         pins.append(model.oe_pin)
@@ -1556,6 +1619,13 @@ def isolation_for_run(model: ProductModel, sweep_pin: str) -> list[IsolationPatt
 
 
 def sim_icc_plan(model: ProductModel) -> dict[str, Any]:
+    if is_sequential(model):
+        return {
+            "pins": [],
+            "n": 0,
+            "corners": [],
+            "note": "sequential_shift_register not combinational 2^n",
+        }
     pins = icc_pins(model)
     corners = iter_logic_corners(pins)
     return {"pins": pins, "n": len(corners), "corners": corners}

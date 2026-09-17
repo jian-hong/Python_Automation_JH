@@ -24,7 +24,9 @@ SETTLE: measure-after-settle (recipe settle_s / stable_n / stable_eps_V / settle
   settle_s once then measures and tags settle=NON_TIGHT (not greenable as
   tight-settle). Do not invent a uA default.
 INSTRUMENT_SENSE IOZ: OE inactive; DMM in series with Y; PSU CH2 force Vout.
-  Not applicable when oe=none.
+  Not applicable when oe=none. Open-drain Y=Z is not IOZ.
+  Open-drain: skip VOH (not a push-pull high). Sequential shift register is
+  not combinational 2^n ICC.
 
 truth_table.status UNCONFIRMED is not Datasheet-signed and is not greenable.
 """
@@ -43,6 +45,8 @@ from ate.tests.logic.product_model import (
     isolation_for_run,
     iter_logic_corners,
     is_datasheet_signed,
+    is_open_drain,
+    is_sequential,
     is_unconfirmed_status,
     load_part_yaml,
     load_product_model,
@@ -725,6 +729,11 @@ def pattern_rising_first(pat: IsolationPattern) -> bool:
 def _run_icc(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE ICC: DMM-on-VCC (series with PSU CH1 / DUT VCC).
     model = _model(params)
+    if is_sequential(model):
+        raise RuntimeError(
+            "icc: sequential_shift_register is not combinational 2^n. "
+            "Do not run Path B gate ICC."
+        )
     _require_for(instr, model, "icc")
     with path_b_handoff(params, model, "icc"):
         ilim = _current_limit(params, model)
@@ -761,12 +770,18 @@ def _run_icc(instr, params: Any) -> dict[str, Any]:
 
 
 def _icct_blob(model: ProductModel) -> dict[str, Any]:
-    """ICCT maps to delta_icc via one_input_V. Do not invent delta_offset_v=0.6."""
+    """ICCT maps to delta_icc via one_input_V or card offset_v. Do not invent 0.6."""
     dc = model.dc_limits if isinstance(model.dc_limits, dict) else {}
     for key in ("ICCT_uA", "ICCT", "icct"):
         block = dc.get(key)
-        if isinstance(block, dict) and (
+        if not isinstance(block, dict):
+            continue
+        st = str(block.get("status") or "").strip().upper().replace("-", "_")
+        if st in ("ABSENT", "N_A", "NA"):
+            continue
+        if (
             block.get("one_input_V") is not None
+            or block.get("offset_v") is not None
             or str(block.get("map_to") or "").strip().lower() == "delta_icc"
         ):
             return block
@@ -778,11 +793,13 @@ def _delta_force_v(model: ProductModel, vcc: float) -> float:
     one = icct.get("one_input_V")
     if one is not None:
         return float(one)
-    offset = model.recipe.get("delta_offset_v")
+    offset = icct.get("offset_v")
+    if offset is None:
+        offset = model.recipe.get("delta_offset_v")
     if offset is None:
         raise RuntimeError(
-            "delta_icc: need dc_limits.ICCT_uA.one_input_V or recipe.delta_offset_v "
-            "(do not invent 0.6)"
+            "delta_icc: need dc_limits.ICCT_uA.one_input_V / offset_v or "
+            "recipe.delta_offset_v (do not invent 0.6)"
         )
     return max(0.0, float(vcc) - float(offset))
 
@@ -792,12 +809,14 @@ def _delta_vccs(params: Any, model: ProductModel) -> list[float]:
     if icct.get("vcc") is not None:
         return [float(icct["vcc"])]
     vccs = _vcc_corners(params, model, "delta_vcc_list")
-    vmin = model.recipe.get("delta_vcc_min")
+    vmin = icct.get("vcc_min")
+    if vmin is None:
+        vmin = model.recipe.get("delta_vcc_min")
     if vmin is not None:
         vccs = [v for v in vccs if v + 1e-9 >= float(vmin)]
         if not vccs:
             raise RuntimeError(
-                "delta_icc: no vcc_list points at/above recipe.delta_vcc_min"
+                "delta_icc: no vcc_list points at/above ICCT vcc_min / recipe.delta_vcc_min"
             )
     return vccs
 
@@ -805,11 +824,21 @@ def _delta_vccs(params: Any, model: ProductModel) -> list[float]:
 def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at offset or ICCT voltage.
     model = _model(params)
+    if is_sequential(model):
+        raise RuntimeError(
+            "delta_icc: sequential_shift_register is not combinational 2^n. "
+            "ICCT absent -- do not run Path B gate delta_icc."
+        )
     near_note = ""
     icct = _icct_blob(model)
     if icct.get("one_input_V") is not None:
         near_note = f"ICCT one_in={icct.get('one_input_V')}V @{icct.get('vcc')}"
-    elif model.recipe.get("delta_offset_v") is None:
+    elif icct.get("offset_v") is not None or model.recipe.get("delta_offset_v") is not None:
+        off = icct.get("offset_v")
+        if off is None:
+            off = model.recipe.get("delta_offset_v")
+        near_note = f"VCC-{off}"
+    else:
         raise RuntimeError(
             "delta_icc: recipe.delta_offset_v missing (datasheet dICC, e.g. VCC-0.6). "
             "Do not invent; add ICCT one_input_V or offset to product_model YAML."
@@ -964,6 +993,11 @@ def _apply_y_vector(instr, model: ProductModel, high: bool, vcc: float, ilim: fl
 def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE VOH: force Y-high; DMM sense V(Y). Loaded IOH only from voh_table.
     model = _model(params)
+    if is_open_drain(model):
+        raise RuntimeError(
+            "voh: open-drain -- skip VOH series. Y=Z is output OFF, not VOH. "
+            "Remove voh from enabled_tests."
+        )
     _require_for(instr, model, "voh")
     with path_b_handoff(params, model, "voh"):
         ilim = _current_limit(params, model)

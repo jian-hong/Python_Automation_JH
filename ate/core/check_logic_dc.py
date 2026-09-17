@@ -14,6 +14,7 @@ import textwrap
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from ate.core.paths import PARTS_DIR
 from ate.core.registry import all_tests, get, load_family
@@ -29,6 +30,8 @@ from ate.tests.logic.product_model import (
     isolation_for,
     isolation_for_run,
     is_datasheet_signed,
+    is_open_drain,
+    is_sequential,
     is_unconfirmed_status,
     iter_logic_corners,
     known_pin_names,
@@ -2080,6 +2083,305 @@ def _excel_lock_ok() -> list[str]:
     return errors
 
 
+_DRAFT_GATE_SKUS = (
+    "rs1g08",
+    "rs1g07",
+    "rs1g14",
+    "rs1g32",
+    "rs1gt08",
+    "rs1gt32",
+    "rs1g125",
+)
+_DRAFT_SCAFFOLD_SKUS = _DRAFT_GATE_SKUS + ("rs164",)
+
+_G14_VT = {
+    1.65: {"VT_plus": [0.75, 1.05], "VT_minus": [0.3, 0.6]},
+    2.3: {"VT_plus": [1.25, 1.55], "VT_minus": [0.35, 0.65]},
+    3.0: {"VT_plus": [1.5, 2.1], "VT_minus": [0.45, 0.75]},
+    4.5: {"VT_plus": [2.3, 3.0], "VT_minus": [0.7, 1.0]},
+    5.5: {"VT_plus": [2.8, 3.4], "VT_minus": [0.85, 1.15]},
+}
+
+
+def _recipe_search_ok(part: str, m) -> list[str]:
+    errors: list[str] = []
+    search = (m.recipe or {}).get("search") if isinstance(m.recipe, dict) else {}
+    if not isinstance(search, dict) or not search:
+        return [f"{part} recipe.search missing (gate SKU; PROPOSED_FROM_LIVE)"]
+    st = str(search.get("status") or "")
+    if "PROPOSED" not in st.upper():
+        errors.append(f"{part} recipe.search.status must stay PROPOSED_FROM_LIVE, got {st!r}")
+    if not isinstance(search.get("vih"), dict) or not isinstance(search.get("vil"), dict):
+        errors.append(f"{part} recipe.search must have vih/vil stages")
+    ladder = search.get("step_ladder_V") or search.get("step_ladder")
+    if not isinstance(ladder, list) or not ladder:
+        errors.append(f"{part} recipe.search step_ladder_V missing")
+    on_hit = search.get("on_hit") if isinstance(search.get("on_hit"), dict) else {}
+    if not on_hit.get("skip_rest_of_walk"):
+        errors.append(f"{part} recipe.search on_hit.skip_rest_of_walk must be true")
+    return errors
+
+
+def _unsigned_draft_ok(part: str, m) -> list[str]:
+    """DRAFT SKUs stay UNCONFIRMED. Do not call _fail_closed_until_signed (that FAILs the suite)."""
+    errors: list[str] = []
+    for name, st in (
+        ("status", m.status),
+        ("truth_table", m.truth_table_status),
+        ("isolation", m.isolation_status),
+    ):
+        if is_datasheet_signed(st):
+            errors.append(
+                f"{part} {name}={st!r} must stay UNCONFIRMED (no number unlock overnight)"
+            )
+        elif name != "isolation" and not is_unconfirmed_status(st):
+            # isolation N_A on sequential is allowed
+            if str(st or "").strip().upper() not in ("N_A", "NA", "N/A"):
+                errors.append(f"{part} {name}={st!r} must be UNCONFIRMED")
+    if vcc_grid_unconfirmed(m) is False and (m.vcc_grid or {}).get("status"):
+        gst = str((m.vcc_grid or {}).get("status") or "")
+        if is_datasheet_signed(gst):
+            errors.append(f"{part} vcc_grid.status must stay UNCONFIRMED, got {gst!r}")
+    return errors
+
+
+def _draft_scaffold_ok() -> list[str]:
+    """Overnight Path B DRAFT scaffold. Physics FAIL bars. Numbers stay UNCONFIRMED."""
+    from ate.tests.logic import logic_dc as ldc
+
+    errors: list[str] = []
+    for part in _DRAFT_SCAFFOLD_SKUS:
+        if not has_product_model(part):
+            errors.append(f"{part} product_model missing (DRAFT scaffold)")
+    m08 = load_product_model("rs1g08")
+    m07 = load_product_model("rs1g07")
+    m14 = load_product_model("rs1g14")
+    m32 = load_product_model("rs1g32")
+    mgt08 = load_product_model("rs1gt08")
+    mgt32 = load_product_model("rs1gt32")
+    m125 = load_product_model("rs1g125")
+    m164 = load_product_model("rs164")
+    if None in (m08, m07, m14, m32, mgt08, mgt32, m125, m164):
+        return errors + ["DRAFT scaffold: one or more product_model failed to load"]
+
+    yaml08 = load_part_yaml("rs1g08")
+    if str(yaml08.get("package") or "") != "SOT23":
+        errors.append(f"rs1g08 campaign package must stay SOT23, got {yaml08.get('package')!r}")
+    a_drive = m08.pin_drive.get("A")
+    b_drive = m08.pin_drive.get("B")
+    if a_drive is None or a_drive.src != "awg" or a_drive.ch != 1:
+        errors.append("rs1g08 pin_drive A must stay AWG CH1")
+    if b_drive is None or b_drive.src != "awg" or b_drive.ch != 2:
+        errors.append("rs1g08 pin_drive B must stay AWG CH2")
+    from ate.tests.logic import excel_lock as el
+
+    if el.uses_excel_lock(m08):
+        errors.append("rs1g08 must keep sheet_map paste.values (no Path B excel_lock)")
+
+    for part, m in (
+        ("rs1g08", m08),
+        ("rs1g07", m07),
+        ("rs1g14", m14),
+        ("rs1g32", m32),
+        ("rs1gt08", mgt08),
+        ("rs1gt32", mgt32),
+        ("rs1g125", m125),
+        ("rs164", m164),
+    ):
+        errors += _unsigned_draft_ok(part, m)
+
+    for part in _DRAFT_GATE_SKUS:
+        m = load_product_model(part)
+        if m is None:
+            continue
+        errors += _recipe_search_ok(part, m)
+
+    # G08 AND-2 other=H; no IOZ
+    en08 = set(enabled_tests_for_part("rs1g08") or [])
+    if "ioz" in en08:
+        errors.append("rs1g08 enabled_tests must not include ioz")
+    if m08.has_oe():
+        errors.append("rs1g08 oe must be none")
+    a08 = isolation_for(m08, "A") or derive_isolation(
+        logic_inputs=m08.logic_inputs, truth_table=m08.truth_table, output_pin=m08.output_pin
+    ).get("A") or []
+    b08 = isolation_for(m08, "B") or []
+    if not any(p.fix.get("B") == "H" and p.y_expect == "track" for p in a08):
+        errors.append("rs1g08 AND isolation A must track with B=H")
+    if not any(p.fix.get("A") == "H" and p.y_expect == "track" for p in b08):
+        errors.append("rs1g08 AND isolation B must track with A=H")
+    rec08 = m08.recipe or {}
+    try:
+        if abs(float(rec08.get("delta_offset_v")) - 0.6) > 1e-9:
+            errors.append(f"rs1g08 recipe.delta_offset_v must stay 0.6, got {rec08.get('delta_offset_v')}")
+    except (TypeError, ValueError):
+        errors.append("rs1g08 recipe.delta_offset_v must stay 0.6 (CMOS ICCT)")
+    force08 = ldc._delta_force_v(m08, 5.5)
+    if abs(float(force08) - 4.9) > 1e-9:
+        errors.append(f"rs1g08 CMOS delta_icc force must be VCC-0.6=4.9, got {force08}")
+
+    # G07 OD: disable VOH; Y=Z != IOZ
+    if not is_open_drain(m07):
+        errors.append("rs1g07 output_type must be open_drain")
+    if m07.has_oe():
+        errors.append("rs1g07 oe must be none (Y=Z is not OE IOZ)")
+    en07 = set(enabled_tests_for_part("rs1g07") or [])
+    if "voh" in en07:
+        errors.append("rs1g07 must not enable voh (open-drain)")
+    if "ioz" in en07:
+        errors.append("rs1g07 must not enable ioz (Y=Z is not IOZ)")
+    yz = [r for r in m07.truth_table if r.get("A") == "H" and r.get("Y") == "Z"]
+    if not yz:
+        errors.append("rs1g07 truth_table must have A=H -> Y=Z (open-drain OFF)")
+    try:
+        ldc._run_voh_path_b(None, _params(part="rs1g07", vcc=5.0))
+        errors.append("Verify FAIL bar: voh on open-drain rs1g07 must raise")
+    except RuntimeError as exc:
+        if "open-drain" not in str(exc).lower():
+            errors.append(f"voh rs1g07 must say open-drain, got {exc!r}")
+    except Exception as exc:
+        errors.append(f"voh rs1g07 must raise RuntimeError, got {type(exc).__name__}: {exc}")
+    try:
+        ldc._run_ioz(None, _params(part="rs1g07", vcc=5.0))
+        errors.append("Verify FAIL bar: ioz on rs1g07 (Y=Z != IOZ) must raise")
+    except RuntimeError as exc:
+        if "not applicable" not in str(exc).lower() and "oe is none" not in str(exc).lower():
+            errors.append(f"ioz rs1g07 should say not applicable, got {exc!r}")
+    except Exception as exc:
+        errors.append(f"ioz rs1g07 must raise RuntimeError, got {type(exc).__name__}: {exc}")
+
+    # G14 Schmitt VT+/- range
+    if not m14.schmitt:
+        errors.append("rs1g14 schmitt must be true")
+    if lookup_pass_mode(m14, "VTPLUS_V", "vth") != "range":
+        errors.append("rs1g14 VT+ pass_mode must be range")
+    if lookup_pass_mode(m14, "VTMINUS_V", "vth") != "range":
+        errors.append("rs1g14 VT- pass_mode must be range")
+    grid14 = m14.vcc_grid or {}
+    if str(grid14.get("kind") or "") != "schmitt_VT":
+        errors.append(f"rs1g14 vcc_grid.kind must be schmitt_VT, got {grid14.get('kind')!r}")
+    got_vt: dict[float, dict[str, Any]] = {}
+    for pt in grid14.get("fixed_points") or []:
+        if not isinstance(pt, dict) or pt.get("vcc") is None:
+            continue
+        got_vt[round(float(pt["vcc"]), 6)] = pt
+    for vcc, want in _G14_VT.items():
+        pt = got_vt.get(round(float(vcc), 6))
+        if pt is None:
+            errors.append(f"rs1g14 VT grid missing vcc={vcc}")
+            continue
+        plus = pt.get("VT_plus") or pt.get("VT+")
+        minus = pt.get("VT_minus") or pt.get("VT-")
+        if list(plus or []) != want["VT_plus"]:
+            errors.append(f"rs1g14 VT+ @ {vcc} must be {want['VT_plus']}, got {plus}")
+        if list(minus or []) != want["VT_minus"]:
+            errors.append(f"rs1g14 VT- @ {vcc} must be {want['VT_minus']}, got {minus}")
+    a14 = isolation_for(m14, "A")
+    if not any(p.y_expect == "invert" for p in a14):
+        errors.append("rs1g14 isolation A must invert (Y=NOT A)")
+    en14 = set(enabled_tests_for_part("rs1g14") or [])
+    if "voh" in en14 or "vol" in en14:
+        errors.append("rs1g14 must not enable voh/vol without table rows")
+
+    # G32 OR-2 other=L
+    a32 = isolation_for(m32, "A")
+    b32 = isolation_for(m32, "B")
+    if not any(p.fix.get("B") == "L" and p.y_expect == "track" for p in a32):
+        errors.append("rs1g32 OR isolation A must track with B=L")
+    if not any(p.fix.get("A") == "L" and p.y_expect == "track" for p in b32):
+        errors.append("rs1g32 OR isolation B must track with A=L")
+    highs32 = vectors_for_output(m32, "H")
+    if not any(v.get("A") == "L" and v.get("B") == "H" for v in highs32):
+        errors.append("rs1g32 OR Y=H must include A=L B=H")
+
+    # GT08 / GT32 TTL 2.0-5.5; ICCT 3.4 not 0.6
+    for part, m, other in (("rs1gt08", mgt08, "H"), ("rs1gt32", mgt32, "L")):
+        if round(float(m.vcc_op_min or 0), 6) != 2.0 or round(float(m.vcc_op_max or 0), 6) != 5.5:
+            errors.append(f"{part} TTL VCC op must be 2.0-5.5, got {m.vcc_op_min}..{m.vcc_op_max}")
+        merged = [round(float(x), 6) for x in m.vcc_list]
+        if any(v < 2.0 - 1e-9 for v in merged):
+            errors.append(f"{part} TTL vcc_list must not include <2.0, got {merged}")
+        if 1.65 in merged:
+            errors.append(f"{part} TTL must not sweep CMOS 1.65")
+        if 2.0 not in merged or 3.3 not in merged:
+            errors.append(f"{part} TTL merged vcc_list must include 2.0 and 3.3")
+        force = ldc._delta_force_v(m, 5.5)
+        if abs(float(force) - 3.4) > 1e-9:
+            errors.append(f"{part} ICCT force must be one_in 3.4, got {force}")
+        if abs(float(force) - 4.9) < 1e-9:
+            errors.append(f"Verify FAIL bar: {part} must not invent VCC-0.6")
+        hold = "B" if other == "H" else "B"
+        pats = isolation_for(m, "A")
+        if not any(p.fix.get("B") == other and p.y_expect == "track" for p in pats):
+            errors.append(f"{part} isolation A must track with B={other}")
+        rec = m.recipe or {}
+        if rec.get("delta_offset_v") is not None:
+            errors.append(f"{part} must not invent recipe.delta_offset_v (TTL ICCT uses 3.4)")
+
+    # G125 OE active-L -> IOZ ON (opposite of 126 active-H)
+    if not m125.has_oe() or m125.oe_mode != "low":
+        errors.append("rs1g125 oe must be active low")
+    en125 = set(enabled_tests_for_part("rs1g125") or [])
+    if "ioz" not in en125:
+        errors.append("rs1g125 enabled_tests must include ioz (OE active-L)")
+    if "voh" in en125 or "vol" in en125:
+        errors.append("rs1g125 must not enable voh/vol without table rows")
+    a125 = isolation_for(m125, "A")
+    if not any(p.fix.get("OE") == "L" and p.y_expect == "track" for p in a125):
+        errors.append("rs1g125 isolation A must hold OE=L (active-L)")
+    zrow = [r for r in m125.truth_table if r.get("OE") == "H" and r.get("Y") == "Z"]
+    if not zrow:
+        errors.append("rs1g125 truth_table must have OE=H -> Y=Z")
+
+    # RS164 sequential -- NOT gate 2^n
+    if not is_sequential(m164):
+        errors.append("rs164 product_class/recipe.runner must be sequential_shift_register")
+    en164 = {str(x).strip().lower() for x in (enabled_tests_for_part("rs164") or [])}
+    for banned in ("icc", "delta_icc", "input_threshold", "vth", "voh", "vol", "ioz"):
+        if banned in en164:
+            errors.append(f"rs164 must not enable Path B {banned} (not combinational 2^n)")
+    plan = sim_icc_plan(m164)
+    if int(plan.get("n") or 0) == 16:
+        errors.append("Verify FAIL bar: rs164 ICC must not be gate 2^4=16")
+    if int(plan.get("n") or 0) != 0:
+        errors.append(f"rs164 sim_icc_plan n must be 0 (not combinational), got {plan}")
+    n_inputs = len(m164.logic_inputs)
+    if n_inputs and int(plan.get("n") or 0) == (1 << n_inputs):
+        errors.append(f"rs164 ICC must not be 2^{n_inputs}={1 << n_inputs}")
+    try:
+        ldc._run_icc(None, _params(part="rs164", vcc=5.0))
+        errors.append("Verify FAIL bar: icc on sequential rs164 must raise")
+    except RuntimeError as exc:
+        msg = str(exc).lower()
+        if "sequential" not in msg and "2^n" not in msg and "2n" not in msg:
+            errors.append(f"icc rs164 must say sequential / not 2^n, got {exc!r}")
+    except Exception as exc:
+        errors.append(f"icc rs164 must raise RuntimeError, got {type(exc).__name__}: {exc}")
+    try:
+        ldc._run_delta_icc(None, _params(part="rs164", vcc=5.0))
+        errors.append("Verify FAIL bar: delta_icc on sequential rs164 must raise")
+    except RuntimeError as exc:
+        if "sequential" not in str(exc).lower() and "2^n" not in str(exc).lower():
+            errors.append(f"delta_icc rs164 must say sequential, got {exc!r}")
+    except Exception as exc:
+        errors.append(f"delta_icc rs164 must raise RuntimeError, got {type(exc).__name__}: {exc}")
+    dc164 = m164.dc_limits if isinstance(m164.dc_limits, dict) else {}
+    icct164 = dc164.get("ICCT_uA") if isinstance(dc164.get("ICCT_uA"), dict) else {}
+    if str(icct164.get("status") or "").strip().upper() != "ABSENT":
+        errors.append(f"rs164 ICCT_uA.status must be ABSENT, got {icct164.get('status')!r}")
+    runner = str((m164.recipe or {}).get("runner") or "")
+    if "sequential" not in runner.lower():
+        errors.append(f"rs164 recipe.runner must be sequential_shift_register, got {runner!r}")
+
+    src_ldc = _LOGIC_DC.read_text(encoding="utf-8")
+    src_model = _MODEL.read_text(encoding="utf-8")
+    if "is_open_drain" not in src_ldc or "is_sequential" not in src_ldc:
+        errors.append("logic_dc.py must fail-close open-drain VOH / sequential ICC via generic flags")
+    if "is_open_drain" not in src_model or "is_sequential" not in src_model:
+        errors.append("product_model.py must expose is_open_drain / is_sequential (no part-name ifs)")
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -2112,6 +2414,7 @@ def check_logic_dc() -> list[str]:
     errors += _operator_doc_ok()
     errors += _panel_ok()
     errors += _excel_lock_ok()
+    errors += _draft_scaffold_ok()
     load_family("opamp")
     return errors
 

@@ -190,7 +190,7 @@ Zip operators: `START.bat` (from `ATE_Console_Try_*.zip` or the copy-ready Versi
 
 - UI: `http://127.0.0.1:5174`
 - Worker JSON-RPC: `http://127.0.0.1:8766` (not 8765)
-- After `git pull` / zip refresh: **Ctrl+F5** (`app.js?v=20260918logicdc12`)
+- After `git pull` / zip refresh: **Ctrl+F5** (`app.js?v=20260918logicdc13`)
 - After `ate/tests/**` / worker changes: idle-restart worker (`restart_ate_worker.bat`), not mid-run, then Ctrl+F5
 
 Pick a **person** (not All) -> Apply campaign -> Discover -> Open Session -> tick tests -> START.
@@ -231,3 +231,15 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 - `vcc_grid` CONFIRMED: fixed 2.0 (VIH>=1.0 VIL<=0.3), 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Preview merged `vcc_list` before START.
 - Excel: auto overwrite Version; pretty never auto.
 - ICC corners = 2 (A). START.bat first. No Verify PASS.
+
+**Overnight Path B scaffold (UNCONFIRMED -- no number unlock)**
+
+Eight SKUs carry DRAFT `product_model` from attached cards. Status stays UNCONFIRMED. Do not treat numbers as Datasheet-signed. Gate SKUs use `recipe.search` (PROPOSED_FROM_LIVE). `check_logic_dc` FAIL-closes open-drain VOH and sequential-as-gate 2^n.
+
+1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock.
+2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ.
+3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL).
+4. RS1G32 OR-2 other=L. RS1GT08/RS1GT32 TTL VCC 2.0-5.5; ICCT one_in@3.4 (not 0.6).
+5. RS1G125 OE active-L -> tick ioz. RS164 sequential_shift_register -- do not tick Path B gate 2^n.
+
+No Verify PASS.

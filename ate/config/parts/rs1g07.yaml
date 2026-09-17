@@ -25,6 +25,10 @@ enabled_tests:
   - delta_supply_current
   - ioff_leakage
   - input_leakage_sweep
+  - input_threshold
+  - icc
+  - ii
+  - delta_icc
 
 fixture_modes:
   LOGIC:
@@ -38,3 +42,101 @@ fixture_modes:
       - delta_supply_current
       - ioff_leakage
       - input_leakage_sweep
+      - input_threshold
+      - icc
+      - ii
+      - delta_icc
+
+# Path B DRAFT -- UNCONFIRMED. Open-drain: VOH skip; Y=Z is not IOZ.
+product_model:
+  part: RS1G07
+  status: UNCONFIRMED
+  source_card: RS1G07_card_DRAFT.md
+  package: SC70-5
+  packages_note: "SOT23-5 / SC70-5 (=SOT353) -- campaign package stays SOT23"
+  schmitt: false
+  oe: none
+  output_pin: Y
+  output_type: open_drain
+  vcc_op_min: 1.65
+  vcc_op_max: 5.5
+  logic_inputs: [A]
+  pins:
+    - {name: NC, role: nc, number: 1}
+    - {name: A, role: input, number: 2}
+    - {name: GND, role: gnd, number: 3}
+    - {name: Y, role: output, number: 4, note: "open-drain"}
+    - {name: VCC, role: vcc, number: 5}
+  truth_table:
+    status: UNCONFIRMED
+    source: "RS1G07 RevA.5.1 §4"
+    rows:
+      - {A: L, Y: L}
+      - {A: H, Y: Z}
+  isolation:
+    status: UNCONFIRMED
+    tests:
+      A:
+        - {sweep_pin: A, fix: {}, y_expect: track, note: "VOL when Y=L; Z when A=H -- not VOH"}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: PSU_MSO
+    pass_mode: {VIH: min_only, VIL: max_only}
+    ranges:
+      - {start: 1.65, stop: 1.95, step: 0.1, VIH_min: "0.65*VCC", VIL_max: "0.15*VCC", label: "1.65-1.95"}
+      - {start: 2.3, stop: 2.7, step: 0.1, VIH_min_V: 1.7, VIL_max_V: 0.3, label: "2.3-2.7"}
+      - {start: 3.0, stop: 3.6, step: 0.1, VIH_min_V: 2.2, VIL_max_V: 0.4, label: "3-3.6"}
+      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min: "0.7*VCC", VIL_max: "0.15*VCC", label: "4.5-5.5"}
+    fixed_points: []
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    vol: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+  dc_limits:
+    VOH:
+      status: N_A
+      note: "open-drain -- skip VOH series"
+    VOL:
+      status: UNCONFIRMED
+      loads:
+        - {IOL_mA: 0.1, vcc: [1.65, 5.5], VOL_max_V: 0.1}
+        - {IOL_mA: 4, vcc: 1.65, VOL_max_V: 0.45}
+        - {IOL_mA: 8, vcc: 2.3, VOL_max_V: 0.3}
+        - {IOL_mA: 16, vcc: 3.0, VOL_max_V: 0.4}
+        - {IOL_mA: 24, vcc: 3.0, VOL_max_V: 0.55}
+        - {IOL_mA: 32, vcc: 4.5, VOL_max_V: 0.55}
+    II_uA: {plus25C_max: 1.0, Full: 5.0}
+    ICC_uA: {plus25C_max: 1.0, Full: 10.0}
+    ICCT_uA:
+      status: UNCONFIRMED
+      Full: 500.0
+      vcc_min: 3.0
+      offset_v: 0.6
+      map_to: delta_icc
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    icc_corners: 2
+    search:
+      status: PROPOSED_FROM_LIVE
+      vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
+      vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
+      step_ladder_V: [0.5, 0.2, 0.1, 0.05, 0.01]
+      step_select: "largest step compatible with card |limit|"
+      on_hit: {skip_rest_of_walk: true, rearm: true, restart_fraction_back: 0.3, next_smaller_step: true}
+      after_precision: {interpolate: true, skip_to: next_test_or_vcc}
+      coverage_order: [input_threshold, icc, ii, vol, delta_icc]
+  enabled_tests_model: [input_threshold, icc, ii, delta_icc]
+  gaps:
+    - "UNCONFIRMED until JH CONFIRM"
+    - "VOH N/A open-drain -- do not enable voh"
+    - "Y=Z when A=H is open-drain OFF -- not OE-gated IOZ"
+    - "stable_eps_A null"
+    - "vol not enabled (no vol_table rows)"
+
