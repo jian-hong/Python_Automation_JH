@@ -10,7 +10,7 @@ Settle loop (this PR): recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005
 - Null `stable_eps_A`: tight-settle **claims** stay FAIL-closed. Honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle).
 - Ground `stable_eps_A` (amps) on the Logic DC panel overlay before claiming current settle-to-stable.
 
-`check_logic_dc` also FAIL-closes **enabled-but-unrunnable** ids: every part `enabled_tests` id must have a registered `TestSpec` with callable `run` (no stub). Enabled 97/126 tests with empty `wire_map` or missing `data_paths` FAIL the same gate. Never invent nets.
+`check_logic_dc` also FAIL-closes **enabled-but-unrunnable** ids: every part `enabled_tests` id must have a registered `TestSpec` with callable `run` (no stub). Enabled `voh`/`vol` without `voh_table`/`vol_table` rows FAIL the same gate. Enabled 97/126 tests with empty `wire_map` or missing `data_paths` FAIL too. Never invent nets.
 
 ## Copy-ready Version folder
 
@@ -87,11 +87,11 @@ After each PSU VCC switch and pin force: **PSU -> settle -> measure**. Voltage m
 | ΔICC | DMM-on-VCC; one input at VCC-offset, others at rail | Needs `recipe.delta_offset_v` (97/126: 0.6). Do not invent the offset |
 | II | DMM in series with the swept input; force VI | Per input, VI=0 and VI=max |
 | VTH / VIH / VIL | Force unused ties from truth_table; DMM sense V(Y) | 97 Schmitt = VT+/VT- (range). 126 = VIH min_only / VIL max_only. 34 DRAFT: per-VCC limits from `vcc_grid` (UNCONFIRMED until JH CONFIRM -- not greenable) |
-| VOH | Force Y=H from truth_table; DMM sense V(Y); IOH via PSU CH2 | Loaded rows only from CONFIRMED `voh_table`. Judge **VOH >= min** (`min_only`) |
-| VOL | Force Y=L from truth_table; DMM sense V(Y); IOL via PSU CH2 | Loaded rows only from CONFIRMED `vol_table`. Judge **VOL <= max** (`max_only`) |
+| VOH | Force Y=H from truth_table; DMM sense V(Y); IOH via PSU CH2 | Loaded rows from `voh_table` (97/126 CONFIRMED; 34 UNCONFIRMED DRAFT). Judge **VOH >= min** (`min_only`) |
+| VOL | Force Y=L from truth_table; DMM sense V(Y); IOL via PSU CH2 | Loaded rows from `vol_table` (97/126 CONFIRMED; 34 UNCONFIRMED DRAFT). Judge **VOL <= max** (`max_only`) |
 | IOZ | Only if OE exists. OE inactive; DMM in series with Y; PSU CH2 force Vout | 126: yes. 97 `oe: none`: do **not** tick ioz |
 
-PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC -- fixture, not a datasheet Vref) **only when the CONFIRMED card says so (97/126)**. RS1G97 pin C is PSU CH3 (checklist: AWG CH1=A CH2=B). RS1G126: AWG CH1=A CH2=OE; no C. RS1GT34 DRAFT PSU_MSO: PSU CH1=VCC, PSU CH3=A; DMM/SCOPE on Y; NC not wired; **do not invent PSU CH2 or AWG Freq/Amp**.
+PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC -- fixture, not a datasheet Vref) when a `voh_table`/`vol_table` exists (97/126 CONFIRMED; RS1GT34 UNCONFIRMED DRAFT tables -- pin Y, not a new net). RS1G97 pin C is PSU CH3 (checklist: AWG CH1=A CH2=B). RS1G126: AWG CH1=A CH2=OE; no C. RS1GT34 DRAFT PSU_MSO: PSU CH1=VCC, PSU CH2=Y-load for `voh`/`vol`, PSU CH3=A; DMM/SCOPE on Y; NC not wired; **do not invent AWG Freq/Amp**.
 
 ## Customise Parameters (`vcc_grid`)
 
@@ -187,7 +187,9 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 
 - Console up via **START.bat**. Campaign `#Test_Database/Logic/RS1GT34/...`. Owner note: Chun Tak / Core AE OK.
 - n=1. Y=A. Not Schmitt. `oe: none` -- do **not** tick ioz.
-- Stimulus **PSU_MSO** -- hide Freq/Amp. PSU CH1=VCC, PSU CH3=A, DMM/SCOPE Y. Do not invent PSU CH2 or AWG nets.
-- Tick Path B DC: `input_threshold`, `icc`, `delta_icc`, `ii`, `voh`, `vol`. `delta_icc` FAIL-closes until `recipe.delta_offset_v` is signed (do not invent 0.6). VOH/VOL unloaded -- no invented IOH/IOL.
+- Stimulus **PSU_MSO** -- hide Freq/Amp. PSU CH1=VCC, PSU CH2=Y-load for `voh`/`vol` (pin Y), PSU CH3=A, DMM/SCOPE Y. Do not invent AWG nets.
+- Tick Path B DC: `input_threshold`, `icc`, `ii`, `voh`, `vol`. Do **not** tick `delta_icc` until JH CONFIRM maps ICCT (500uA @5.5V input@3.4V). Do not invent `delta_offset_v=0.6`.
+- VOH/VOL from UNCONFIRMED DRAFT `voh_table`/`vol_table` (100uA on merged `vcc_list`; high-load only at 2.0/3.3/4.5/5.0/5.5). Judge **VOH >= min** (`min_only`) / **VOL <= max** (`max_only`). Numbers not greenable.
+- II: +/-1uA +25C judged (`II_uA`); Full +/-5uA documented (`II_FULL_uA`, no run-judge). ICC: 1uA +25C judged (`ICC_uA`); Full 10uA documented (`ICC_FULL_uA`).
 - `vcc_grid` DRAFT: fixed 2.0 (VIH>=1.0 VIL<=0.3), 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Preview merged `vcc_list` before START. Numbers not greenable until JH CONFIRM.
 - ICC corners = 2 (A). START.bat first. No Verify PASS.

@@ -165,6 +165,25 @@ _SIGNED_VOL = (
     (4.5, 0.032, 0.55),
 )
 
+# RS1GT34 DRAFT card. 100uA expanded onto merged vcc_list. High-load named VCC only.
+_RS1GT34_MERGED = [2.0, 3.3] + [round(4.5 + i * 0.1, 6) for i in range(11)]
+_DRAFT_34_VOH = tuple(
+    (v, -0.0001, round(v - 0.1, 6)) for v in _RS1GT34_MERGED
+) + (
+    (2.0, -0.008, 1.6),
+    (3.3, -0.024, 2.5),
+    (4.5, -0.032, 3.8),
+    (5.0, -0.032, 4.2),
+    (5.5, -0.032, 4.8),
+)
+_DRAFT_34_VOL = tuple((v, 0.0001, 0.1) for v in _RS1GT34_MERGED) + (
+    (2.0, 0.008, 0.45),
+    (3.3, 0.024, 0.55),
+    (4.5, 0.032, 0.55),
+    (5.0, 0.032, 0.5),
+    (5.5, 0.032, 0.45),
+)
+
 
 def _table_sigs(rows: list, i_key: str, spec_key: str) -> set[tuple[float, float, float]]:
     out: set[tuple[float, float, float]] = set()
@@ -690,9 +709,17 @@ def _rs1gt34_draft_ok() -> list[str]:
     for banned in ("ioz", "ioff", "ioff_leakage", "off_current"):
         if banned in en:
             errors.append(f"rs1gt34 must not enable {banned}")
-    for need in ("input_threshold", "icc", "delta_icc", "ii", "voh", "vol"):
+    for need in ("input_threshold", "icc", "ii", "voh", "vol"):
         if need not in en:
             errors.append(f"rs1gt34 enabled_tests missing {need}")
+    fx = yaml.get("fixture_modes") if isinstance(yaml.get("fixture_modes"), dict) else {}
+    logic_fx = fx.get("LOGIC") if isinstance(fx.get("LOGIC"), dict) else {}
+    fx_tests = {str(x) for x in (logic_fx.get("tests") or [])}
+    if "delta_icc" in en or "delta_icc" in fx_tests:
+        errors.append(
+            "rs1gt34 must disable delta_icc until JH CONFIRM maps ICCT "
+            "(500uA @5.5V input@3.4V; do not invent delta_offset_v=0.6)"
+        )
     pins = {p.name: (p.number, p.role) for p in m.pins}
     want_pins = {"NC": (1, "nc"), "A": (2, "input"), "GND": (3, "gnd"), "Y": (4, "output"), "VCC": (5, "vcc")}
     for name, (num, role) in want_pins.items():
@@ -757,7 +784,7 @@ def _rs1gt34_draft_ok() -> list[str]:
         ):
             errors.append(f"rs1gt34 range must be 4.5-5.5 step 0.1 VIH>=2.0 VIL<=0.8, got {band}")
     merged = [round(float(x), 6) for x in merge_vcc_grid(grid)]
-    want_merged = [2.0, 3.3] + [round(4.5 + i * 0.1, 6) for i in range(11)]
+    want_merged = list(_RS1GT34_MERGED)
     if merged != want_merged:
         errors.append(f"rs1gt34 merged vcc_list must be {want_merged}, got {merged}")
     got_vcc = [round(float(x), 6) for x in m.vcc_list]
@@ -779,13 +806,103 @@ def _rs1gt34_draft_ok() -> list[str]:
         errors.append("rs1gt34 pin_drive A must be PSU CH3 (PSU_MSO; do not steal AWG CH1)")
     wm = m.wire_map if isinstance(m.wire_map, dict) else {}
     psu = wm.get("psu") if isinstance(wm.get("psu"), dict) else {}
-    if "CH2" in psu:
-        errors.append("rs1gt34 wire_map must not invent PSU CH2 Y-load")
+    ch2 = psu.get("CH2") if isinstance(psu.get("CH2"), dict) else {}
+    if (
+        str(ch2.get("pin") or "") != "Y"
+        or str(ch2.get("use") or "") != "load"
+        or int(ch2.get("number") or 0) != 4
+    ):
+        errors.append(
+            "rs1gt34 wire_map.psu.CH2 must be pin Y number 4 use=load "
+            "(Path B VOH/VOL fixture; not a new net)"
+        )
+    tests_wm = wm.get("tests") if isinstance(wm.get("tests"), dict) else {}
+    if "delta_icc" in tests_wm:
+        errors.append("rs1gt34 wire_map.tests must not include delta_icc until ICCT mapped")
+    for tid, need_ch2 in (("voh", True), ("vol", True), ("input_threshold", False), ("icc", False), ("ii", False)):
+        block = tests_wm.get(tid) if isinstance(tests_wm.get(tid), dict) else {}
+        chans = [str(x) for x in (block.get("psu") or [])]
+        has_ch2 = "CH2" in chans
+        if need_ch2 and not has_ch2:
+            errors.append(f"rs1gt34 {tid} wire_map must include PSU CH2 Y-load")
+        if not need_ch2 and has_ch2:
+            errors.append(f"rs1gt34 {tid} wire_map must not use PSU CH2 (Y-load is voh/vol only)")
     extra = pins_named_in_wire_map(m) - known_pin_names(m)
     if extra:
         errors.append(f"rs1gt34 wire_map invents nets {sorted(extra)}")
-    if yaml.get("voh_table") or yaml.get("vol_table"):
-        errors.append("rs1gt34 must not invent voh_table/vol_table")
+    voh = _table_sigs(
+        yaml.get("voh_table") if isinstance(yaml.get("voh_table"), list) else [],
+        "ioh_a",
+        "spec_min",
+    )
+    vol = _table_sigs(
+        yaml.get("vol_table") if isinstance(yaml.get("vol_table"), list) else [],
+        "iol_a",
+        "spec_max",
+    )
+    want_voh = {(round(a, 6), round(b, 9), round(c, 6)) for a, b, c in _DRAFT_34_VOH}
+    want_vol = {(round(a, 6), round(b, 9), round(c, 6)) for a, b, c in _DRAFT_34_VOL}
+    if voh != want_voh:
+        errors.append(
+            "rs1gt34 voh_table must match DRAFT card "
+            "(100uA on merged vcc_list + named high-load only; UNCONFIRMED)"
+        )
+    if vol != want_vol:
+        errors.append(
+            "rs1gt34 vol_table must match DRAFT card "
+            "(100uA on merged vcc_list + named high-load only; UNCONFIRMED)"
+        )
+    specs = {s.get("id"): s for s in load_part_specs("rs1gt34")}
+    for row in yaml.get("voh_table") or []:
+        if not isinstance(row, dict):
+            continue
+        sid = str(row.get("id") or "")
+        spec = specs.get(sid) or {}
+        if round(float(spec.get("min") or 0), 6) != round(float(row.get("spec_min") or 0), 6):
+            errors.append(f"rs1gt34 limits {sid} min must match voh_table")
+        mode = str(spec.get("pass_mode") or "").replace("_", "-")
+        if mode not in ("min-only", "min"):
+            errors.append(f"rs1gt34 {sid} pass_mode must be min-only")
+        if str(spec.get("test") or "") != "voh":
+            errors.append(f"rs1gt34 {sid} test must be voh")
+    for row in yaml.get("vol_table") or []:
+        if not isinstance(row, dict):
+            continue
+        sid = str(row.get("id") or "")
+        spec = specs.get(sid) or {}
+        if round(float(spec.get("max") or 0), 6) != round(float(row.get("spec_max") or 0), 6):
+            errors.append(f"rs1gt34 limits {sid} max must match vol_table")
+        mode = str(spec.get("pass_mode") or "").replace("_", "-")
+        if mode not in ("max-only", "max"):
+            errors.append(f"rs1gt34 {sid} pass_mode must be max-only")
+        if str(spec.get("test") or "") != "vol":
+            errors.append(f"rs1gt34 {sid} test must be vol")
+    ii = specs.get("II_uA") or {}
+    if round(float(ii.get("max") or 0), 6) != 1.0 or str(ii.get("test") or "") != "ii":
+        errors.append("rs1gt34 II_uA must be max=1.0 test=ii (+25C judged)")
+    ii_full = specs.get("II_FULL_uA") or {}
+    if round(float(ii_full.get("max") or 0), 6) != 5.0 or ii_full.get("test"):
+        errors.append("rs1gt34 II_FULL_uA must be max=5.0 with no test (Full documented)")
+    icc = specs.get("ICC_uA") or {}
+    if round(float(icc.get("max") or 0), 6) != 1.0 or str(icc.get("test") or "") != "icc":
+        errors.append("rs1gt34 ICC_uA must be max=1.0 test=icc (+25C judged)")
+    icc_full = specs.get("ICC_FULL_uA") or {}
+    if round(float(icc_full.get("max") or 0), 6) != 10.0 or icc_full.get("test"):
+        errors.append("rs1gt34 ICC_FULL_uA must be max=10.0 with no test (Full documented)")
+    if any(str(s.get("test") or "") == "delta_icc" for s in specs.values()):
+        errors.append("rs1gt34 must not judge delta_icc until ICCT mapped")
+    dc = m.dc_limits if isinstance(m.dc_limits, dict) else {}
+    for which in ("voh", "vol", "ii", "icc"):
+        block = dc.get(which) if isinstance(dc.get(which), dict) else {}
+        st = str(block.get("status") or "")
+        if str(st).strip().upper() != "UNCONFIRMED" or is_datasheet_signed(st):
+            errors.append(f"rs1gt34 dc_limits.{which} must stay UNCONFIRMED, got {st!r}")
+    if lookup_pass_mode(m, "voh", "voh") != "min_only":
+        errors.append("rs1gt34 pass_mode voh must be min_only")
+    if lookup_pass_mode(m, "vol", "vol") != "max_only":
+        errors.append("rs1gt34 pass_mode vol must be max_only")
+    if lookup_pass_mode(m, "ii", "ii") != "max_only":
+        errors.append("rs1gt34 pass_mode ii must be max_only")
     if (m.recipe or {}).get("delta_offset_v") is not None:
         errors.append("rs1gt34 must not invent recipe.delta_offset_v")
     if lookup_pass_mode(m, "VIH", "input_threshold") != "min_only":
@@ -810,8 +927,42 @@ def _rs1gt34_draft_ok() -> list[str]:
     )
     if judged.get("result") == "pass":
         errors.append("rs1gt34 UNCONFIRMED VIH must not green as PASS (fail-closed)")
+    judged_voh = enrich_measurement(
+        {
+            "id": "VOH_2p0V_100uA",
+            "value": 1.95,
+            "min": 1.9,
+            "pass_mode": "min_only",
+            "greenable": False,
+        },
+        test_id="voh",
+        part_key="rs1gt34",
+    )
+    if judged_voh.get("result") == "pass":
+        errors.append("rs1gt34 UNCONFIRMED VOH must not green as PASS (fail-closed)")
+    judged_ii = enrich_measurement(
+        {
+            "id": "II_uA",
+            "value": 0.2,
+            "max": 1.0,
+            "pass_mode": "max_only",
+            "greenable": False,
+        },
+        test_id="ii",
+        part_key="rs1gt34",
+    )
+    if judged_ii.get("result") == "pass":
+        errors.append("rs1gt34 UNCONFIRMED II must not green as PASS (fail-closed)")
     if claimed_signed_without_datasheet("UNCONFIRMED"):
         errors.append("UNCONFIRMED must not look signed")
+    op_txt = _OPERATOR_DOC.read_text(encoding="utf-8") if _OPERATOR_DOC.is_file() else ""
+    if "VOH/VOL unloaded" in op_txt:
+        errors.append("LOGIC_DC_OPERATOR.md must not say RS1GT34 VOH/VOL unloaded (DRAFT tables exist)")
+    if "ICCT" not in op_txt or "3.4" not in op_txt:
+        errors.append(
+            "LOGIC_DC_OPERATOR.md must name ICCT 500uA @5.5V input@3.4V as unmapped "
+            "(do not invent delta_offset_v=0.6)"
+        )
     owners = Path(__file__).resolve().parents[1] / "config" / "owners.yaml"
     inv = Path(__file__).resolve().parents[1] / "config" / "inventory.yaml"
     if "chun_tak" not in owners.read_text(encoding="utf-8"):
@@ -827,6 +978,23 @@ def _rs1gt34_draft_ok() -> list[str]:
     model_src = _MODEL.read_text(encoding="utf-8")
     if "merge_vcc_grid" not in model_src or "lookup_vcc_grid_limits" not in model_src:
         errors.append("product_model must merge vcc_grid fixed+ranges and lookup per-VCC limits")
+    return errors
+
+
+def _enabled_voh_vol_tables_ok() -> list[str]:
+    """Enabled voh/vol without table rows is enabled-but-unrunnable. FAIL-closed."""
+    from ate.tests.logic import logic_dc as ldc
+
+    errors: list[str] = []
+    for path in sorted(PARTS_DIR.glob("*.yaml")):
+        key = path.stem.lower()
+        if not has_product_model(key):
+            continue
+        en = {str(x).strip() for x in (enabled_tests_for_part(key) or []) if str(x).strip()}
+        if "voh" in en and not ldc._voh_vol_table(key, "voh"):
+            errors.append(f"{key}: voh enabled but no voh_table rows")
+        if "vol" in en and not ldc._voh_vol_table(key, "vol"):
+            errors.append(f"{key}: vol enabled but no vol_table rows")
     return errors
 
 
@@ -1311,6 +1479,7 @@ def check_logic_dc() -> list[str]:
     errors += _rs1g97_holds()
     errors += _buf126_ok()
     errors += _rs1gt34_draft_ok()
+    errors += _enabled_voh_vol_tables_ok()
     errors += _scale_and_overlay_ok()
     errors += _seelim_wrap_ok()
     errors += _registry_ok()

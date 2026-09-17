@@ -1260,7 +1260,8 @@ def _pin_drive(blob: dict[str, Any], logic_inputs: list[str], oe_pin: str, oe_mo
     if isinstance(grid, dict):
         stim = _stimulus_token(grid.get("stimulus"))
     if stim == "PSU_MSO":
-        # CH1 is VCC. Do not invent PSU CH2 Y-load. Default leftover inputs at CH3+.
+        # CH1 is VCC. CH2 reserved for Y-load when voh/vol tables exist.
+        # Default leftover inputs at CH3+ (do not steal CH2 for an input).
         psu_ch = 3
         for name in names:
             if name in out:
