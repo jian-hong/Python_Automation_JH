@@ -212,6 +212,18 @@ def _signed_voh_vol_ok(part: str) -> list[str]:
             errors.append(f"{part} recipe.stable_eps_V must be 0.005")
         if abs(float(recipe.get("settle_timeout_s")) - 2.0) > 1e-9:
             errors.append(f"{part} recipe.settle_timeout_s must be 2.0")
+        if "stable_eps_A" not in recipe:
+            errors.append(
+                f"{part} recipe.stable_eps_A must be present and null "
+                "(do not invent a uA default)"
+            )
+        else:
+            raw_a = recipe.get("stable_eps_A")
+            if raw_a is not None and str(raw_a).strip().lower() not in ("", "null", "none", "~"):
+                errors.append(
+                    f"{part} recipe.stable_eps_A must stay null "
+                    "(do not invent a uA default; ground via panel / test_params overlay)"
+                )
     except (TypeError, ValueError):
         errors.append(f"{part} recipe settle loop keys missing")
     return errors
@@ -476,9 +488,14 @@ def _settle_loop_ok() -> list[str]:
             errors.append("_wait_settled must not hang forever (no unbounded while True)")
         if "raise RuntimeError" not in wait_src:
             errors.append("_wait_settled timeout must raise RuntimeError")
-        # timeout branch must not return a measurement
         if re.search(r"if \(time\.monotonic\(\) - t0\) >= timeout:\s+return ", wait_src):
             errors.append("_wait_settled must not return last reading when timeout expires")
+        if "stable_eps_A" not in wait_src:
+            errors.append("_wait_settled current must use stable_eps_A only")
+        if "stable_eps_V" not in wait_src:
+            errors.append("_wait_settled voltage must keep stable_eps_V")
+        if "FAIL-closed" not in wait_src and "stable_eps_A missing" not in wait_src:
+            errors.append("current settle must FAIL-closed when stable_eps_A is null/missing")
     power_src = _fn_src(src, "_power_vcc")
     if "time.sleep" in power_src:
         errors.append("_power_vcc must not sleep-as-settle; caller uses settle-to-stable")
@@ -560,10 +577,31 @@ def _settle_loop_ok() -> list[str]:
 
     try:
         i_ua = ldc._wait_settled_current_ua(_FlatCurr(), fast, setup=False)
-        if abs(float(i_ua) - 1.0) > 1e-6:
-            errors.append(f"settled current SIM must return uA, got {i_ua!r}")
+        errors.append("current settle without stable_eps_A must FAIL-closed (not reuse stable_eps_V)")
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "stable_eps_A" not in msg:
+            errors.append(f"current settle null eps must name stable_eps_A, got {exc!r}")
+        if "stable_eps_V" in msg and "do not reuse" not in msg.lower() and "reuse" not in msg.lower():
+            pass
     except Exception as exc:
-        errors.append(f"settled current SIM raised on stable DMM: {exc!r}")
+        errors.append(f"current settle without stable_eps_A must be RuntimeError, got {exc!r}")
+    grounded = replace(
+        fast,
+        recipe={**dict(fast.recipe), "stable_eps_A": 1.0},  # SIM probe window, not a SKU uA default
+    )
+    try:
+        i_ua = ldc._wait_settled_current_ua(_FlatCurr(), grounded, setup=False)
+        if abs(float(i_ua) - 1.0) > 1e-6:
+            errors.append(f"settled current SIM must return uA when stable_eps_A is set, got {i_ua!r}")
+    except Exception as exc:
+        errors.append(f"settled current SIM raised with grounded stable_eps_A: {exc!r}")
+    over = load_product_model("rs1g97", overlay={"stable_eps_A": 1.0})
+    if over is None or over.recipe.get("stable_eps_A") != 1.0:
+        errors.append("test_params overlay must set stable_eps_A")
+    bare = load_product_model("rs1g97")
+    if bare is not None and bare.recipe.get("stable_eps_A") not in (None,):
+        errors.append("rs1g97 recipe.stable_eps_A must stay null without overlay")
     return errors
 
 
@@ -607,6 +645,12 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must confirm VOH >= min / VOL <= max vs table")
     if "IOZ" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must cover IOZ if OE")
+    if "stable_eps_A" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must document stable_eps_A (current; not volts)")
+    if "FAIL-closed" not in text and "fail-closed" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must say current settle is FAIL-closed without stable_eps_A")
+    if "invent a ua" not in text.lower().replace("µ", "u"):
+        errors.append("LOGIC_DC_OPERATOR.md must forbid inventing a uA current-settle epsilon")
     if not re.search(r"HEAD SHA.*[`']?[0-9a-f]{7,40}", text, re.I | re.S):
         errors.append("LOGIC_DC_OPERATOR.md must list PR HEAD SHA")
     logic = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC.md"
@@ -715,6 +759,8 @@ def _panel_ok() -> list[str]:
         errors.append("app.js must visualise recipe + save Version overlay")
     if "icc_corner_rows" not in js or "Enabled tests" not in js or "fail-open" not in js:
         errors.append("app.js must visualise enabled tests, ICC corners, fail-open")
+    if "logic-dc-stable-eps-a" not in js or "stable_eps_A" not in js:
+        errors.append("Logic DC panel must edit stable_eps_A (overlay; null FAIL-closed)")
     if judge_value(1, None, None, pass_mode="fail-open") != "fail":
         errors.append("fail-open with no limits must fail")
     srv = Path(__file__).resolve().parents[1] / "worker" / "server.py"

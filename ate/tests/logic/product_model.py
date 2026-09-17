@@ -551,6 +551,11 @@ def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, 
         recipe["levels"] = overlay["levels"]
     if overlay.get("rails") is not None:
         recipe["rails"] = overlay["rails"]
+    if "stable_eps_A" in overlay:
+        recipe["stable_eps_A"] = overlay.get("stable_eps_A")
+    nested = overlay.get("recipe")
+    if isinstance(nested, dict) and "stable_eps_A" in nested:
+        recipe["stable_eps_A"] = nested.get("stable_eps_A")
     if recipe != _as_dict(out.get("recipe")):
         out["recipe"] = recipe
     if overlay.get("oe") is not None:
@@ -959,6 +964,9 @@ def load_product_model(
     recipe.setdefault("stable_n", 3)
     recipe.setdefault("stable_eps_V", 0.005)
     recipe.setdefault("settle_timeout_s", 2.0)
+    # current settle eps: default null (FAIL-closed). Do not invent a uA/amp number.
+    if "stable_eps_A" not in recipe:
+        recipe["stable_eps_A"] = None
     pin_drive = _pin_drive(blob, logic_inputs, oe_pin, oe_mode)
     part_name = str(blob.get("part") or part_yaml.get("part") or key).strip()
     pass_mode = _pass_mode(blob, schmitt)
@@ -1142,6 +1150,11 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
         "pass_mode": dict(model.pass_mode),
         "levels": model.recipe.get("levels"),
         "rails": model.recipe.get("rails"),
+        "settle_s": model.recipe.get("settle_s"),
+        "stable_n": model.recipe.get("stable_n"),
+        "stable_eps_V": model.recipe.get("stable_eps_V"),
+        "stable_eps_A": model.recipe.get("stable_eps_A"),
+        "settle_timeout_s": model.recipe.get("settle_timeout_s"),
         "status": model.status,
         "output_pin": model.output_pin,
     }

@@ -50,6 +50,8 @@ product_model:
   recipe:
     threshold_step_v: 0.05
     settle_s: 0.3
+    stable_eps_V: 0.005
+    stable_eps_A: null  # current settle; FAIL-closed until overlay; do not invent uA
     delta_offset_v: 0.6   # dICC; omit if datasheet has no dICC
   gaps: []                # honest UNSURE / PROVISIONAL notes
 ```
@@ -66,7 +68,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **Delta ICC** -- one input at VCC-offset.
 - **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`.
 - **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126 use the CONFIRMED Full IOH/IOL grid (same table). No invented extra loads. Unloaded only when the table is absent.
-- **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Measure after settle on every PSU VCC switch and pin force (VOH/VOL/threshold/ICC/ΔICC/II/IOZ). Timeout raises FAIL; never returns the last reading. Not a DC limit.
+- **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only; null/missing is FAIL-closed. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default; ground `stable_eps_A` via panel / `_manifest/test_params.yaml`. Timeout raises FAIL; never returns the last reading. Not a DC limit.
 
 RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
 
@@ -78,6 +80,7 @@ RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; 
 vcc_list: [3.3]
 levels: {}      # optional recipe
 rails: {}       # optional recipe
+stable_eps_A: null  # current settle; set a grounded amp number here, never invent uA in docs
 pass_mode:
   ICC_uA: max-only
   VTPLUS_V: range
@@ -126,5 +129,6 @@ A green check that never could fail is not a check. Do not claim bench PASS from
 - Copy See Lim / Ariff trees into limits yaml
 - Enable IOZ/IOFF when `oe` is none
 - Invent VOH load tables
+- Invent a uA `stable_eps_A` default, or reuse `stable_eps_V` as amps
 - Touch `family_ingest` / `FAMILY_PACKAGES` for a new RS1Gxx
 - Claim Verify PASS / Datasheet-signed from an UNCONFIRMED table

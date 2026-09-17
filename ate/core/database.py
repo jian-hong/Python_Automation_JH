@@ -307,6 +307,8 @@ class DbContext:
             "gaps",
             "oe",
             "schmitt",
+            "stable_eps_A",
+            "recipe",
         )
         incoming = blob if isinstance(blob, dict) else {}
         existing = self.load_test_params()
@@ -317,7 +319,7 @@ class DbContext:
         path = self.test_params_path()
         text = (
             "# Version overlay (PRD-004 / EPIC-A28). Does not change part yaml or limits yaml.\n"
-            "# Keys: vcc_list, levels, rails, pass_mode, logic_inputs, isolation.\n"
+            "# Keys: vcc_list, levels, rails, pass_mode, logic_inputs, isolation, stable_eps_A.\n"
             + yaml.safe_dump(existing, sort_keys=False, allow_unicode=True)
         )
         path.write_text(text, encoding="utf-8")

@@ -23,6 +23,7 @@ One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_mo
 - `#add-test-format` must stay on Test program (always visible), not inside hidden `#panel-logic-dc`.
 - settle timeout must raise RuntimeError / FAIL. Never return last reading (measure-as-pass). Never hang forever (no unbounded while True).
 - ICC / ΔICC / II / IOZ must settle-to-stable after VCC and each force, not sleep(_settle) then _avg_current_ua.
+- Never reuse stable_eps_V as amps. Current settle uses stable_eps_A only; 97/126 default null (FAIL-closed). Do not invent a uA epsilon. Overlay/panel grounds it.
 - Operator Excel: never invent cells. Fill Excel = campaign sheet_map paste.values; known Logic VOX/ICC cells only from campaign_outline.py when those sheets exist.
 
 ## cite

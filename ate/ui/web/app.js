@@ -1039,10 +1039,14 @@ function renderLogicDc() {
       ? `<p class="logic-dc-chips">${enabled.map((id) => `<span class="mode-tag">${id}</span>`).join(" ")}</p>`
       : "<p class=\"hint\">No enabled_tests on this part yaml.</p>");
   const vcc = (dc.vcc_list || dc.vcc_sweep_list || []).join(", ");
+  const epsA = dc.stable_eps_A;
+  const epsAShow = (epsA === null || epsA === undefined || epsA === "") ? "" : String(epsA);
   const recipeHtml =
     "<h3 class=\"subhead\">Recipe</h3>" +
     `<p class="hint">logic_inputs: ${inputs.join(", ") || "--"} · vcc_list: ${vcc || "--"} · ICC pins: ${(dc.icc_pins || []).join(",") || "--"}</p>` +
-    `<label>vcc_list (comma)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>`;
+    `<p class="hint">Voltage settle uses stable_eps_V. Current settle uses stable_eps_A (amps) only; blank/null is FAIL-closed. Do not reuse volts as amps. Do not invent a uA default.</p>` +
+    `<label>vcc_list (comma)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>` +
+    `<label>stable_eps_A (amps, current settle; blank = null / FAIL-closed)<input id="logic-dc-stable-eps-a" type="text" value="${epsAShow}" placeholder="null" /></label>`;
   const tt = dc.truth_table || [];
   const pins = tt.length ? Object.keys(tt[0]) : inputs.concat([dc.output_pin || "Y"]);
   let ttHtml = "<h3 class=\"subhead\">Truth table</h3>";
@@ -1110,7 +1114,7 @@ function renderLogicDc() {
   const gapHtml = gaps ? `<h3 class="subhead">Gaps</h3><ul class="hint">${gaps}</ul>` : "";
   body.innerHTML = enHtml + recipeHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
   if (hint && !hint.textContent) {
-    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (pass_mode + vcc_list). Ctrl+F5 after worker restart if RPC is new.";
+    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (pass_mode + vcc_list + stable_eps_A). Ctrl+F5 after worker restart if RPC is new.";
   }
   wirePassModeSync();
 }
@@ -2629,6 +2633,19 @@ async function saveTestParamsOverlay() {
     blob.vcc_list = vccRaw
       ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
       : [];
+  }
+  const epsAInput = $("logic-dc-stable-eps-a");
+  if (logicOpen && epsAInput) {
+    const raw = (epsAInput.value || "").trim();
+    if (!raw || raw.toLowerCase() === "null" || raw.toLowerCase() === "none") {
+      blob.stable_eps_A = null;
+    } else {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) {
+        throw new Error("stable_eps_A must be a number in amps, or blank for null (FAIL-closed)");
+      }
+      blob.stable_eps_A = n;
+    }
   }
   const res = await rpc("save_test_params", { test_params: blob });
   const hint = $("logic-dc-hint");

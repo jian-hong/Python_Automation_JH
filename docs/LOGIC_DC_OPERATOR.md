@@ -4,7 +4,7 @@
 
 This file is the bench/operator map. Writer/import format stays in `docs/LOGIC_DC.md`. Verify is a separate agent. This page is **not** a reproduce claim and does **not** claim Verify PASS / bench green.
 
-Settle loop (this PR): recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. After every PSU VCC switch and pin force the DMM waits eps/N then measures. Timeout raises `RuntimeError` / FAIL. It does **not** return the last reading.
+Settle loop (this PR): recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) waits eps/N vs `stable_eps_V`. Current (ICC / ΔICC / II / IOZ) uses `stable_eps_A` only -- 97/126 default is **null** (FAIL-closed). Do **not** reuse `stable_eps_V` as amps (0.005 V would be a 5 mA window). Do **not** invent a uA epsilon. Ground `stable_eps_A` (amps) on the Logic DC panel / `_manifest/test_params.yaml` overlay before claiming current settle-to-stable. Timeout raises `RuntimeError` / FAIL. It does **not** return the last reading.
 
 ## DEMO / SIM -- enough (not a reproduce)
 
@@ -13,7 +13,7 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 1. Product-model schema load (`ate/config/parts/<key>.yaml` `product_model` / `logic_dc:`). Isolation derives from `truth_table` (Y tracks the swept pin; invert only if no track combo).
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
 3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green.
-4. Panel recipe edit: JSON **Save product_model** writes part yaml (cannot promote to Datasheet-signed). Visual tables **Save Version overlay** write `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml`.
+4. Panel recipe edit: JSON **Save product_model** writes part yaml (cannot promote to Datasheet-signed). Visual tables **Save Version overlay** write `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (vcc_list, pass_mode, `stable_eps_A`).
 5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4. Timeout SIM raises. **Not a reproduce claim.**
 
 DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure.
@@ -22,11 +22,11 @@ DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It
 
 Reproduce Path B DC only with a human, Open Session, and live PSU + DMM + AWG wired to the DUT. Continue prompts (ICC / II / IOZ) are recable steps -- follow them. Fixture text is `fixture_modes.LOGIC.checklist` on the part yaml (Setup/Run checklist), not a second wiring table.
 
-After each PSU VCC switch and pin force: **PSU -> eps/N settle hard-FAIL -> measure**. If the DMM never holds `stable_n` readings inside `stable_eps_V` before `settle_timeout_s`, the step **FAIL**s. Do not treat a timed-out last reading as PASS.
+After each PSU VCC switch and pin force: **PSU -> eps/N settle hard-FAIL -> measure**. Voltage must hold `stable_n` inside `stable_eps_V`. Current must hold `stable_n` inside **`stable_eps_A`** (amps). If `stable_eps_A` is null/missing, current settle **FAIL**s closed -- it does not fall back to `stable_eps_V`. If the DMM never settles before `settle_timeout_s`, the step **FAIL**s. Do not treat a timed-out last reading as PASS.
 
 | Id | Sense (from `logic_dc.py` INSTRUMENT_SENSE) | Notes |
 |----|-----------------------------------------------|-------|
-| ICC | DMM-on-VCC (DMM in series with PSU CH1 / DUT VCC) | All `2^n` corners (`logic_inputs`; plus OE when `oe != none`) |
+| ICC | DMM-on-VCC (DMM in series with PSU CH1 / DUT VCC) | All `2^n` corners. Needs grounded `stable_eps_A` (amps) before settle-to-stable |
 | ΔICC | DMM-on-VCC; one input at VCC-offset, others at rail | Needs `recipe.delta_offset_v` (97/126: 0.6). Do not invent the offset |
 | II | DMM in series with the swept input; force VI | Per input, VI=0 and VI=max |
 | VTH / VIH / VIL | Force unused ties from truth_table; DMM sense V(Y) | 97 Schmitt = VT+/VT- (range). 126 = VIH min_only / VIL max_only |
@@ -95,7 +95,7 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 2. Discover. **Open Session** (PSU + DMM + AWG present; DMM required at run for these ids).
 3. Run fixture checklist (part yaml `fixture_modes.LOGIC.checklist`). Wire DMM+PSU+AWG to that text. Continue when the runner asks to recable (ICC series-VCC vs II series-input vs IOZ series-Y vs VOH/VOL DMM-on-Y).
 4. Tick Path B DC: `input_threshold` (and/or `vth`), `icc`, `delta_icc`, `ii`, `voh`, `vol`. 126 also tick `ioz`. 97 must **not** tick `ioz` / `ioff`.
-5. START (not DEMO). Confirm an unstable DMM **settle timeout hard-FAIL**s (RuntimeError / FAIL), not a last-reading PASS. Recipe timeout 2.0 s.
+5. START (not DEMO). Confirm an unstable DMM **settle timeout hard-FAIL**s (RuntimeError / FAIL), not a last-reading PASS. Recipe timeout 2.0 s. Current tests FAIL-closed until `stable_eps_A` is grounded (panel / test_params); do not invent uA.
 6. On a stable bench: Results / `report.json` -- **VOH >= min** vs CONFIRMED `voh_table` / limits (`min_only`); **VOL <= max** vs CONFIRMED `vol_table` (`max_only`). Do not invent extra loads.
 7. Fill Excel only via sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
 

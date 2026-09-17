@@ -16,6 +16,8 @@ INSTRUMENT_SENSE VOH: force Y-high from truth_table vector; DMM sense V(Y).
 INSTRUMENT_SENSE VOL: force Y-low from truth_table vector; DMM sense V(Y).
   Loaded IOL from CONFIRMED vol_table (PSU CH2 Y-load source rail = VCC unless vref given).
 SETTLE: measure-after-settle (recipe settle_s / stable_n / stable_eps_V / settle_timeout_s).
+  Voltage uses stable_eps_V. Current (ICC / ΔICC / II / IOZ) uses stable_eps_A only;
+  null/missing is FAIL-closed (do not reuse stable_eps_V as amps).
   Every PSU VCC switch and pin force uses settle-to-stable (eps/N + hard timeout),
   including ICC / ΔICC / II / IOZ -- not sleep(_settle) only. Timeout raises
   RuntimeError / FAIL; never returns the last reading as a measurement.
@@ -213,12 +215,29 @@ def _recipe_num(model: ProductModel, key: str, default: float) -> float:
     return float(default)
 
 
+def _recipe_optional_positive(model: ProductModel, key: str) -> float | None:
+    """Recipe number or None. Empty / null / non-numeric -> None (not a default)."""
+    raw = model.recipe.get(key)
+    if raw is None:
+        return None
+    if isinstance(raw, str) and raw.strip().lower() in ("", "null", "none", "~", "nan"):
+        return None
+    try:
+        v = float(raw)
+    except (TypeError, ValueError):
+        return None
+    if v != v:  # NaN
+        return None
+    return v
+
+
 def _wait_settled(dmm, model: ProductModel, *, kind: str = "voltage", setup: bool = True) -> float:
     """Wait settle_s, then measure until stable_n within eps, or FAIL.
 
     Measure-after-settle, not before. Recipe is not a DC limit.
     kind voltage: DMM volts vs stable_eps_V.
-    kind current: DMM amps vs the same recipe number (not a new DC spec).
+    kind current: DMM amps vs stable_eps_A only. Null/missing raises FAIL-closed
+    (never reuse stable_eps_V; 0.005 V is not a 5 mA window).
     settle_timeout_s expiry raises RuntimeError (FAIL). Never returns the last
     reading. Sleep is capped by remaining time so this cannot hang forever.
     """
@@ -232,7 +251,20 @@ def _wait_settled(dmm, model: ProductModel, *, kind: str = "voltage", setup: boo
     except (TypeError, ValueError):
         n = 3
     n = max(1, n)
-    eps = _recipe_num(model, "stable_eps_V", 0.005)
+    if kind == "current":
+        eps_a = _recipe_optional_positive(model, "stable_eps_A")
+        if eps_a is None:
+            raise RuntimeError(
+                "stable_eps_A missing: current settle FAIL-closed "
+                "(do not reuse stable_eps_V / 0.005 V as amps). "
+                "Set recipe.stable_eps_A or campaign test_params overlay. "
+                "Do not invent a uA default."
+            )
+        if eps_a <= 0:
+            raise RuntimeError("stable_eps_A must be > 0 A (amps; not volts)")
+        eps = eps_a
+    else:
+        eps = _recipe_num(model, "stable_eps_V", 0.005)
     timeout = _recipe_num(model, "settle_timeout_s", 2.0)
     if timeout <= 0:
         raise RuntimeError(f"settle timeout {timeout}s: invalid (must be > 0; never hang)")
