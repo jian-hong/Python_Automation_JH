@@ -212,6 +212,17 @@ product_model:
     datalog: sessions/datalog.md
     records: "{test}/DUT_n/records/"
     attach: "{test}/DUT_n/"
+  workbook_policy: one_per_version_overwrite
+  excel_plots:
+    series:
+      - vtplus_vs_vcc
+      - vtminus_vs_vcc
+      - dvt_vs_vcc
+      - icc_vs_vcc
+      - delta_icc_vs_vcc
+      - ii_vs_vcc
+      - voh_at_ioh
+      - vol_at_iol
   # Datasheet §4 FUNCTION TABLE (A B C -> Y). CONFIRMED Jian Hong 2026-09-17.
   # LLL->L HLL->L LHL->H HHL->H LLH->L HLH->H LHH->L HHH->H
   truth_table:

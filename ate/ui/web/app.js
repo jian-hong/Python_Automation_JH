@@ -4012,7 +4012,10 @@ function pollLoop() {
     $("btn-fill-excel").onclick = async () => {
       try {
         const res = await rpc("fill_workbook");
-        log(`Excel fill: ${res.status || ""} filled=${res.filled || 0} ${res.excel || ""}\n`);
+        log(`Excel fill: ${res.status || ""} filled=${res.filled || 0} plots=${res.plots || 0} ${res.excel || ""} ${res.policy || ""}\n`);
+        if (res.status === "orphan") {
+          alert(`Excel orphan FAIL: ${res.error || "second xlsx under workbook/"}`);
+        }
         if ($("results-db-hint")) {
           $("results-db-hint").textContent = `Excel ${res.status}: ${res.excel || ""} (${res.filled || 0} cells)`;
         }

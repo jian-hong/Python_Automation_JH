@@ -218,6 +218,17 @@ product_model:
     datalog: sessions/datalog.md
     records: "{test}/DUT_n/records/"
     attach: "{test}/DUT_n/"
+  workbook_policy: one_per_version_overwrite
+  excel_plots:
+    series:
+      - vih_vs_vcc
+      - vil_vs_vcc
+      - icc_vs_vcc
+      - delta_icc_vs_vcc
+      - ii_vs_vcc
+      - voh_at_ioh
+      - vol_at_iol
+      - ioz_vs_vcc
   # Function table (OE, A -> Y / Z). CONFIRMED Jian Hong 2026-09-17.
   truth_table:
     status: CONFIRMED

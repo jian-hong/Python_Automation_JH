@@ -112,17 +112,52 @@ Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/
 
 ## Excel path -- never invent cells
 
+**Policy:** one workbook per campaign Version. `workbook_policy: one_per_version_overwrite`. Same session always writes/overwrites that same xlsx under:
+
+`#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`
+
+Never create an orphan second book (`_filled.xlsx` or another name). If Excel has the file locked, Fill Excel **FAIL**s (orphan) -- do not save a second path.
+
 Campaign tree (same copy-ready Version folder as above):
 
 ```
 #Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/
   START.bat
-  workbook/                 # lab xlsx (Import xlsx / Create folders)
-  _manifest/sheet_map.yaml  # folder <-> sheet <-> paste anchors
+  workbook/                 # the one lab xlsx (overwrite, never a second book)
+  _manifest/sheet_map.yaml  # OpAmp / imported VOX paste anchors
   _manifest/test_params.yaml
-  sessions/
-  {TestKey}/DUT_n/
+  sessions/report.json
+  sessions/datalog.md
+  {test}/DUT_n/records/
 ```
+
+Record path after a run is still: that workbook + `sessions/report.json` + `{test}/DUT_n/records/` + STS datalog.
+
+### Path B (RS1G97 / RS1G126 / RS1GT34)
+
+`product_model.excel_plots` binds card-backed series only. Headers come from Path B runner row keys. Regex only **detects** plottable series -- it does not invent columns or G16 paste cells.
+
+Setup sheet: `wire_map`, `vcc_list` / `vcc_grid`, `pass_mode`, CONFIRMED/UNCONFIRMED status.
+
+Per enabled Path B test tab (`VTH` / `Icc` / `DeltaICC` / `II` / `VOH` / `VOL` / `IOZ`) scales with DUT count and VCC plan. IOZ tab only if OE is on the card. DeltaICC tab only if `delta_icc` is enabled+mapped.
+
+Auto plots when series data exists (from those headers):
+
+- VIH/VIL measured vs Vcc + limit lines (`min_only` / `max_only`)
+- VT+/VT- vs Vcc (+ ΔVT if Schmitt)
+- ICC vs Vcc (`2^n` corners)
+- ΔICC vs Vcc only if enabled+mapped
+- II vs Vcc per pin
+- VOH vs IOH @ Vcc (limit min); VOL vs IOL @ Vcc (limit max)
+- IOZ only if OE on card
+
+Series ids only: `vih_vs_vcc`, `vil_vs_vcc`, `icc_vs_vcc`, `voh_at_ioh`, `vol_at_iol`, `ii_vs_vcc`, `ioz_vs_vcc` if OE; `vtplus_vs_vcc` / `vtminus_vs_vcc` / `dvt_vs_vcc` if Schmitt; `delta_icc_vs_vcc` only if enabled+mapped.
+
+**Results -> Fill Excel numbers** on Path B overwrites the one Version xlsx (`write_path_b_workbook`). `check_logic_dc` FAIL-closes an orphan second xlsx, or an enabled test with series data but no `excel_plots` binding.
+
+RS1GT34 `excel_plots.status` stays **UNCONFIRMED until JH CONFIRM** -- numbers not greenable.
+
+### OpAmp / imported VOX (not Path B)
 
 **Results -> Fill Excel numbers** writes `sheet_map` `tests.<key>.paste.values` from living `sessions/report.json`. Photos use `paste.photos`. Do **not** invent Excel cells in this doc, in Python, or in chat.
 
@@ -134,7 +169,7 @@ Paste cells come from, in this order only:
    - Logic ICC sheet (not RS0204 `Icc` grid): `ICC_uA` `D10`
 3. Import may stub `FILL_ME`. A human fills real cells from the tracking xlsx. A filled map is not overwritten without a `.bak_*` backup.
 
-The CONFIRMED 97/126 VOH/VOL Full grid (100uA + 4/8/16/24/32mA ids in part yaml) is **limits + runner**, not a license to mint new paste cells here. If the workbook has no cell for an id, Fill Excel skips it. Map coverage is Setup **Map coverage**.
+Path B does **not** mint those G16 / D10 cells. The CONFIRMED 97/126 VOH/VOL Full grid (100uA + 4/8/16/24/32mA ids in part yaml) is **limits + runner + excel_plots**, not a license to mint new paste cells here. Map coverage is Setup **Map coverage**.
 
 ## Log path
 
@@ -171,7 +206,7 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 4. Tick Path B DC: `input_threshold` (and/or `vth`), `icc`, `delta_icc`, `ii`, `voh`, `vol`. 126 also tick `ioz`. 97 must **not** tick `ioz` / `ioff`.
 5. START (not DEMO). Confirm an unstable DMM **settle timeout hard-FAIL**s (RuntimeError / FAIL) when `stable_eps_A` is grounded, not a last-reading PASS. Recipe timeout 2.0 s. Null `stable_eps_A` is NON_TIGHT (wait `settle_s` once); do not invent uA. Tight-settle claims stay FAIL-closed until overlay/panel sets `stable_eps_A`.
 6. On a stable bench: Results / `report.json` -- **VOH >= min** vs CONFIRMED `voh_table` / limits (`min_only`); **VOL <= max** vs CONFIRMED `vol_table` (`max_only`). Do not invent extra loads. After run, Continue shows save paths (`workbook/` + `sessions/report.json` + STS datalog + `{test}/DUT_n/records/`). On FAIL, attach photo to `{test}/DUT_n/`.
-7. Fill Excel only via sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
+7. Fill Excel: Path B overwrites the one Version xlsx (`excel_plots` / `one_per_version_overwrite`). Never an orphan second book. Imported VOX still uses sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
 
 **RS1G97 extra**
 

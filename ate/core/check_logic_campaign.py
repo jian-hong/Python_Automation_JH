@@ -233,7 +233,42 @@ def check_logic_campaign() -> list[str]:
                 errors.append(f"rs0204 vih should say missing instruments, got {exc!r}")
         except Exception as exc:
             errors.append(f"rs0204 vih unexpected {type(exc).__name__}: {exc}")
+    errors += _path_b_lock_campaigns()
     load_family("opamp")
+    return errors
+
+
+def _path_b_lock_campaigns() -> list[str]:
+    """If a Path B lock campaign exists, a second xlsx under workbook/ is FAIL."""
+    from ate.tests.logic.excel_lock import list_xlsx, uses_excel_lock
+    from ate.tests.logic.product_model import has_product_model, load_product_model
+
+    errors: list[str] = []
+    if not TEST_DB_ROOT.is_dir():
+        return errors
+    for wb_dir in TEST_DB_ROOT.glob("Logic/*/*/*/Version_*/workbook"):
+        try:
+            rel = wb_dir.relative_to(TEST_DB_ROOT)
+        except ValueError:
+            continue
+        parts = rel.parts
+        if len(parts) < 2:
+            continue
+        key = str(parts[1]).strip().lower()
+        if not has_product_model(key):
+            continue
+        model = load_product_model(key)
+        if not uses_excel_lock(model):
+            continue
+        files = list_xlsx(wb_dir)
+        names = [p.name for p in files]
+        if len(files) > 1:
+            errors.append(
+                f"{key}: workbook/ has orphan xlsx {sorted(names)} "
+                "(one_per_version_overwrite)"
+            )
+        if any(n.endswith("_filled.xlsx") or Path(n).stem.endswith("_filled") for n in names):
+            errors.append(f"{key}: Path B must not keep _filled.xlsx under workbook/")
     return errors
 
 

@@ -186,6 +186,8 @@ class ProductModel:
     data_paths: dict[str, Any] = field(default_factory=dict)
     vcc_grid: dict[str, Any] = field(default_factory=dict)
     sample_size: Optional[int] = None
+    excel_plots: dict[str, Any] = field(default_factory=dict)
+    workbook_policy: str = ""
     raw: dict[str, Any] = field(default_factory=dict)
 
     def has_oe(self) -> bool:
@@ -204,6 +206,25 @@ def _as_dict(raw: Any) -> dict[str, Any]:
 
 def _as_list(raw: Any) -> list[Any]:
     return list(raw) if isinstance(raw, list) else []
+
+
+def _excel_plots_blob(blob: dict[str, Any]) -> dict[str, Any]:
+    raw = blob.get("excel_plots")
+    if isinstance(raw, list):
+        return {"series": list(raw)}
+    if isinstance(raw, dict):
+        return dict(raw)
+    return {}
+
+
+def _workbook_policy_blob(blob: dict[str, Any]) -> str:
+    raw = str(blob.get("workbook_policy") or "").strip()
+    if raw:
+        return raw
+    plots = blob.get("excel_plots")
+    if isinstance(plots, dict):
+        return str(plots.get("policy") or plots.get("workbook_policy") or "").strip()
+    return ""
 
 
 def load_part_yaml(part_key: str) -> dict[str, Any]:
@@ -996,6 +1017,8 @@ def panel_payload(part_key: str) -> dict[str, Any]:
         "wire_map": dict(model.wire_map),
         "settle_prompt": dict(model.settle_prompt),
         "data_paths": dict(model.data_paths),
+        "excel_plots": dict(model.excel_plots or {}),
+        "workbook_policy": model.workbook_policy,
         "card_fields": card_fields_for_panel(blob, model),
         "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }
@@ -1086,6 +1109,8 @@ def _lookup_card_value(blob: dict[str, Any], model: ProductModel, key: str) -> A
         "wire_map": dict(model.wire_map),
         "settle_prompt": dict(model.settle_prompt),
         "data_paths": dict(model.data_paths),
+        "excel_plots": dict(model.excel_plots or {}),
+        "workbook_policy": model.workbook_policy,
     }
     return attr_map.get(key)
 
@@ -1401,6 +1426,8 @@ def load_product_model(
         data_paths=_as_dict(blob.get("data_paths")),
         vcc_grid=vcc_grid,
         sample_size=sample_size,
+        excel_plots=_excel_plots_blob(blob),
+        workbook_policy=_workbook_policy_blob(blob),
         raw=blob,
     )
 
@@ -1567,6 +1594,8 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
         "wire_map": dict(model.wire_map),
         "settle_prompt": dict(model.settle_prompt),
         "data_paths": dict(model.data_paths),
+        "excel_plots": dict(model.excel_plots or {}),
+        "workbook_policy": model.workbook_policy,
         "card_fields": card_fields_for_panel(model.raw if isinstance(model.raw, dict) else {}, model),
         "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }

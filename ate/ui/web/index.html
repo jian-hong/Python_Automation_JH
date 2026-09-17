@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260917logicdc9" />
+  <link rel="stylesheet" href="styles.css?v=20260917logicdc10" />
 </head>
 <body>
   <div class="bg"></div>
@@ -395,7 +395,7 @@
             <button type="button" id="btn-fill-excel" class="btn">Fill Excel numbers</button>
             <button type="button" id="btn-fetch-datasheet" class="btn ghost">Fetch limits (local PDF first)</button>
           </div>
-          <p class="hint" id="results-db-hint">Limits: ate/config/limits/&lt;part&gt;.yaml from local Reference PDFs first. Each test checkbox shows datasheet min/max/typ when stamped. Fill Excel uses sheet_map paste.values. Photos go in paste.photos cells (RS622 TTSOP = 8 boxes per sheet, ORT = 16). Export writes sessions/datalog.md|.html|.pdf with PASS/FAIL. Never dump the RUN-IC catalog into #Test_Database.</p>
+          <p class="hint" id="results-db-hint">Limits: ate/config/limits/&lt;part&gt;.yaml from local Reference PDFs first. Each test checkbox shows datasheet min/max/typ when stamped. Fill Excel: Path B overwrites the one Version xlsx (never an orphan second book). Mapped/OpAmp uses sheet_map paste.values. Photos go in paste.photos cells (RS622 TTSOP = 8 boxes per sheet, ORT = 16). Export writes sessions/datalog.md|.html|.pdf with PASS/FAIL. Never dump the RUN-IC catalog into #Test_Database.</p>
         </div>
         <div class="glass panel wide" id="panel-layout">
           <h2>Waveform layout</h2>
@@ -493,6 +493,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260917logicdc9"></script>
+  <script src="app.js?v=20260917logicdc10"></script>
 </body>
 </html>

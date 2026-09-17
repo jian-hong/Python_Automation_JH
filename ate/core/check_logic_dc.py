@@ -7,7 +7,9 @@ from __future__ import annotations
 import ast
 import inspect
 import re
+import shutil
 import sys
+import tempfile
 import textwrap
 from dataclasses import replace
 from pathlib import Path
@@ -909,6 +911,38 @@ def _rs1gt34_draft_ok() -> list[str]:
         errors.append("rs1gt34 pass_mode VIH must be min_only")
     if lookup_pass_mode(m, "VIL", "input_threshold") != "max_only":
         errors.append("rs1gt34 pass_mode VIL must be max_only")
+    from ate.tests.logic.excel_lock import (
+        WORKBOOK_POLICY,
+        bound_series_ids,
+        excel_plots_status,
+        workbook_policy,
+    )
+
+    if workbook_policy(m) != WORKBOOK_POLICY:
+        errors.append(
+            f"rs1gt34 workbook_policy must be {WORKBOOK_POLICY}, got {workbook_policy(m)!r}"
+        )
+    if excel_plots_status(m).upper() != "UNCONFIRMED":
+        errors.append(
+            f"rs1gt34 excel_plots.status must stay UNCONFIRMED, got {excel_plots_status(m)!r}"
+        )
+    bound = bound_series_ids(m)
+    if "ioz_vs_vcc" in bound:
+        errors.append("rs1gt34 excel_plots must not bind ioz_vs_vcc (oe none)")
+    if "delta_icc_vs_vcc" in bound:
+        errors.append("rs1gt34 excel_plots must not bind delta_icc_vs_vcc until ICCT mapped")
+    want_series = {
+        "vih_vs_vcc",
+        "vil_vs_vcc",
+        "icc_vs_vcc",
+        "ii_vs_vcc",
+        "voh_at_ioh",
+        "vol_at_iol",
+    }
+    if bound != want_series:
+        errors.append(
+            f"rs1gt34 excel_plots series must be {sorted(want_series)}, got {sorted(bound)}"
+        )
     plan = sim_icc_plan(m)
     if plan["n"] != 2:
         errors.append(f"rs1gt34 ICC corners must be 2^1=2, got {plan}")
@@ -1080,6 +1114,12 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must name START.bat everywhere (Version folder + DEMO + HUMAN + console + checklist)")
     if "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must show Excel #Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/")
+    if "one_per_version_overwrite" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name workbook_policy one_per_version_overwrite")
+    if "excel_plots" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
+    if "orphan" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must forbid orphan second xlsx books")
     if not re.search(r"HEAD SHA.*[`']?[0-9a-f]{7,40}", text, re.I | re.S):
         errors.append("LOGIC_DC_OPERATOR.md must list PR HEAD SHA")
     logic = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC.md"
@@ -1233,7 +1273,7 @@ def _panel_ok() -> list[str]:
         if str(schema.get("ocr", {}).get("engine") or "").lower() != "paddleocr":
             errors.append("card_fields.schema.yaml ocr.engine must be paddleocr")
         keys = panel_save_keys()
-        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid"):
+        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid", "excel_plots", "workbook_policy"):
             if need not in keys:
                 errors.append(f"panel_save_keys missing {need}")
     except Exception as exc:
@@ -1462,6 +1502,245 @@ def _runnable_ok() -> list[str]:
     return errors
 
 
+def _excel_lock_ok() -> list[str]:
+    """One Version xlsx. Card-backed excel_plots only. Orphan second book FAIL."""
+    from ate.reporting.session_values import fill_workbook_from_report
+    from ate.tests.logic import excel_lock as el
+
+    errors: list[str] = []
+    lock_src = Path(__file__).resolve().parents[1] / "tests" / "logic" / "excel_lock.py"
+    src = lock_src.read_text(encoding="utf-8")
+    if "one_per_version_overwrite" not in src:
+        errors.append("excel_lock.py must name one_per_version_overwrite")
+    for line in src.splitlines():
+        if "_filled.xlsx" in line and re.search(r"\.save\s*\(", line):
+            errors.append("excel_lock.py must not save _filled.xlsx")
+    sv_txt = (
+        Path(__file__).resolve().parents[1] / "reporting" / "session_values.py"
+    ).read_text(encoding="utf-8")
+    i_lock = sv_txt.find("uses_excel_lock")
+    i_none = sv_txt.find('"no_workbook"')
+    if i_lock < 0 or i_none < 0 or i_lock > i_none:
+        errors.append("Path B excel lock must run before no_workbook (create the one book)")
+    if "gbw" in el.ALLOWED_SERIES or "noise" in el.ALLOWED_SERIES:
+        errors.append("excel_plots must not include OpAmp series")
+    for part in ("rs1g97", "rs1g126", "rs1gt34"):
+        m = load_product_model(part)
+        if m is None:
+            errors.append(f"{part} product_model missing for excel lock")
+            continue
+        if el.workbook_policy(m) != el.WORKBOOK_POLICY:
+            errors.append(
+                f"{part} workbook_policy must be {el.WORKBOOK_POLICY}, got {el.workbook_policy(m)!r}"
+            )
+        if not el.uses_excel_lock(m):
+            errors.append(f"{part} must bind excel_plots + workbook_policy")
+        errors.extend(el.binding_errors(m, list(enabled_tests_for_part(part) or [])))
+    m08 = load_product_model("rs1g08")
+    if m08 is not None and el.uses_excel_lock(m08):
+        errors.append("rs1g08 must keep sheet_map paste.values (no Path B excel_lock)")
+    m34 = load_product_model("rs1gt34")
+    if m34 is not None:
+        if el.excel_plots_status(m34).upper() != "UNCONFIRMED":
+            errors.append("rs1gt34 excel_plots.status must be UNCONFIRMED")
+        stripped = replace(
+            m34, excel_plots={"status": "UNCONFIRMED", "series": ["vih_vs_vcc"]}
+        )
+        miss = el.binding_errors(
+            stripped,
+            list(enabled_tests_for_part("rs1gt34") or []),
+            series_data={"icc_vs_vcc", "vih_vs_vcc"},
+        )
+        if not any("icc_vs_vcc" in e for e in miss):
+            errors.append(
+                "binding_errors must FAIL when series data has no excel_plots binding"
+            )
+        illegal = replace(
+            m34,
+            excel_plots={
+                "status": "UNCONFIRMED",
+                "series": [
+                    "vih_vs_vcc",
+                    "vil_vs_vcc",
+                    "icc_vs_vcc",
+                    "ii_vs_vcc",
+                    "voh_at_ioh",
+                    "vol_at_iol",
+                    "ioz_vs_vcc",
+                    "delta_icc_vs_vcc",
+                ],
+            },
+        )
+        bad = el.binding_errors(illegal, list(enabled_tests_for_part("rs1gt34") or []))
+        if not any("ioz" in e for e in bad):
+            errors.append("ioz_vs_vcc on oe=none must FAIL")
+        if not any("delta_icc" in e for e in bad):
+            errors.append("delta_icc_vs_vcc when not enabled must FAIL")
+    m97 = load_product_model("rs1g97")
+    if m97 is not None:
+        bound = el.bound_series_ids(m97)
+        if "ioz_vs_vcc" in bound:
+            errors.append("rs1g97 excel_plots must not bind ioz (oe none)")
+        if "vih_vs_vcc" in bound or "vil_vs_vcc" in bound:
+            errors.append("rs1g97 Schmitt must bind vtplus/vtminus not VIH/VIL")
+        for need in ("vtplus_vs_vcc", "vtminus_vs_vcc", "dvt_vs_vcc", "delta_icc_vs_vcc"):
+            if need not in bound:
+                errors.append(f"rs1g97 excel_plots missing {need}")
+    m126 = load_product_model("rs1g126")
+    if m126 is not None:
+        bound = el.bound_series_ids(m126)
+        if "ioz_vs_vcc" not in bound:
+            errors.append("rs1g126 excel_plots must bind ioz_vs_vcc (OE on card)")
+        if "vtplus_vs_vcc" in bound:
+            errors.append("rs1g126 is not Schmitt")
+    tmp = Path(tempfile.mkdtemp(prefix="ate_excel_lock_"))
+    try:
+        class _Ctx:
+            def __init__(self, root: Path):
+                self._root = root
+                self.model = "RS1GT34"
+                self.package = "SOT23-5"
+                self.part_key = "rs1gt34"
+                self.sample_size = 1
+                (root / "workbook").mkdir(parents=True, exist_ok=True)
+                (root / "_manifest").mkdir(parents=True, exist_ok=True)
+
+            def workbook_dir(self):
+                return self._root / "workbook"
+
+            def manifest_dir(self):
+                return self._root / "_manifest"
+
+            def lab_report_path(self):
+                return self.workbook_dir() / f"{self.model}_Lab_Report_{self.package}.xlsx"
+
+            def load_sheet_map(self):
+                return {}
+
+        ctx = _Ctx(tmp)
+        m = load_product_model("rs1gt34")
+        report = {
+            "steps": [
+                {
+                    "test_id": "input_threshold",
+                    "dut": 1,
+                    "data": {
+                        "rows": [
+                            {
+                                "VCC": 2.0,
+                                "PIN": "A",
+                                "VIH": 1.2,
+                                "VIL": 0.2,
+                                "VIH_min_V": 1.0,
+                                "VIL_max_V": 0.3,
+                            },
+                            {
+                                "VCC": 3.3,
+                                "PIN": "A",
+                                "VIH": 1.7,
+                                "VIL": 0.4,
+                                "VIH_min_V": 1.5,
+                                "VIL_max_V": 0.55,
+                            },
+                        ]
+                    },
+                },
+                {
+                    "test_id": "icc",
+                    "dut": 1,
+                    "data": {
+                        "rows": [
+                            {"VCC": 2.0, "ICC_uA": 0.4, "IN_A": "L"},
+                            {"VCC": 3.3, "ICC_uA": 0.5, "IN_A": "H"},
+                        ]
+                    },
+                },
+                {
+                    "test_id": "voh",
+                    "dut": 1,
+                    "data": {
+                        "rows": [
+                            {
+                                "id": "VOH_2p0V_100uA",
+                                "VCC": 2.0,
+                                "IOH_A": 0.0001,
+                                "Measured": 1.95,
+                                "Spec_min": 1.9,
+                                "pass_mode": "min_only",
+                            },
+                            {
+                                "id": "VOH_3p3V_100uA",
+                                "VCC": 3.3,
+                                "IOH_A": 0.0001,
+                                "Measured": 3.1,
+                                "Spec_min": 2.9,
+                                "pass_mode": "min_only",
+                            },
+                        ]
+                    },
+                },
+            ]
+        }
+        first = el.write_path_b_workbook(ctx=ctx, model=m, report=report)
+        dest = Path(first["excel"])
+        names1 = sorted(p.name for p in el.list_xlsx(ctx.workbook_dir()))
+        if len(names1) != 1:
+            errors.append(f"Path B SIM must write one xlsx, got {names1}")
+        if int(first.get("plots") or 0) < 1:
+            errors.append("Path B SIM must auto-plot when series data exists")
+        second = el.write_path_b_workbook(ctx=ctx, model=m, report=report)
+        names2 = sorted(p.name for p in el.list_xlsx(ctx.workbook_dir()))
+        if len(names2) != 1 or Path(second["excel"]).resolve() != dest.resolve():
+            errors.append(f"Path B overwrite must reuse the same xlsx, got {names2}")
+        fill = fill_workbook_from_report(report=report, ctx=ctx)
+        if fill.get("status") == "orphan":
+            errors.append(f"fill_workbook Path B SIM orphan: {fill}")
+        names3 = sorted(p.name for p in el.list_xlsx(ctx.workbook_dir()))
+        if len(names3) != 1:
+            errors.append(f"fill_workbook Path B must not create a second book, got {names3}")
+        if any(n.endswith("_filled.xlsx") for n in names3):
+            errors.append("Path B must not create _filled.xlsx")
+        from openpyxl import Workbook as _WB
+
+        orphan_path = ctx.workbook_dir() / "orphan_second.xlsx"
+        extra = _WB()
+        extra.save(orphan_path)
+        extra.close()
+        try:
+            el.write_path_b_workbook(ctx=ctx, model=m, report=report)
+            errors.append("write_path_b_workbook must FAIL when a second xlsx exists")
+        except el.OrphanWorkbook:
+            pass
+        except Exception as exc:
+            errors.append(
+                f"second xlsx must raise OrphanWorkbook, got {type(exc).__name__}: {exc}"
+            )
+        fill2 = fill_workbook_from_report(report=report, ctx=ctx)
+        if fill2.get("status") != "orphan":
+            errors.append(
+                f"fill_workbook must status=orphan when a second xlsx exists, got {fill2}"
+            )
+        orphan_path.unlink(missing_ok=True)
+        found = el.detect_series_from_headers(
+            ["VCC", "VIH", "VIL", "VIH_min_V", "VIL_max_V"], "VTH"
+        )
+        if "vih_vs_vcc" not in found or "vil_vs_vcc" not in found:
+            errors.append(f"header regex must detect vih/vil, got {found}")
+        delta = el.detect_series_from_headers(["VCC", "ICC_uA", "NEAR_PIN"], "DeltaICC")
+        if "icc_vs_vcc" in delta or "delta_icc_vs_vcc" not in delta:
+            errors.append(f"DeltaICC ICC_uA must map to delta_icc_vs_vcc, got {delta}")
+        voh = el.detect_series_from_headers(
+            ["VCC", "IOH_A", "Measured", "Spec_min"], "VOH"
+        )
+        if "voh_at_ioh" not in voh or "vol_at_iol" in voh:
+            errors.append(f"VOH Measured must not bind vol_at_iol, got {voh}")
+    except Exception as exc:
+        errors.append(f"excel lock SIM: {type(exc).__name__}: {exc}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -1488,6 +1767,7 @@ def check_logic_dc() -> list[str]:
     errors += _settle_loop_ok()
     errors += _operator_doc_ok()
     errors += _panel_ok()
+    errors += _excel_lock_ok()
     load_family("opamp")
     return errors
 

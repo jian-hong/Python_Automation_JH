@@ -321,3 +321,22 @@ fields:
     note: >
       Folder templates only. Never invent Excel cells.
       excel / report / datalog / records required.
+  - key: workbook_policy
+    oop: Part
+    type: text
+    editable: true
+    deletable: true
+    label: workbook_policy
+    note: >
+      one_per_version_overwrite -- same session always writes the same xlsx
+      under workbook/. Never a second orphan book.
+  - key: excel_plots
+    oop: Limit
+    type: json
+    editable: true
+    deletable: true
+    label: excel_plots (card-backed series ids)
+    note: >
+      Series ids only: vih_vs_vcc, vil_vs_vcc, icc_vs_vcc, voh_at_ioh,
+      vol_at_iol, ii_vs_vcc, ioz_vs_vcc if OE; vtplus/vtminus/dvt if Schmitt;
+      delta_icc_vs_vcc only if enabled+mapped. Do not invent columns.

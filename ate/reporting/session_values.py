@@ -1,7 +1,9 @@
 """Fill campaign workbook number cells from living report.json.
 
-Uses sheet_map paste.values (measurement id -> cell, DUT list, or CHA/CHB grid).
-Skips FILL_ME. Does not run OpAmp golden layout on other families.
+Path B (excel_plots + workbook_policy one_per_version_overwrite): create or
+overwrite the one Version xlsx. Never a second orphan book / _filled.xlsx.
+OpAmp / mapped families: sheet_map paste.values (measurement id -> cell,
+DUT list, or CHA/CHB grid). Skips FILL_ME. Does not run OpAmp golden on Path B.
 """
 from __future__ import annotations
 
@@ -120,11 +122,46 @@ def fill_workbook_from_report(
 
     c = ctx or get_context()
     doc = report if isinstance(report, dict) else load_report(ctx=c)
+    path = Path(workbook_path) if workbook_path else c.lab_report_path()
+
+    try:
+        from ate.tests.logic.product_model import has_product_model, load_product_model
+        from ate.tests.logic.excel_lock import (
+            OrphanWorkbook,
+            uses_excel_lock,
+            write_path_b_workbook,
+        )
+
+        key = str(getattr(c, "part_key", "") or "").strip().lower()
+        if key and has_product_model(key):
+            model = load_product_model(key)
+            if uses_excel_lock(model):
+                try:
+                    return write_path_b_workbook(ctx=c, model=model, report=doc)
+                except OrphanWorkbook as exc:
+                    return {
+                        "filled": 0,
+                        "skipped": 0,
+                        "status": "orphan",
+                        "excel": str(path),
+                        "error": str(exc),
+                    }
+                except Exception as exc:
+                    _LOG.warning("Path B workbook: %s", exc)
+                    return {
+                        "filled": 0,
+                        "skipped": 0,
+                        "status": "error",
+                        "excel": str(path),
+                        "error": str(exc),
+                    }
+    except Exception:
+        pass
+
     sm = c.load_sheet_map() if hasattr(c, "load_sheet_map") else {}
     tests = sm.get("tests") if isinstance(sm, dict) else {}
     if not isinstance(tests, dict):
         return {"filled": 0, "skipped": 0, "status": "no_sheet_map"}
-    path = Path(workbook_path) if workbook_path else c.lab_report_path()
     if not path.is_file():
         return {"filled": 0, "skipped": 0, "status": "no_workbook", "excel": str(path)}
 
