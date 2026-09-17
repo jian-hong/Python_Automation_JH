@@ -121,6 +121,13 @@ One Logic family rail; differences live in YAML:
 8. A12 Ariff latest: thickened DC + `supply_current_sweep` / `vih_vil` / `voh_load` / `vol_load`
    (ids distinct from RS0204 `voh`/`vol`). Tables in part YAML. Operator deselects via checkboxes.
    LDO not on RS1G. Reference: Ariff Repo `LabAutomation_v1 - Copy` (do not import).
+9. Shared Logic DC (RS1G97 / RS1G126, then other 1G parts): `logic_inputs`, `oe`,
+   `logic_dc.truth_table`, `logic_dc.threshold_isolation`, `vcc_sweep_list` in
+   `ate/config/parts/<key>.yaml`. One procedure in `ate/tests/logic/dc.py` (ICC 2^n,
+   Schmitt isolation, dICC, leakage, IOZ when OE exists). Do not tick Ariff `vih_vil`
+   next to `input_thresholds` on RS1G97. Do not copy RS1G08 `voh_table` onto parts
+   without a load map. `setup_dc` lives in `generator_setup.py`. Check:
+   `python -m ate.core.check_logic_dc` (SIM, no VISA). DEMO does not execute TestSpec.run.
 
 ## Analog Switch (was mislabeled Lim)
 

@@ -144,6 +144,7 @@ def check_logic_campaign() -> list[str]:
         "vih_vil",
         "voh_load",
         "vol_load",
+        "ioz",
         "vih",
         "tp_rs0204",
         "tpd",
@@ -162,6 +163,7 @@ def check_logic_campaign() -> list[str]:
         "ioff_leakage",
         "input_leakage_sweep",
         "off_current",
+        "ioz",
     ):
         if banned in soo_en:
             errors.append(f"rs29511 must not enable Ariff-only id {banned}")

@@ -45,8 +45,11 @@ def main() -> int:
     voh_src = (root / "tests" / "logic" / "ariff_dc.py").read_text(encoding="utf-8")
     if "VOH_{" not in voh_src:
         errors.append("voh_load must emit VOH_* measurements")
-    if "ICC_uA" not in voh_src:
+    dc_src = (root / "tests" / "logic" / "dc.py").read_text(encoding="utf-8")
+    if "ICC_uA" not in voh_src and "ICC_uA" not in dc_src:
         errors.append("supply_current_sweep must return ICC_uA")
+    if "IOZ_uA" not in dc_src:
+        errors.append("ioz must return IOZ_uA")
     iplus_src = (root / "tests" / "lim" / "rs2323.py").read_text(encoding="utf-8")
     if "IPLUS_uA" not in iplus_src:
         errors.append("iplus must return IPLUS_uA")

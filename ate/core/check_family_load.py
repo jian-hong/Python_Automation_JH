@@ -31,6 +31,7 @@ _LOGIC_PROBE_IDS = frozenset(
         "vih_vil",
         "voh_load",
         "vol_load",
+        "ioz",
     }
 )
 _OPA_BOARD_MODES = frozenset({"G11", "G_NEG100", "G201", "G1001"})

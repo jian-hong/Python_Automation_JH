@@ -98,5 +98,69 @@ def screenshot():
     result = auto.quick_capture()
     if result:
         print(f"   已保存: {result}")
+
+
+def recover_scope_session(scope, clear: bool = False, run: bool = False) -> None:
+    """Clear VISA error state; optionally RUN so the next JPEG is not Cnt=0."""
+    try:
+        scope.write("*CLS")
+    except Exception:
+        pass
+    if clear:
+        try:
+            scope.write(":MEASure:CLEar")
+        except Exception:
+            pass
+    if run:
+        try:
+            scope.write(":RUN")
+        except Exception:
+            pass
+
+
+def park_scope_idle(scope, clear: bool = False) -> None:
+    """STOP after a test. Do not call this from capture_scope_png."""
+    try:
+        scope.write(":STOP")
+    except Exception:
+        pass
+    if clear:
+        try:
+            scope.write(":MEASure:CLEar")
+        except Exception:
+            pass
+
+
+def capture_scope_png(scope, filepath, timeout_ms: int = 10000, jpeg_quality: int = 90) -> str:
+    """MSO :DISP:DATA? to a file. Leaves the scope RUNning for the next shot.
+
+    jpeg_quality is accepted for callers; Rigol MSO5000 :DISP:DATA? does not take it.
+    """
+    from pathlib import Path as _P
+
+    from utils import BinaryDataParser
+
+    path = _P(filepath)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    old_timeout = getattr(scope, "timeout", None)
+    try:
+        scope.timeout = int(timeout_ms)
+        try:
+            scope.write(":SYSTem:KEY:PRESs MOFF")
+        except Exception:
+            pass
+        scope.write(":DISP:DATA?")
+        raw = scope.read_raw()
+        data = BinaryDataParser.parse_visa_binary(raw)
+        path.write_bytes(data)
+    finally:
+        if old_timeout is not None:
+            try:
+                scope.timeout = old_timeout
+            except Exception:
+                pass
+    recover_scope_session(scope, run=True)
+    return str(path)
+
   
  

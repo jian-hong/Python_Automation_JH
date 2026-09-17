@@ -1,5 +1,13 @@
-# RS1G97 Logic configurable gate — RUN-IC small logic. Owner Lim.
-# Lim codes in Downloads/code/RS1G97 — not imported.
+# RS1G97 configurable multiple-function gate.
+# Owner: Lim (folder). SeeLim is a different owners.yaml row (analog-switch PIC).
+# Lim recipes live in Downloads/code/RS1G97 -- not imported (input() waits).
+#
+# Do NOT tick Ariff vih_vil alongside input_thresholds. This part is Schmitt
+# VT+/VT- with pin isolation (A swept, B/C held so Y tracks). vih_vil is the
+# RS1G08 AND-gate hold-A-high sweep.
+# VOH/VOL load: not enabled. No part-local load table; do not inherit RS1G08.
+#
+# Campaign package SOT23 matches other 1G yaml. Inventory SKU is SC70-6 (RS1G97XC6).
 
 part: RS1G97
 model: RS1G97
@@ -19,10 +27,64 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
+# Datasheet VT corners from ate/config/datasheets/text/rs1g97.txt (not colleague trees).
+vcc_sweep_list: [1.65, 2.3, 3.0, 4.5, 5.5]
+ioff_vcc_list: [0.0]
+
+logic_inputs: [A, B, C]
+logic_output: Y
+oe: null
+schmitt: true
+
+logic_dc:
+  inputs: [A, B, C]
+  output: Y
+  schmitt: true
+  icc_vi: 5.5
+  icc_include_oe: false
+  delta_icc_offset_v: 0.6
+  delta_icc_vcc_min: 3.0
+  threshold_step_v: 0.05
+  psu_vmax: 5.0
+  # Function table from local extract RS1G97_(RevA.2.1) page 1.
+  truth_table:
+    - {A: L, B: L, C: L, Y: L}
+    - {A: H, B: L, C: L, Y: L}
+    - {A: L, B: H, C: L, Y: H}
+    - {A: H, B: H, C: L, Y: H}
+    - {A: L, B: L, C: H, Y: L}
+    - {A: H, B: L, C: H, Y: L}
+    - {A: L, B: H, C: H, Y: L}
+    - {A: H, B: H, C: H, Y: H}
+  # Isolation so Y changes when the swept pin flips (unused inputs must not float).
+  threshold_isolation:
+    - sweep: A
+      hold: {B: H, C: H}
+      y_tracks: A
+    - sweep: B
+      hold: {A: L, C: L}
+      y_tracks: B
+    - sweep: C
+      hold: {A: L, B: H}
+      y_tracks: not_C
+  stimulus:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+    C: {src: psu, ch: 3}
+    Y_force: {src: psu, ch: 2}
+    VCC: {src: psu, ch: 1}
+  gaps:
+    - "VOH/VOL load tables not in part yaml -- tests not enabled (do not copy RS1G08 voh_table)."
+    - "True pin-II needs DMM on the input path; input_leakage_sweep is supply-path current."
+    - "DP832 CH3 max 5.0 V so pin C ICC-high is capped at 5.0 not 5.5."
+
+# DC list is shared procedure ids. tp stays (Soo wrap). No vih_vil. No voh_load/vol_load.
 enabled_tests:
   - tp
-  - supply_current
   - input_thresholds
+  - supply_current_sweep
+  - delta_supply_current
+  - input_leakage_sweep
   - ioff_leakage
 
 fixture_modes:
@@ -30,9 +92,14 @@ fixture_modes:
     label: "Logic board (RS1G97 / Lim)"
     board_class: general
     checklist:
-      - "RS1G97 is configurable logic, not analog switch."
+      - "RS1G97 is configurable logic (3 inputs A/B/C), not analog switch."
+      - "Do not tick Ariff vih_vil with input_thresholds."
+      - "AWG CH1=A CH2=B; PSU CH1=VCC CH3=C (static); DMM on VCC for ICC."
+      - "Hold unused inputs at VCC or GND -- do not float."
     tests:
       - tp
-      - supply_current
       - input_thresholds
+      - supply_current_sweep
+      - delta_supply_current
+      - input_leakage_sweep
       - ioff_leakage

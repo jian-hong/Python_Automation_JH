@@ -231,3 +231,35 @@ def reset_generator(gen):
     gen.write("*RST")
     time.sleep(0.5)
 
+
+def setup_dc(gen, ch, volts):
+    """Force one AWG channel to a DC voltage. True on success, False on SCPI error.
+
+    Uses FUNC DC + offset, never APPL. DG800 :APPL turns the AC output on as a
+    side effect (see park_generator_idle / check_slew_capture_run).
+    """
+    try:
+        v = float(volts)
+        gen.write(f":SOUR{ch}:FUNC DC")
+        gen.write(f":SOUR{ch}:VOLT:OFFS {v}")
+        gen.write(f":OUTP{ch} ON")
+        return True
+    except Exception:
+        return False
+
+
+def park_generator_idle(gen):
+    """Safe idle: every AWG channel OFF. Do not APPL (DG800 APPL pulses AC on)."""
+    for ch in (1, 2, 3, 4):
+        try:
+            gen.write(f":OUTP{ch} OFF")
+        except Exception:
+            pass
+        try:
+            gen.write(f":SOUR{ch}:FUNC DC")
+            gen.write(f":SOUR{ch}:FREQ 1000")
+            gen.write(f":SOUR{ch}:VOLT 0.01")
+            gen.write(f":SOUR{ch}:VOLT:OFFS 0")
+        except Exception:
+            pass
+

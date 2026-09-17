@@ -686,6 +686,7 @@ _I_UA = frozenset(
         "supply_current",
         "supply_current_sweep",
         "input_leakage_sweep",
+        "ioz",
         "iq",
         "enable_current",
     }

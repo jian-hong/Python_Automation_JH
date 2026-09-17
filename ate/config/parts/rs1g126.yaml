@@ -1,5 +1,12 @@
-# RS1G126 Logic bus buffer — RUN-IC small logic. Owner Lim.
-# Lim codes in Downloads/code/RS1G126 (input() waits) — not imported.
+# RS1G126 single bus buffer with 3-state output.
+# Owner: Lim (folder). SeeLim is a different owners.yaml row (analog-switch PIC).
+# Lim recipes live in Downloads/code/RS1G126 -- not imported (input() waits).
+#
+# Do NOT tick Ariff vih_vil alongside input_thresholds. Sweep A with OE held
+# active-high so Y tracks A. Not the RS1G08 AND-gate VIH/VIL helper.
+# VOH/VOL load: not enabled. No part-local load table; do not inherit RS1G08.
+#
+# Campaign package SOT23 matches other 1G yaml. Inventory SKU is SC70-5 (RS1G126XC5).
 
 part: RS1G126
 model: RS1G126
@@ -19,25 +26,79 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
+vcc_sweep_list: [1.65, 3.3, 5.0, 5.5]
+ioff_vcc_list: [0.0]
+
+logic_inputs: [A]
+logic_output: Y
+oe:
+  pin: OE
+  active: high
+schmitt: false
+
+logic_dc:
+  inputs: [A]
+  output: Y
+  oe:
+    pin: OE
+    active: high
+  schmitt: false
+  icc_vi: 5.5
+  icc_include_oe: true
+  delta_icc_offset_v: 0.6
+  delta_icc_vcc_min: 3.0
+  threshold_step_v: 0.05
+  psu_vmax: 5.0
+  ioz_vcc: 3.6
+  ioz_vo_list: [0.0, 5.5]
+  # Function table from local extract RS1G126_(RevA.4) page 1. OE active high.
+  truth_table:
+    - {OE: H, A: H, Y: H}
+    - {OE: H, A: L, Y: L}
+    - {OE: L, A: X, Y: Z}
+  threshold_isolation:
+    - sweep: A
+      hold: {OE: H}
+      y_tracks: A
+  stimulus:
+    A: {src: awg, ch: 1}
+    OE: {src: awg, ch: 2}
+    Y_force: {src: psu, ch: 2}
+    VCC: {src: psu, ch: 1}
+  gaps:
+    - "Recommended VIH/VIL numbers are missing from the in-repo extract (page 7 stripped). input_thresholds still runs; result stays unspec until limits are filled from the local PDF."
+    - "DC table has no VT+/VT- (not Schmitt). Features say 1 uA ICC max; Full-temp DC row is 10 uA -- limits yaml keeps existing ICC_uA max 1.0."
+    - "VOH/VOL load tables not in part yaml -- tests not enabled."
+    - "True pin-II needs DMM on the input path; input_leakage_sweep is supply-path current."
+
 enabled_tests:
   - tp
   - ten
   - tdis
-  - supply_current
-  - ioff_leakage
   - input_thresholds
+  - supply_current_sweep
+  - delta_supply_current
+  - input_leakage_sweep
+  - ioff_leakage
+  - ioz
 
 fixture_modes:
   LOGIC:
     label: "Logic board (RS1G126 / Lim)"
     board_class: general
     checklist:
-      - "RS1G126 is small logic (bus buffer), not analog switch."
+      - "RS1G126 is a 3-state bus buffer (small logic), not analog switch."
+      - "OE active high. IOZ holds OE low and forces Y on PSU CH2."
+      - "Do not tick Ariff vih_vil with input_thresholds."
+      - "AWG CH1=A CH2=OE; PSU CH1=VCC CH2=Y force for IOFF/IOZ; DMM on VCC for ICC."
       - "Lim recipes stay in Downloads/code; ATE uses platform Logic ids."
     tests:
       - tp
       - ten
       - tdis
-      - supply_current
-      - ioff_leakage
       - input_thresholds
+      - supply_current_sweep
+      - delta_supply_current
+      - input_leakage_sweep
+      - ioff_leakage
+      - ioz

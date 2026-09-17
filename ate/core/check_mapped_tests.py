@@ -149,6 +149,14 @@ def coverage_payload(mapping: dict | None = None) -> dict:
     }
 
 
+def check_setup_dc_helper() -> list[str]:
+    import generator_setup
+
+    if not hasattr(generator_setup, "setup_dc"):
+        return ["generator_setup.setup_dc missing (Logic DC / RS0204 / mapped_dc)"]
+    return []
+
+
 def check_mapped_tests() -> list[str]:
     return (
         check_family_component_map()
@@ -156,6 +164,7 @@ def check_mapped_tests() -> list[str]:
         + check_mapped_ids()
         + check_map_folder_keys()
         + check_lab_report_sync()
+        + check_setup_dc_helper()
     )
 
 

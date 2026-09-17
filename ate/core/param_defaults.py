@@ -50,6 +50,7 @@ LOGIC_TEST_DEFAULTS: dict[str, dict[str, Any]] = {
     "vih_vil": {"vcc": 1.65},
     "voh_load": {"vcc": 1.65},
     "vol_load": {"vcc": 1.65},
+    "ioz": {"vcc": 3.6},
     # RS0204 dual-rail (vcc = VCCA; vccb from part yaml)
     "vih": {"vcc": 1.8, "vccb": 3.3},
     "vil": {"vcc": 1.8, "vccb": 3.3},

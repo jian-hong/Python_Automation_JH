@@ -4,14 +4,141 @@ datasheet:
   source: local-reference
   file: C:\Users\OoiJianHong\Downloads\Reference\Reference\RS1G97_(RevA.2.1).pdf
   extract: C:\Users\OoiJianHong\Eugene's Repo\PythonAutomation\ate\config\datasheets\text\rs1g97.txt
+# Numbers from ate/config/datasheets/text/rs1g97.txt 9.2 DC Characteristics (Full).
+# pass_mode documents judge_value: range = min and max, max-only = abs max, min-only = min.
 specs:
 - id: VCC_V
   unit: V
   min: 1.65
   max: 5.5
+  pass_mode: range
   source: local:RS1G97_(RevA.2.1).pdf
 - id: ICC_uA
   unit: uA
   max: 10.0
-  test: supply_current
-  source: local:RS1G97_(RevA.2.1).pdf
+  pass_mode: max-only
+  test: supply_current_sweep
+  source: local:RS1G97_(RevA.2.1).pdf Full
+- id: DELTA_ICC_uA
+  unit: uA
+  max: 500.0
+  pass_mode: max-only
+  test: delta_supply_current
+  source: local:RS1G97_(RevA.2.1).pdf dICC 3V to 5.5V
+- id: II_uA
+  unit: uA
+  max: 5.0
+  pass_mode: max-only
+  test: input_leakage_sweep
+  source: local:RS1G97_(RevA.2.1).pdf II Full +/-5
+- id: IOFF_uA
+  unit: uA
+  max: 10.0
+  pass_mode: max-only
+  test: ioff_leakage
+  source: local:RS1G97_(RevA.2.1).pdf Ioff Full +/-10
+- id: VTPLUS_1p65V
+  unit: V
+  min: 0.75
+  max: 1.05
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT+ 1.65V
+- id: VTPLUS_2p3V
+  unit: V
+  min: 1.25
+  max: 1.55
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT+ 2.3V
+- id: VTPLUS_3p0V
+  unit: V
+  min: 1.5
+  max: 2.1
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT+ 3V
+- id: VTPLUS_4p5V
+  unit: V
+  min: 2.3
+  max: 3.0
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT+ 4.5V
+- id: VTPLUS_5p5V
+  unit: V
+  min: 2.8
+  max: 3.4
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT+ 5.5V
+- id: VTMINUS_1p65V
+  unit: V
+  min: 0.3
+  max: 0.6
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT- 1.65V
+- id: VTMINUS_2p3V
+  unit: V
+  min: 0.35
+  max: 0.65
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT- 2.3V
+- id: VTMINUS_3p0V
+  unit: V
+  min: 0.45
+  max: 0.75
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT- 3V
+- id: VTMINUS_4p5V
+  unit: V
+  min: 0.7
+  max: 1.0
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT- 4.5V
+- id: VTMINUS_5p5V
+  unit: V
+  min: 0.85
+  max: 1.15
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf VT- 5.5V
+- id: HYST_1p65V
+  unit: V
+  min: 0.35
+  max: 0.6
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf hysteresis 1.65V
+- id: HYST_2p3V
+  unit: V
+  min: 0.6
+  max: 1.2
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf hysteresis 2.3V
+- id: HYST_3p0V
+  unit: V
+  min: 1.05
+  max: 1.65
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf hysteresis 3V
+- id: HYST_4p5V
+  unit: V
+  min: 1.6
+  max: 2.0
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf hysteresis 4.5V
+- id: HYST_5p5V
+  unit: V
+  min: 1.95
+  max: 2.25
+  pass_mode: range
+  test: input_thresholds
+  source: local:RS1G97_(RevA.2.1).pdf hysteresis 5.5V

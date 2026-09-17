@@ -161,6 +161,7 @@ python -m ate.core.check_sync_repo
 python -m ate.core.check_campaign_outline
 python -m ate.core.check_session_values
 python -m ate.core.check_specs_datalog
+python -m ate.core.check_logic_dc
 ```
 
 A green check that never could fail is not a check. Do not claim PASS without running it.

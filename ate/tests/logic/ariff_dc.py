@@ -113,6 +113,12 @@ def _vcc_list(cfg: dict[str, Any], key: str, default: list[float]) -> list[float
 
 
 def _run_delta_supply_current(instr, params: RunParams) -> dict[str, Any]:
+    from ate.core.logic_model import load_logic_model
+    from ate.tests.logic.dc import run_delta_supply_current
+
+    model = load_logic_model(getattr(params, "part", "") or "")
+    if model is not None:
+        return run_delta_supply_current(instr, params, model=model)
     _require(instr, "PSU", "AWG", "DMM")
     from generator_setup import setup_dc, stop_output
 
@@ -199,6 +205,12 @@ def _run_off_current(instr, params: RunParams) -> dict[str, Any]:
 
 def _run_input_thresholds(instr, params: RunParams) -> dict[str, Any]:
     """AWG 0.05 V steps; return VIH/VIL + hysteresis."""
+    from ate.core.logic_model import load_logic_model
+    from ate.tests.logic.dc import run_input_thresholds
+
+    model = load_logic_model(getattr(params, "part", "") or "")
+    if model is not None:
+        return run_input_thresholds(instr, params, model=model)
     _require(instr, "PSU", "AWG", "DMM")
     from dmm_setup import dmm_read, dmm_setup_voltage
     from generator_setup import setup_dc, stop_output
@@ -246,6 +258,12 @@ def _run_input_thresholds(instr, params: RunParams) -> dict[str, Any]:
 
 def _run_ioff_leakage(instr, params: RunParams) -> dict[str, Any]:
     """IOFF at VCC list with 8 pin-force combos (A/B AWG, Y PSU CH2)."""
+    from ate.core.logic_model import load_logic_model
+    from ate.tests.logic.dc import run_ioff_leakage
+
+    model = load_logic_model(getattr(params, "part", "") or "")
+    if model is not None:
+        return run_ioff_leakage(instr, params, model=model)
     _require(instr, "PSU", "AWG", "DMM")
     from generator_setup import setup_dc, stop_output
     from psu_setup import power_on_protected
@@ -305,6 +323,12 @@ def _run_ioff_leakage(instr, params: RunParams) -> dict[str, Any]:
 
 def _run_input_leakage_sweep(instr, params: RunParams) -> dict[str, Any]:
     """IDD-style leakage vs VCC list x 4 input combos (YAML-capped by default)."""
+    from ate.core.logic_model import load_logic_model
+    from ate.tests.logic.dc import run_input_leakage_sweep
+
+    model = load_logic_model(getattr(params, "part", "") or "")
+    if model is not None:
+        return run_input_leakage_sweep(instr, params, model=model)
     _require(instr, "PSU", "AWG", "DMM")
     from generator_setup import setup_dc, stop_output
 
@@ -348,6 +372,12 @@ def _run_input_leakage_sweep(instr, params: RunParams) -> dict[str, Any]:
 
 def _run_supply_current_sweep(instr, params: RunParams) -> dict[str, Any]:
     """Ariff IDD vs VCC x 4 input combos. Distinct from Soo supply_current."""
+    from ate.core.logic_model import load_logic_model
+    from ate.tests.logic.dc import run_supply_current_sweep
+
+    model = load_logic_model(getattr(params, "part", "") or "")
+    if model is not None:
+        return run_supply_current_sweep(instr, params, model=model)
     _require(instr, "PSU", "AWG", "DMM")
     from generator_setup import setup_dc, stop_output
 
@@ -478,7 +508,12 @@ def _run_voh_load(instr, params: RunParams) -> dict[str, Any]:
     from psu_setup import power_off, power_on_protected
 
     cfg = _part_cfg(params)
-    rows_cfg = cfg.get("voh_table") if isinstance(cfg.get("voh_table"), list) else _DEFAULT_VOH_ROWS
+    rows_cfg = cfg.get("voh_table") if isinstance(cfg.get("voh_table"), list) else None
+    if not rows_cfg:
+        raise RuntimeError(
+            f"{getattr(params, 'part', '')}: voh_load needs part yaml voh_table "
+            "(will not inherit RS1G08 default load numbers)"
+        )
     vplus = float(cfg.get("vplus_v") or 5.0)
     ilim = _current_limit(params)
     settle = float(cfg.get("voh_vol_settle_s") or 1.0)
@@ -538,7 +573,12 @@ def _run_vol_load(instr, params: RunParams) -> dict[str, Any]:
     from psu_setup import power_off, power_on_protected
 
     cfg = _part_cfg(params)
-    rows_cfg = cfg.get("vol_table") if isinstance(cfg.get("vol_table"), list) else _DEFAULT_VOL_ROWS
+    rows_cfg = cfg.get("vol_table") if isinstance(cfg.get("vol_table"), list) else None
+    if not rows_cfg:
+        raise RuntimeError(
+            f"{getattr(params, 'part', '')}: vol_load needs part yaml vol_table "
+            "(will not inherit RS1G08 default load numbers)"
+        )
     vplus = float(cfg.get("vplus_v") or 5.0)
     ilim = _current_limit(params)
     settle = float(cfg.get("voh_vol_settle_s") or 1.0)

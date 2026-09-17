@@ -95,8 +95,16 @@ def load_part_datasheet(part_key: str = "") -> dict[str, Any]:
     return ds
 
 
-def judge_value(value: Any, mn: Any, mx: Any) -> str:
-    """pass / fail / unspec. typ is display-only."""
+def judge_value(value: Any, mn: Any, mx: Any, pass_mode: Any = None) -> str:
+    """pass / fail / unspec. typ is display-only.
+
+    pass_mode range | min-only | max-only (optional). Empty = infer from min/max.
+    """
+    mode = str(pass_mode or "").strip().lower().replace("_", "-")
+    if mode in ("min-only", "min"):
+        mx = None
+    elif mode in ("max-only", "max"):
+        mn = None
     v = _num(value)
     lo = _num(mn)
     hi = _num(mx)
@@ -154,7 +162,11 @@ def enrich_measurement(
             row["unit"] = spec["unit"]
         if not row.get("source") and spec.get("source"):
             row["source"] = spec["source"]
-    row["result"] = judge_value(row.get("value"), row.get("min"), row.get("max"))
+        if not row.get("pass_mode") and spec.get("pass_mode"):
+            row["pass_mode"] = spec["pass_mode"]
+    row["result"] = judge_value(
+        row.get("value"), row.get("min"), row.get("max"), pass_mode=row.get("pass_mode")
+    )
     return row
 
 
