@@ -218,20 +218,48 @@ def _excel_plots_blob(blob: dict[str, Any]) -> dict[str, Any]:
 
 
 def _workbook_policy_blob(blob: dict[str, Any]) -> dict[str, Any]:
-    """golden_auto / ultimate_manual map. Legacy string -> golden_auto only."""
+    """golden_auto / auto overwrite Version; pretty / ultimate_manual never auto.
+
+    Nested workbook: {golden_auto: {policy: ...}, ultimate_manual: {note: ...}}
+    from the CONFIRMED card is flattened. Do not invent a data_paths.ultimate key.
+    """
+    out: dict[str, Any] = {}
     raw = blob.get("workbook_policy")
     if isinstance(raw, dict):
-        return dict(raw)
-    if isinstance(raw, str) and raw.strip():
-        return {"golden_auto": raw.strip()}
+        out.update({str(k).strip(): v for k, v in raw.items() if str(k).strip()})
+    elif isinstance(raw, str) and raw.strip():
+        out["golden_auto"] = raw.strip()
+    wb = blob.get("workbook")
+    if isinstance(wb, dict):
+        ga = wb.get("golden_auto")
+        if isinstance(ga, dict) and ga.get("policy"):
+            out.setdefault("golden_auto", str(ga.get("policy") or "").strip())
+        elif isinstance(ga, str) and ga.strip():
+            out.setdefault("golden_auto", ga.strip())
+        um = wb.get("ultimate_manual") or wb.get("pretty")
+        if isinstance(um, dict):
+            note = str(um.get("note") or um.get("policy") or "").strip().lower()
+            if "never" in note or str(um.get("policy") or "").strip() == "never_auto_write":
+                out.setdefault("ultimate_manual", "never_auto_write")
+                out.setdefault("pretty", "never_auto_write")
+        elif isinstance(um, str) and um.strip():
+            out.setdefault("ultimate_manual", um.strip())
     plots = blob.get("excel_plots")
-    if isinstance(plots, dict):
+    if isinstance(plots, dict) and not out:
         nested = plots.get("policy") or plots.get("workbook_policy")
         if isinstance(nested, dict):
-            return dict(nested)
-        if nested not in (None, ""):
-            return {"golden_auto": str(nested).strip()}
-    return {}
+            out.update({str(k).strip(): v for k, v in nested.items() if str(k).strip()})
+        elif nested not in (None, ""):
+            out.setdefault("golden_auto", str(nested).strip())
+    ga = str(out.get("golden_auto") or out.get("auto") or "").strip()
+    um = str(out.get("ultimate_manual") or out.get("pretty") or "").strip()
+    if ga:
+        out.setdefault("golden_auto", ga)
+        out.setdefault("auto", ga)
+    if um:
+        out.setdefault("ultimate_manual", um)
+        out.setdefault("pretty", um)
+    return out
 
 
 def load_part_yaml(part_key: str) -> dict[str, Any]:
@@ -1896,7 +1924,7 @@ def format_save_lines(
     paths = resolve_data_paths(model, test_id, dut_index)
     return [
         "Save path after run (folders only; do not invent Excel cells)",
-        f"Excel golden_auto (never ultimate_manual): {paths.get('excel')}",
+        f"Excel golden_auto/auto (pretty never auto): {paths.get('excel')}",
         f"report: {paths.get('report')}",
         f"STS datalog: {paths.get('datalog')}",
         f"records: {paths.get('records')}",
@@ -1927,8 +1955,8 @@ def format_handoff_begin(model: ProductModel, test_id: str) -> list[str]:
     wp = model.workbook_policy if isinstance(model.workbook_policy, dict) else {}
     if wp or model.excel_plots:
         lines.append(
-            "Excel fill/plot: golden_auto Version workbook/ only "
-            "(ultimate_manual never_auto_write)"
+            "Excel fill/plot: golden_auto/auto Version workbook/ only "
+            "(pretty/ultimate_manual never_auto_write)"
         )
     return lines
 

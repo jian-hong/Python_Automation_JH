@@ -9,7 +9,8 @@ its own bodies; voh/vol/icc dispatch there only when the part has vcca/vccb
 and no Path B model.
 
 INSTRUMENT_SENSE ICC: DMM-on-VCC (DMM in series with PSU CH1 / DUT VCC).
-INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at VCC-offset, others at rail.
+INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at recipe.delta_offset_v
+  below VCC, or at dc_limits.ICCT_uA.one_input_V when ICCT is mapped (not 0.6).
 INSTRUMENT_SENSE II: DMM in series with the swept input pin (force VI via AWG/PSU).
 INSTRUMENT_SENSE VOH: force Y-high from truth_table vector; DMM sense V(Y).
   Loaded IOH from CONFIRMED voh_table (PSU CH2 Y-load sink rail 0V unless vref given).
@@ -564,6 +565,32 @@ def _sweep_threshold(
     drives = _drive_for_sweep(model, pattern.sweep_pin)
     _apply_levels(instr, model, pattern.fix, vcc, ilim, drives=drives)
     _wait_settled_voltage(instr.dmm, model)
+    search = (model.recipe or {}).get("search")
+    sweep_drive = drives[pattern.sweep_pin]
+    if isinstance(search, dict) and search:
+        from ate.tests.logic.threshold_search import run_search_stage
+
+        lim = lookup_vcc_grid_limits(model, vcc) or {}
+        limit = lim.get("VIH_min_V") if rising else lim.get("VIL_max_V")
+        try:
+            limit_f = float(limit) if limit is not None else None
+        except (TypeError, ValueError):
+            limit_f = None
+
+        def _measure(vin: float) -> float:
+            _apply_pin(instr, sweep_drive, float(vin), ilim)
+            return float(_wait_settled_voltage(instr.dmm, model, setup=False))
+
+        result = run_search_stage(
+            _measure,
+            vcc=float(vcc),
+            rising=rising,
+            limit=limit_f,
+            search=search,
+            y_expect=pattern.y_expect,
+            mid=_mid(vcc),
+        )
+        return result.vin
     step = _step_v(model)
     n = int(round(vcc / step))
     seq = list(range(0, n + 1))
@@ -571,7 +598,6 @@ def _sweep_threshold(
         seq = list(reversed(seq))
     found: Optional[float] = None
     prev: Optional[float] = None
-    sweep_drive = drives[pattern.sweep_pin]
     for i in seq:
         vin = min(vcc, i * step)
         _apply_pin(instr, sweep_drive, vin, ilim)
@@ -734,30 +760,66 @@ def _run_icc(instr, params: Any) -> dict[str, Any]:
         )
 
 
-def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
-    # INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at VCC-offset.
-    model = _model(params)
+def _icct_blob(model: ProductModel) -> dict[str, Any]:
+    """ICCT maps to delta_icc via one_input_V. Do not invent delta_offset_v=0.6."""
+    dc = model.dc_limits if isinstance(model.dc_limits, dict) else {}
+    for key in ("ICCT_uA", "ICCT", "icct"):
+        block = dc.get(key)
+        if isinstance(block, dict) and (
+            block.get("one_input_V") is not None
+            or str(block.get("map_to") or "").strip().lower() == "delta_icc"
+        ):
+            return block
+    return {}
+
+
+def _delta_force_v(model: ProductModel, vcc: float) -> float:
+    icct = _icct_blob(model)
+    one = icct.get("one_input_V")
+    if one is not None:
+        return float(one)
     offset = model.recipe.get("delta_offset_v")
     if offset is None:
         raise RuntimeError(
+            "delta_icc: need dc_limits.ICCT_uA.one_input_V or recipe.delta_offset_v "
+            "(do not invent 0.6)"
+        )
+    return max(0.0, float(vcc) - float(offset))
+
+
+def _delta_vccs(params: Any, model: ProductModel) -> list[float]:
+    icct = _icct_blob(model)
+    if icct.get("vcc") is not None:
+        return [float(icct["vcc"])]
+    vccs = _vcc_corners(params, model, "delta_vcc_list")
+    vmin = model.recipe.get("delta_vcc_min")
+    if vmin is not None:
+        vccs = [v for v in vccs if v + 1e-9 >= float(vmin)]
+        if not vccs:
+            raise RuntimeError(
+                "delta_icc: no vcc_list points at/above recipe.delta_vcc_min"
+            )
+    return vccs
+
+
+def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
+    # INSTRUMENT_SENSE DELTA_ICC: DMM-on-VCC; one input at offset or ICCT voltage.
+    model = _model(params)
+    near_note = ""
+    icct = _icct_blob(model)
+    if icct.get("one_input_V") is not None:
+        near_note = f"ICCT one_in={icct.get('one_input_V')}V @{icct.get('vcc')}"
+    elif model.recipe.get("delta_offset_v") is None:
+        raise RuntimeError(
             "delta_icc: recipe.delta_offset_v missing (datasheet dICC, e.g. VCC-0.6). "
-            "Do not invent; add it to product_model YAML."
+            "Do not invent; add ICCT one_input_V or offset to product_model YAML."
         )
     _require_for(instr, model, "delta_icc")
-    offset_v = float(offset)
     with path_b_handoff(params, model, "delta_icc"):
         ilim = _current_limit(params, model)
-        vccs = _vcc_corners(params, model, "delta_vcc_list")
-        vmin = model.recipe.get("delta_vcc_min")
-        if vmin is not None:
-            vccs = [v for v in vccs if v + 1e-9 >= float(vmin)]
-            if not vccs:
-                raise RuntimeError(
-                    "delta_icc: no vcc_list points at/above recipe.delta_vcc_min"
-                )
+        vccs = _delta_vccs(params, model)
         pins = list(model.logic_inputs)
         if model.has_oe() and model.oe_pin:
-            # dICC is one input at VCC-0.6, others at rail. Include OE as a rail pin.
             if model.oe_pin not in pins:
                 pins.append(model.oe_pin)
         rows: list[dict[str, Any]] = []
@@ -765,6 +827,7 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
             for vcc in vccs:
                 _power_vcc(instr, vcc, ilim)
                 _wait_settled_current_ua(instr.dmm, model)
+                near_v = _delta_force_v(model, vcc)
                 for near in pins:
                     for others_high in (True, False):
                         levels: dict[str, Any] = {}
@@ -776,7 +839,6 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
                             levels[model.oe_pin] = model.oe_active_level()
                         _apply_levels(instr, model, levels, vcc, ilim)
                         _wait_settled_current_ua(instr.dmm, model, setup=False)
-                        near_v = max(0.0, vcc - offset_v)
                         drive = model.pin_drive.get(near)
                         if drive is None:
                             raise RuntimeError(f"delta_icc: no pin_drive for {near}")
@@ -800,7 +862,7 @@ def _run_delta_icc(instr, params: Any) -> dict[str, Any]:
             model,
             "delta_icc",
             {
-                "summary": f"DeltaICC n={len(rows)} max={mx:.3f} uA offset={offset_v} V",
+                "summary": f"DeltaICC n={len(rows)} max={mx:.3f} uA {near_note}".strip(),
                 "data": {"rows": rows, "instrument_sense": "DMM-on-VCC"},
                 "measurements": [_meas(model, "DELTA_ICC_uA", mx, "uA", test_id="delta_icc")],
             },

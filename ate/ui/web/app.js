@@ -3321,7 +3321,7 @@ $("btn-open").onclick = async () => {
     $("btn-start").disabled = false;
     log(`Session open ${JSON.stringify(m)}\n`);
     if (m.golden_auto) {
-      log(`Excel golden_auto (never ultimate_manual): ${m.golden_auto}\n`);
+      log(`Excel golden_auto/auto (pretty never auto): ${m.golden_auto}\n`);
     }
     const need = ["MSO", "PSU", "AWG"];
     const miss = need.filter((k) => !m[k]);

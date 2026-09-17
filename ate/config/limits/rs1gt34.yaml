@@ -4,33 +4,50 @@ datasheet:
   source: local-reference
   file: C:\Users\OoiJianHong\Downloads\Reference\Reference\RS1GT34_(RevA.1.1).pdf
   extract: C:\Users\OoiJianHong\Eugene's Repo\PythonAutomation\ate\config\datasheets\text\rs1gt34.txt
-# Path B DRAFT. Numbers UNCONFIRMED until JH CONFIRM -- not greenable.
-# VIH/VIL live in product_model.vcc_grid. VOH/VOL/II/ICC copied from
-# RS1GT34_card_DRAFT only. Do not invent extra loads or delta_offset_v=0.6.
-# +25C rows are the Path B run-judge. Full rows are documented (no test:).
+# Path B CONFIRMED. Jian Hong 2026-09-18 -- not a Verify PASS claim.
+# VIH/VIL live in product_model.vcc_grid. VOH/VOL/II/ICC/ICCT copied from
+# RS1GT34_card_CONFIRMED only. Do not invent extra loads or delta_offset_v=0.6.
+# +25C rows are the Path B run-judge. Full rows are documented (no test:)
+# except ICCT Full 500uA which maps to delta_icc.
 specs:
 - id: ICC_uA
   unit: uA
   max: 1.0
   pass_mode: max-only
   test: icc
-  source: UNCONFIRMED DRAFT card ICC +25C 1uA
+  source: CONFIRMED card ICC +25C 1uA
 - id: ICC_FULL_uA
   unit: uA
   max: 10.0
   pass_mode: max-only
-  source: UNCONFIRMED DRAFT card ICC Full 10uA (documented; not run-judge)
+  source: CONFIRMED card ICC Full 10uA (documented; not run-judge)
 - id: II_uA
   unit: uA
   max: 1.0
   pass_mode: max-only
   test: ii
-  source: UNCONFIRMED DRAFT card II +/-1uA +25C
+  source: CONFIRMED card II +/-1uA +25C
 - id: II_FULL_uA
   unit: uA
   max: 5.0
   pass_mode: max-only
-  source: UNCONFIRMED DRAFT card II Full +/-5uA (documented; not run-judge)
+  source: CONFIRMED card II Full +/-5uA (documented; not run-judge)
+- id: DELTA_ICC_uA
+  unit: uA
+  max: 500.0
+  pass_mode: max-only
+  test: delta_icc
+  source: CONFIRMED ICCT Full 500uA @5.5 one_in@3.4 (not VCC-0.6)
+- id: Ioff_uA
+  unit: uA
+  max: 1.0
+  pass_mode: max-only
+  source: CONFIRMED Ioff +25C 1uA (VCC=0; not IOZ; documented; not run-judge)
+- id: Ioff_FULL_uA
+  unit: uA
+  max: 10.0
+  pass_mode: max-only
+  source: CONFIRMED Ioff Full 10uA (VCC=0; not IOZ; documented; not run-judge)
 - id: VCC_V
   unit: V
   min: 2.0
@@ -42,214 +59,214 @@ specs:
   min: 1.9
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @2.0
+  source: CONFIRMED IOH -100uA VCC-0.1 @2.0
 - id: VOH_3p3V_100uA
   unit: V
   min: 3.2
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @3.3
+  source: CONFIRMED IOH -100uA VCC-0.1 @3.3
 - id: VOH_4p5V_100uA
   unit: V
   min: 4.4
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @4.5
+  source: CONFIRMED IOH -100uA VCC-0.1 @4.5
 - id: VOH_4p6V_100uA
   unit: V
   min: 4.5
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @4.6
+  source: CONFIRMED IOH -100uA VCC-0.1 @4.6
 - id: VOH_4p7V_100uA
   unit: V
   min: 4.6
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @4.7
+  source: CONFIRMED IOH -100uA VCC-0.1 @4.7
 - id: VOH_4p8V_100uA
   unit: V
   min: 4.7
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @4.8
+  source: CONFIRMED IOH -100uA VCC-0.1 @4.8
 - id: VOH_4p9V_100uA
   unit: V
   min: 4.8
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @4.9
+  source: CONFIRMED IOH -100uA VCC-0.1 @4.9
 - id: VOH_5p0V_100uA
   unit: V
   min: 4.9
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @5.0
+  source: CONFIRMED IOH -100uA VCC-0.1 @5.0
 - id: VOH_5p1V_100uA
   unit: V
   min: 5.0
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @5.1
+  source: CONFIRMED IOH -100uA VCC-0.1 @5.1
 - id: VOH_5p2V_100uA
   unit: V
   min: 5.1
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @5.2
+  source: CONFIRMED IOH -100uA VCC-0.1 @5.2
 - id: VOH_5p3V_100uA
   unit: V
   min: 5.2
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @5.3
+  source: CONFIRMED IOH -100uA VCC-0.1 @5.3
 - id: VOH_5p4V_100uA
   unit: V
   min: 5.3
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @5.4
+  source: CONFIRMED IOH -100uA VCC-0.1 @5.4
 - id: VOH_5p5V_100uA
   unit: V
   min: 5.4
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -100uA VCC-0.1 @5.5
+  source: CONFIRMED IOH -100uA VCC-0.1 @5.5
 - id: VOH_2p0V_8mA
   unit: V
   min: 1.6
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -8mA @2.0
+  source: CONFIRMED IOH -8mA @2.0
 - id: VOH_3p3V_24mA
   unit: V
   min: 2.5
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -24mA @3.3
+  source: CONFIRMED IOH -24mA @3.3
 - id: VOH_4p5V_32mA
   unit: V
   min: 3.8
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -32mA @4.5
+  source: CONFIRMED IOH -32mA @4.5
 - id: VOH_5p0V_32mA
   unit: V
   min: 4.2
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -32mA @5.0
+  source: CONFIRMED IOH -32mA @5.0
 - id: VOH_5p5V_32mA
   unit: V
   min: 4.8
   pass_mode: min-only
   test: voh
-  source: UNCONFIRMED DRAFT IOH -32mA @5.5
+  source: CONFIRMED IOH -32mA @5.5
 - id: VOL_2p0V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @2.0
+  source: CONFIRMED IOL 100uA @2.0
 - id: VOL_3p3V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @3.3
+  source: CONFIRMED IOL 100uA @3.3
 - id: VOL_4p5V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @4.5
+  source: CONFIRMED IOL 100uA @4.5
 - id: VOL_4p6V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @4.6
+  source: CONFIRMED IOL 100uA @4.6
 - id: VOL_4p7V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @4.7
+  source: CONFIRMED IOL 100uA @4.7
 - id: VOL_4p8V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @4.8
+  source: CONFIRMED IOL 100uA @4.8
 - id: VOL_4p9V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @4.9
+  source: CONFIRMED IOL 100uA @4.9
 - id: VOL_5p0V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @5.0
+  source: CONFIRMED IOL 100uA @5.0
 - id: VOL_5p1V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @5.1
+  source: CONFIRMED IOL 100uA @5.1
 - id: VOL_5p2V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @5.2
+  source: CONFIRMED IOL 100uA @5.2
 - id: VOL_5p3V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @5.3
+  source: CONFIRMED IOL 100uA @5.3
 - id: VOL_5p4V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @5.4
+  source: CONFIRMED IOL 100uA @5.4
 - id: VOL_5p5V_100uA
   unit: V
   max: 0.1
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 100uA @5.5
+  source: CONFIRMED IOL 100uA @5.5
 - id: VOL_2p0V_8mA
   unit: V
   max: 0.45
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 8mA @2.0
+  source: CONFIRMED IOL 8mA @2.0
 - id: VOL_3p3V_24mA
   unit: V
   max: 0.55
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 24mA @3.3
+  source: CONFIRMED IOL 24mA @3.3
 - id: VOL_4p5V_32mA
   unit: V
   max: 0.55
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 32mA @4.5
+  source: CONFIRMED IOL 32mA @4.5
 - id: VOL_5p0V_32mA
   unit: V
   max: 0.5
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 32mA @5.0
+  source: CONFIRMED IOL 32mA @5.0
 - id: VOL_5p5V_32mA
   unit: V
   max: 0.45
   pass_mode: max-only
   test: vol
-  source: UNCONFIRMED DRAFT IOL 32mA @5.5
+  source: CONFIRMED IOL 32mA @5.5

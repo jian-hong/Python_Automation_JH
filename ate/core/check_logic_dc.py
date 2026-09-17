@@ -52,6 +52,7 @@ from ate.tests.logic.product_model import (
 _LOGIC_DC = Path(__file__).resolve().parents[1] / "tests" / "logic" / "logic_dc.py"
 _DC_ALIAS = Path(__file__).resolve().parents[1] / "tests" / "logic" / "dc.py"
 _MODEL = Path(__file__).resolve().parents[1] / "tests" / "logic" / "product_model.py"
+_THRESHOLD_SEARCH = Path(__file__).resolve().parents[1] / "tests" / "logic" / "threshold_search.py"
 _OPERATOR_DOC = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC_OPERATOR.md"
 
 _PATH_B_IDS = (
@@ -167,7 +168,7 @@ _SIGNED_VOL = (
     (4.5, 0.032, 0.55),
 )
 
-# RS1GT34 DRAFT card. 100uA expanded onto merged vcc_list. High-load named VCC only.
+# RS1GT34 CONFIRMED card. 100uA expanded onto merged vcc_list. High-load named VCC only.
 _RS1GT34_MERGED = [2.0, 3.3] + [round(4.5 + i * 0.1, 6) for i in range(11)]
 _DRAFT_34_VOH = tuple(
     (v, -0.0001, round(v - 0.1, 6)) for v in _RS1GT34_MERGED
@@ -682,16 +683,17 @@ def _settle_loop_ok() -> list[str]:
     return errors
 
 
-def _rs1gt34_draft_ok() -> list[str]:
-    """RS1GT34 Path B DRAFT. Numbers UNCONFIRMED until JH CONFIRM -- not greenable.
+def _rs1gt34_ok() -> list[str]:
+    """RS1GT34 Path B CONFIRMED (Jian Hong 2026-09-18). Copy attached card. No invent.
 
-    Do not call _fail_closed_until_signed (that FAIL-closes check until CONFIRMED).
-    Require UNCONFIRMED. Do not invent beyond DRAFT card.
+    ICCT 500uA @5.5 one_in@3.4 maps to delta_icc -- not delta_offset_v=0.6.
+    No IOZ. Search: limit-scaled first step, on-hit skip, no reverse.
+    Dual Excel: auto overwrite Version; pretty never auto.
     """
     errors: list[str] = []
     m = load_product_model("rs1gt34")
     if m is None:
-        return ["rs1gt34 product_model missing (Path B DRAFT)"]
+        return ["rs1gt34 product_model missing (Path B CONFIRMED)"]
     yaml = load_part_yaml("rs1gt34")
     if str(yaml.get("package") or "") != "SOT23-5":
         errors.append(f"rs1gt34 package must be SOT23-5, got {yaml.get('package')!r}")
@@ -710,18 +712,15 @@ def _rs1gt34_draft_ok() -> list[str]:
     en = set(enabled_tests_for_part("rs1gt34") or [])
     for banned in ("ioz", "ioff", "ioff_leakage", "off_current"):
         if banned in en:
-            errors.append(f"rs1gt34 must not enable {banned}")
-    for need in ("input_threshold", "icc", "ii", "voh", "vol"):
+            errors.append(f"rs1gt34 must not enable {banned} (Ioff is not IOZ)")
+    for need in ("input_threshold", "icc", "ii", "voh", "vol", "delta_icc"):
         if need not in en:
             errors.append(f"rs1gt34 enabled_tests missing {need}")
     fx = yaml.get("fixture_modes") if isinstance(yaml.get("fixture_modes"), dict) else {}
     logic_fx = fx.get("LOGIC") if isinstance(fx.get("LOGIC"), dict) else {}
     fx_tests = {str(x) for x in (logic_fx.get("tests") or [])}
-    if "delta_icc" in en or "delta_icc" in fx_tests:
-        errors.append(
-            "rs1gt34 must disable delta_icc until JH CONFIRM maps ICCT "
-            "(500uA @5.5V input@3.4V; do not invent delta_offset_v=0.6)"
-        )
+    if "delta_icc" not in en or "delta_icc" not in fx_tests:
+        errors.append("rs1gt34 must enable delta_icc (ICCT mapped 500uA @5.5 one_in@3.4)")
     pins = {p.name: (p.number, p.role) for p in m.pins}
     want_pins = {"NC": (1, "nc"), "A": (2, "input"), "GND": (3, "gnd"), "Y": (4, "output"), "VCC": (5, "vcc")}
     for name, (num, role) in want_pins.items():
@@ -737,22 +736,18 @@ def _rs1gt34_draft_ok() -> list[str]:
     if vcc_grid_stimulus(m) != "PSU_MSO":
         errors.append(f"rs1gt34 stimulus must be PSU_MSO, got {vcc_grid_stimulus(m)}")
     grid = m.vcc_grid or {}
-    if str(grid.get("status") or "") != "UNCONFIRMED":
-        errors.append(f"rs1gt34 vcc_grid.status must be UNCONFIRMED, got {grid.get('status')}")
-    if not vcc_grid_unconfirmed(m):
-        errors.append("rs1gt34 vcc_grid must be UNCONFIRMED (not greenable)")
+    if not is_datasheet_signed(grid.get("status")):
+        errors.append(f"rs1gt34 vcc_grid.status must be CONFIRMED, got {grid.get('status')}")
+    if vcc_grid_unconfirmed(m):
+        errors.append("rs1gt34 vcc_grid must be Datasheet-signed CONFIRMED")
     for st_name, st in (
         ("status", m.status),
         ("truth_table", m.truth_table_status),
         ("isolation", m.isolation_status),
-        ("wire_map", (m.wire_map or {}).get("status")),
     ):
-        if is_datasheet_signed(st) or claimed_signed_without_datasheet(st):
-            errors.append(
-                f"rs1gt34 {st_name}={st!r} must stay UNCONFIRMED until JH CONFIRM"
-            )
-        if str(st or "").strip().upper() != "UNCONFIRMED":
-            errors.append(f"rs1gt34 {st_name} must be UNCONFIRMED, got {st!r}")
+        if not is_datasheet_signed(st):
+            errors.append(f"rs1gt34 {st_name}={st!r} must be CONFIRMED (Jian Hong 2026-09-18)")
+    errors += _fail_closed_until_signed("rs1gt34", m)
     fixed = grid.get("fixed_points") or []
     fixed_v = sorted(round(float(p.get("vcc")), 6) for p in fixed if isinstance(p, dict) and p.get("vcc") is not None)
     if fixed_v != [2.0, 3.3]:
@@ -819,9 +814,16 @@ def _rs1gt34_draft_ok() -> list[str]:
             "(Path B VOH/VOL fixture; not a new net)"
         )
     tests_wm = wm.get("tests") if isinstance(wm.get("tests"), dict) else {}
-    if "delta_icc" in tests_wm:
-        errors.append("rs1gt34 wire_map.tests must not include delta_icc until ICCT mapped")
-    for tid, need_ch2 in (("voh", True), ("vol", True), ("input_threshold", False), ("icc", False), ("ii", False)):
+    if "delta_icc" not in tests_wm:
+        errors.append("rs1gt34 wire_map.tests must include delta_icc (ICCT mapped)")
+    for tid, need_ch2 in (
+        ("voh", True),
+        ("vol", True),
+        ("input_threshold", False),
+        ("icc", False),
+        ("ii", False),
+        ("delta_icc", False),
+    ):
         block = tests_wm.get(tid) if isinstance(tests_wm.get(tid), dict) else {}
         chans = [str(x) for x in (block.get("psu") or [])]
         has_ch2 = "CH2" in chans
@@ -846,13 +848,13 @@ def _rs1gt34_draft_ok() -> list[str]:
     want_vol = {(round(a, 6), round(b, 9), round(c, 6)) for a, b, c in _DRAFT_34_VOL}
     if voh != want_voh:
         errors.append(
-            "rs1gt34 voh_table must match DRAFT card "
-            "(100uA on merged vcc_list + named high-load only; UNCONFIRMED)"
+            "rs1gt34 voh_table must match CONFIRMED card "
+            "(100uA on merged vcc_list + named high-load only)"
         )
     if vol != want_vol:
         errors.append(
-            "rs1gt34 vol_table must match DRAFT card "
-            "(100uA on merged vcc_list + named high-load only; UNCONFIRMED)"
+            "rs1gt34 vol_table must match CONFIRMED card "
+            "(100uA on merged vcc_list + named high-load only)"
         )
     specs = {s.get("id"): s for s in load_part_specs("rs1gt34")}
     for row in yaml.get("voh_table") or []:
@@ -891,61 +893,99 @@ def _rs1gt34_draft_ok() -> list[str]:
     icc_full = specs.get("ICC_FULL_uA") or {}
     if round(float(icc_full.get("max") or 0), 6) != 10.0 or icc_full.get("test"):
         errors.append("rs1gt34 ICC_FULL_uA must be max=10.0 with no test (Full documented)")
-    if any(str(s.get("test") or "") == "delta_icc" for s in specs.values()):
-        errors.append("rs1gt34 must not judge delta_icc until ICCT mapped")
+    dicc = specs.get("DELTA_ICC_uA") or {}
+    if round(float(dicc.get("max") or 0), 6) != 500.0 or str(dicc.get("test") or "") != "delta_icc":
+        errors.append("rs1gt34 DELTA_ICC_uA must be max=500 test=delta_icc (ICCT Full)")
+    ioff = specs.get("Ioff_uA") or {}
+    if round(float(ioff.get("max") or 0), 6) != 1.0 or ioff.get("test"):
+        errors.append("rs1gt34 Ioff_uA must be documented without test (VCC=0; not IOZ)")
     dc = m.dc_limits if isinstance(m.dc_limits, dict) else {}
-    for which in ("voh", "vol", "ii", "icc"):
+    for which in ("voh", "vol", "ii", "icc", "delta_icc"):
         block = dc.get(which) if isinstance(dc.get(which), dict) else {}
         st = str(block.get("status") or "")
-        if str(st).strip().upper() != "UNCONFIRMED" or is_datasheet_signed(st):
-            errors.append(f"rs1gt34 dc_limits.{which} must stay UNCONFIRMED, got {st!r}")
+        if not is_datasheet_signed(st):
+            errors.append(f"rs1gt34 dc_limits.{which} must be CONFIRMED, got {st!r}")
+    icct = dc.get("ICCT_uA") if isinstance(dc.get("ICCT_uA"), dict) else {}
+    try:
+        one = float(icct.get("one_input_V"))
+        vcc_icct = float(icct.get("vcc"))
+        full = float(icct.get("Full") or icct.get("full") or 0)
+    except (TypeError, ValueError):
+        one = vcc_icct = full = None
+    if one != 3.4 or vcc_icct != 5.5 or full != 500.0:
+        errors.append(
+            f"rs1gt34 ICCT_uA must be 500uA @5.5 one_in@3.4, got {icct}"
+        )
+    if str(icct.get("map_to") or "").strip().lower() != "delta_icc":
+        errors.append("rs1gt34 ICCT_uA.map_to must be delta_icc")
     if lookup_pass_mode(m, "voh", "voh") != "min_only":
         errors.append("rs1gt34 pass_mode voh must be min_only")
     if lookup_pass_mode(m, "vol", "vol") != "max_only":
         errors.append("rs1gt34 pass_mode vol must be max_only")
     if lookup_pass_mode(m, "ii", "ii") != "max_only":
         errors.append("rs1gt34 pass_mode ii must be max_only")
+    if lookup_pass_mode(m, "delta_icc", "delta_icc") != "max_only":
+        errors.append("rs1gt34 pass_mode delta_icc must be max_only")
     if (m.recipe or {}).get("delta_offset_v") is not None:
-        errors.append("rs1gt34 must not invent recipe.delta_offset_v")
+        errors.append("rs1gt34 must not invent recipe.delta_offset_v (ICCT uses one_input_V=3.4)")
     if lookup_pass_mode(m, "VIH", "input_threshold") != "min_only":
         errors.append("rs1gt34 pass_mode VIH must be min_only")
     if lookup_pass_mode(m, "VIL", "input_threshold") != "max_only":
         errors.append("rs1gt34 pass_mode VIL must be max_only")
+    search = (m.recipe or {}).get("search") if isinstance(m.recipe, dict) else {}
+    if not isinstance(search, dict) or not search:
+        errors.append("rs1gt34 recipe.search missing (limit-scaled first step, on-hit skip, no reverse)")
+    else:
+        vih = search.get("vih") if isinstance(search.get("vih"), dict) else {}
+        vil = search.get("vil") if isinstance(search.get("vil"), dict) else {}
+        if not vih.get("no_reverse_in_stage") or str(vih.get("direction") or "") != "up":
+            errors.append("rs1gt34 recipe.search.vih must be up + no_reverse_in_stage")
+        if not vil.get("no_reverse_in_stage") or str(vil.get("direction") or "") != "down":
+            errors.append("rs1gt34 recipe.search.vil must be down + no_reverse_in_stage")
+        on_hit = search.get("on_hit") if isinstance(search.get("on_hit"), dict) else {}
+        if not on_hit.get("skip_rest_of_walk"):
+            errors.append("rs1gt34 recipe.search.on_hit.skip_rest_of_walk must be true")
     from ate.tests.logic.excel_lock import (
         WORKBOOK_POLICY,
         ULTIMATE_POLICY,
+        PRETTY_POLICY,
         bound_series_ids,
         excel_plots_status,
         golden_auto_policy,
+        pretty_policy,
         ultimate_manual_policy,
         workbook_policy,
     )
 
     if golden_auto_policy(m) != WORKBOOK_POLICY:
         errors.append(
-            f"rs1gt34 workbook_policy.golden_auto must be {WORKBOOK_POLICY}, got {golden_auto_policy(m)!r}"
+            f"rs1gt34 workbook_policy.auto/golden_auto must be {WORKBOOK_POLICY}, got {golden_auto_policy(m)!r}"
         )
     if ultimate_manual_policy(m) != ULTIMATE_POLICY:
         errors.append(
             f"rs1gt34 workbook_policy.ultimate_manual must be {ULTIMATE_POLICY}, got {ultimate_manual_policy(m)!r}"
         )
+    if pretty_policy(m) != PRETTY_POLICY:
+        errors.append(
+            f"rs1gt34 workbook_policy.pretty must be {PRETTY_POLICY} (never auto), got {pretty_policy(m)!r}"
+        )
     if workbook_policy(m) != WORKBOOK_POLICY:
         errors.append(
             f"rs1gt34 workbook_policy golden_auto token must be {WORKBOOK_POLICY}, got {workbook_policy(m)!r}"
         )
-    if excel_plots_status(m).upper() != "UNCONFIRMED":
-        errors.append(
-            f"rs1gt34 excel_plots.status must stay UNCONFIRMED, got {excel_plots_status(m)!r}"
-        )
+    plots_st = excel_plots_status(m).upper()
+    if plots_st and plots_st != "CONFIRMED":
+        errors.append(f"rs1gt34 excel_plots.status must be CONFIRMED, got {excel_plots_status(m)!r}")
     bound = bound_series_ids(m)
     if "ioz_vs_vcc" in bound:
         errors.append("rs1gt34 excel_plots must not bind ioz_vs_vcc (oe none)")
-    if "delta_icc_vs_vcc" in bound:
-        errors.append("rs1gt34 excel_plots must not bind delta_icc_vs_vcc until ICCT mapped")
+    if "delta_icc_vs_vcc" not in bound:
+        errors.append("rs1gt34 excel_plots must bind delta_icc_vs_vcc (ICCT mapped)")
     want_series = {
         "vih_vs_vcc",
         "vil_vs_vcc",
         "icc_vs_vcc",
+        "delta_icc_vs_vcc",
         "ii_vs_vcc",
         "voh_at_ioh",
         "vol_at_iol",
@@ -971,43 +1011,25 @@ def _rs1gt34_draft_ok() -> list[str]:
         part_key="rs1gt34",
     )
     if judged.get("result") == "pass":
-        errors.append("rs1gt34 UNCONFIRMED VIH must not green as PASS (fail-closed)")
-    judged_voh = enrich_measurement(
-        {
-            "id": "VOH_2p0V_100uA",
-            "value": 1.95,
-            "min": 1.9,
-            "pass_mode": "min_only",
-            "greenable": False,
-        },
-        test_id="voh",
-        part_key="rs1gt34",
-    )
-    if judged_voh.get("result") == "pass":
-        errors.append("rs1gt34 UNCONFIRMED VOH must not green as PASS (fail-closed)")
-    judged_ii = enrich_measurement(
-        {
-            "id": "II_uA",
-            "value": 0.2,
-            "max": 1.0,
-            "pass_mode": "max_only",
-            "greenable": False,
-        },
-        test_id="ii",
-        part_key="rs1gt34",
-    )
-    if judged_ii.get("result") == "pass":
-        errors.append("rs1gt34 UNCONFIRMED II must not green as PASS (fail-closed)")
+        errors.append("Verify FAIL bar: unsigned/greenable=False VIH must not green as PASS")
     if claimed_signed_without_datasheet("UNCONFIRMED"):
         errors.append("UNCONFIRMED must not look signed")
     op_txt = _OPERATOR_DOC.read_text(encoding="utf-8") if _OPERATOR_DOC.is_file() else ""
     if "VOH/VOL unloaded" in op_txt:
-        errors.append("LOGIC_DC_OPERATOR.md must not say RS1GT34 VOH/VOL unloaded (DRAFT tables exist)")
+        errors.append("LOGIC_DC_OPERATOR.md must not say RS1GT34 VOH/VOL unloaded")
+    if "DRAFT / UNCONFIRMED until JH CONFIRM" in op_txt:
+        errors.append(
+            "LOGIC_DC_OPERATOR.md must promote RS1GT34 to CONFIRMED (Jian Hong 2026-09-18)"
+        )
     if "ICCT" not in op_txt or "3.4" not in op_txt:
         errors.append(
-            "LOGIC_DC_OPERATOR.md must name ICCT 500uA @5.5V input@3.4V as unmapped "
+            "LOGIC_DC_OPERATOR.md must name ICCT 500uA @5.5V one_in@3.4 "
             "(do not invent delta_offset_v=0.6)"
         )
+    if "pretty" not in op_txt.lower() or "never auto" not in op_txt.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must name dual Excel: auto overwrite Version; pretty never auto")
+    if "threshold_search" not in op_txt and "recipe.search" not in op_txt:
+        errors.append("LOGIC_DC_OPERATOR.md must name recipe.search / threshold_search")
     owners = Path(__file__).resolve().parents[1] / "config" / "owners.yaml"
     inv = Path(__file__).resolve().parents[1] / "config" / "inventory.yaml"
     if "chun_tak" not in owners.read_text(encoding="utf-8"):
@@ -1020,9 +1042,188 @@ def _rs1gt34_draft_ok() -> list[str]:
         errors.append("logic_dc.py input_threshold must apply per-VCC limits from vcc_grid")
     if "PSU_MSO" not in src:
         errors.append("logic_dc.py must keep YAML pin_drive on PSU_MSO (do not steal AWG CH1)")
+    if "threshold_search" not in src or "run_search_stage" not in src:
+        errors.append("logic_dc.py must wire recipe.search via threshold_search")
+    if "one_input_V" not in src:
+        errors.append("logic_dc.py delta_icc must use ICCT one_input_V (not invent 0.6)")
     model_src = _MODEL.read_text(encoding="utf-8")
     if "merge_vcc_grid" not in model_src or "lookup_vcc_grid_limits" not in model_src:
         errors.append("product_model must merge vcc_grid fixed+ranges and lookup per-VCC limits")
+    return errors
+
+
+def _threshold_search_ok() -> list[str]:
+    """Verify FAIL bars: reverse search, first step > |limit|, on-hit skip, invent 0.6, ioz, unsigned green."""
+    from ate.core.specs import enrich_measurement
+    from ate.tests.logic import logic_dc as ldc
+    from ate.tests.logic.excel_lock import PRETTY_POLICY, is_ultimate_path, pretty_policy
+    from ate.tests.logic.threshold_search import (
+        SearchError,
+        SearchReverseError,
+        first_step,
+        run_search_stage,
+        stage_points,
+        step_ladder,
+    )
+
+    errors: list[str] = []
+    if not _THRESHOLD_SEARCH.is_file():
+        return ["threshold_search.py missing (recipe.search helper)"]
+    errors += _no_part_name_ifs(_THRESHOLD_SEARCH)
+    ladder = [0.5, 0.2, 0.1, 0.05, 0.01]
+    if abs(first_step(ladder, 1.0) - 0.5) > 1e-12:
+        errors.append(
+            f"Verify FAIL bar: VIH |limit| 1.0 first_step must be 0.5, got {first_step(ladder, 1.0)}"
+        )
+    if abs(first_step(ladder, 0.3) - 0.2) > 1e-12:
+        errors.append(
+            f"Verify FAIL bar: VIL |limit| 0.3 first_step must be 0.2 not 0.5, got {first_step(ladder, 0.3)}"
+        )
+    try:
+        first_step([1.0, 0.8], 0.3)
+        errors.append("Verify FAIL bar: first step > |limit| must FAIL (no invent smaller than ladder)")
+    except SearchError:
+        pass
+    except Exception as exc:
+        errors.append(
+            f"first step > |limit| must raise SearchError, got {type(exc).__name__}: {exc}"
+        )
+    try:
+        stage_points(1.0, 0.0, 0.1, True)
+        errors.append("Verify FAIL bar: VIH reverse (end < arm) must raise SearchReverseError")
+    except SearchReverseError:
+        pass
+    except Exception as exc:
+        errors.append(
+            f"VIH reverse must raise SearchReverseError, got {type(exc).__name__}: {exc}"
+        )
+    try:
+        stage_points(0.0, 1.0, 0.1, False)
+        errors.append("Verify FAIL bar: VIL reverse (end > arm) must raise SearchReverseError")
+    except SearchReverseError:
+        pass
+    except Exception as exc:
+        errors.append(
+            f"VIL reverse must raise SearchReverseError, got {type(exc).__name__}: {exc}"
+        )
+    m = load_product_model("rs1gt34")
+    if m is None:
+        errors.append("rs1gt34 product_model missing for recipe.search SIM")
+        return errors
+    search = (m.recipe or {}).get("search") if isinstance(m.recipe, dict) else {}
+    if not isinstance(search, dict) or not search:
+        errors.append("rs1gt34 recipe.search missing for threshold_search SIM")
+        return errors
+    try:
+        lad = step_ladder(search)
+    except SearchError as exc:
+        errors.append(f"rs1gt34 recipe.search ladder: {exc}")
+        return errors
+    lim20 = lookup_vcc_grid_limits(m, 2.0) or {}
+    try:
+        vih_first = first_step(lad, lim20.get("VIH_min_V"))
+        vil_first = first_step(lad, lim20.get("VIL_max_V"))
+    except SearchError as exc:
+        errors.append(f"rs1gt34 first_step from vcc_grid: {exc}")
+        vih_first = vil_first = None
+    if vih_first is not None and abs(vih_first - 0.5) > 1e-12:
+        errors.append(
+            f"Verify FAIL bar: rs1gt34 VIH@2.0 |limit| 1.0 first_step must be 0.5, got {vih_first}"
+        )
+    if vil_first is not None and abs(vil_first - 0.2) > 1e-12:
+        errors.append(
+            f"Verify FAIL bar: rs1gt34 VIL@2.0 |limit| 0.3 first_step must be 0.2 not 0.5, got {vil_first}"
+        )
+    blob = dict(search)
+    on_hit = dict(blob.get("on_hit") if isinstance(blob.get("on_hit"), dict) else {})
+    on_hit["skip_rest_of_walk"] = True
+    on_hit["next_smaller_step"] = False
+    blob["on_hit"] = on_hit
+
+    def _vih(vin: float) -> float:
+        return 2.0 if float(vin) >= 1.15 else 0.0
+
+    r = run_search_stage(
+        _vih, vcc=2.0, rising=True, limit=1.0, search=blob, y_expect="track"
+    )
+    if r.first_step is not None and abs(r.first_step - 0.5) > 1e-12:
+        errors.append(f"search first_step VIH must be 0.5, got {r.first_step}")
+    if any(abs(float(v) - 2.0) < 1e-9 for v in r.visited):
+        errors.append(
+            "Verify FAIL bar: on-hit skip must not visit VCC after coarse VIH hit"
+        )
+    noskip = dict(blob)
+    on_hit_n = dict(on_hit)
+    on_hit_n["skip_rest_of_walk"] = False
+    noskip["on_hit"] = on_hit_n
+    r_n = run_search_stage(
+        _vih, vcc=2.0, rising=True, limit=1.0, search=noskip, y_expect="track"
+    )
+    if not any(abs(float(v) - 2.0) < 1e-9 for v in r_n.visited):
+        errors.append("SIM control: without skip, coarse VIH walk must still reach VCC")
+    rev = dict(search)
+    vih_rev = dict(rev.get("vih") if isinstance(rev.get("vih"), dict) else {})
+    vih_rev["direction"] = "down"
+    rev["vih"] = vih_rev
+    try:
+        run_search_stage(
+            lambda _v: 0.0, vcc=2.0, rising=True, limit=1.0, search=rev, y_expect="track"
+        )
+        errors.append("Verify FAIL bar: reverse VIH search must raise SearchReverseError")
+    except SearchReverseError:
+        pass
+    except Exception as exc:
+        errors.append(
+            f"reverse VIH search must raise SearchReverseError, got {type(exc).__name__}: {exc}"
+        )
+    force = ldc._delta_force_v(m, 5.5)
+    if abs(float(force) - 3.4) > 1e-9:
+        errors.append(f"rs1gt34 delta_icc force must be ICCT one_in 3.4, got {force}")
+    if abs(float(force) - 4.9) < 1e-9:
+        errors.append("Verify FAIL bar: invent 0.6 (VCC-0.6) must not be the ICCT force")
+    try:
+        vccs = ldc._delta_vccs(_params(part="rs1gt34", vcc=5.5), m)
+    except Exception as exc:
+        errors.append(f"rs1gt34 _delta_vccs: {type(exc).__name__}: {exc}")
+        vccs = []
+    if [round(float(x), 6) for x in vccs] != [5.5]:
+        errors.append(f"rs1gt34 ICCT vcc must restrict delta_icc to [5.5], got {vccs}")
+    try:
+        ldc._run_ioz(None, _params(part="rs1gt34", vcc=5.0))
+        errors.append("Verify FAIL bar: ioz on rs1gt34 (oe none) must raise")
+    except RuntimeError as exc:
+        if "not applicable" not in str(exc).lower() and "oe is none" not in str(exc).lower():
+            errors.append(f"ioz rs1gt34 should say oe is none / not applicable, got {exc!r}")
+    except Exception as exc:
+        errors.append(f"ioz rs1gt34 must raise RuntimeError, got {type(exc).__name__}: {exc}")
+    judged = enrich_measurement(
+        {
+            "id": "VIH_2p0V",
+            "value": 1.5,
+            "min": 1.0,
+            "pass_mode": "min_only",
+            "greenable": False,
+        },
+        test_id="input_threshold",
+        part_key="rs1gt34",
+    )
+    if judged.get("result") == "pass":
+        errors.append(
+            "Verify FAIL bar: unsigned/greenable=False VIH must not green as PASS"
+        )
+    if pretty_policy(m) != PRETTY_POLICY:
+        errors.append(
+            f"Verify FAIL bar: pretty must be {PRETTY_POLICY} (never auto), got {pretty_policy(m)!r}"
+        )
+    if not is_ultimate_path("pretty.xlsx"):
+        errors.append("Verify FAIL bar: pretty.xlsx must never be an auto dest")
+    src = _LOGIC_DC.read_text(encoding="utf-8")
+    if "run_search_stage" not in src or "threshold_search" not in src:
+        errors.append("logic_dc.py must call threshold_search.run_search_stage")
+    load_family("logic")
+    th = get("input_threshold")
+    if th is None or th.run is not ldc._run_input_threshold:
+        errors.append("input_threshold.run must stay logic_dc._run_input_threshold")
     return errors
 
 
@@ -1108,9 +1309,17 @@ def _operator_doc_ok() -> list[str]:
     if "PSU_MSO" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must document PSU_MSO (hide Freq/Amp)")
     if "RS1GT34" not in text:
-        errors.append("LOGIC_DC_OPERATOR.md must checklist RS1GT34 DRAFT")
-    if "UNCONFIRMED until JH CONFIRM" not in text:
-        errors.append("LOGIC_DC_OPERATOR.md must say RS1GT34 numbers are UNCONFIRMED until JH CONFIRM")
+        errors.append("LOGIC_DC_OPERATOR.md must checklist RS1GT34")
+    if "2026-09-18" not in text or "CONFIRMED" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must say RS1GT34 CONFIRMED Jian Hong 2026-09-18")
+    if "pretty" not in text.lower() or "never auto" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must name dual Excel auto overwrite / pretty never auto")
+    if "recipe.search" not in text and "threshold_search" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name recipe.search / threshold_search")
+    if "DRAFT / UNCONFIRMED until JH CONFIRM" in text:
+        errors.append(
+            "LOGIC_DC_OPERATOR.md must not keep RS1GT34 DRAFT / UNCONFIRMED until JH CONFIRM"
+        )
     if "data_paths" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must document data_paths")
     if "invent nets" not in text.lower() and "invent a net" not in text.lower():
@@ -1290,7 +1499,7 @@ def _panel_ok() -> list[str]:
         if str(schema.get("ocr", {}).get("engine") or "").lower() != "paddleocr":
             errors.append("card_fields.schema.yaml ocr.engine must be paddleocr")
         keys = panel_save_keys()
-        for need in ("pins", "recipe", "recipe.stable_eps_A", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid", "excel_plots", "workbook_policy"):
+        for need in ("pins", "recipe", "recipe.stable_eps_A", "recipe.search", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid", "excel_plots", "workbook_policy"):
             if need not in keys:
                 errors.append(f"panel_save_keys missing {need}")
     except Exception as exc:
@@ -1425,7 +1634,7 @@ def _handoff_ok() -> list[str]:
     errors: list[str] = []
     wraps = Path(__file__).resolve().parents[1] / "tests" / "logic" / "wraps.py"
     runner = Path(__file__).resolve().parents[1] / "core" / "runner.py"
-    for part in ("rs1g97", "rs1g126"):
+    for part in ("rs1g97", "rs1g126", "rs1gt34"):
         m = load_product_model(part)
         if m is None:
             errors.append(f"{part} product_model missing for AE/FAE handoff")
@@ -1538,6 +1747,8 @@ def _excel_lock_ok() -> list[str]:
         errors.append("excel_lock.py must split golden_auto vs ultimate_manual")
     if "never_auto_write" not in src:
         errors.append("excel_lock.py must name never_auto_write")
+    if "PRETTY_POLICY" not in src or "pretty" not in src:
+        errors.append("excel_lock.py must name pretty never auto")
     runner_src = Path(__file__).resolve().parents[1] / "core" / "runner.py"
     rtxt = runner_src.read_text(encoding="utf-8")
     if "bind_golden_auto" not in rtxt or "coerce_golden_auto_lab_report" not in rtxt:
@@ -1577,6 +1788,10 @@ def _excel_lock_ok() -> list[str]:
             errors.append(
                 f"{part} workbook_policy.ultimate_manual must be {el.ULTIMATE_POLICY}, got {el.ultimate_manual_policy(m)!r}"
             )
+        if el.pretty_policy(m) != el.PRETTY_POLICY:
+            errors.append(
+                f"{part} workbook_policy.pretty must be {el.PRETTY_POLICY} (never auto), got {el.pretty_policy(m)!r}"
+            )
         if not el.uses_excel_lock(m):
             errors.append(f"{part} must bind excel_plots + workbook_policy")
         errors.extend(el.binding_errors(m, list(enabled_tests_for_part(part) or [])))
@@ -1585,10 +1800,10 @@ def _excel_lock_ok() -> list[str]:
         errors.append("rs1g08 must keep sheet_map paste.values (no Path B excel_lock)")
     m34 = load_product_model("rs1gt34")
     if m34 is not None:
-        if el.excel_plots_status(m34).upper() != "UNCONFIRMED":
-            errors.append("rs1gt34 excel_plots.status must be UNCONFIRMED")
+        if el.excel_plots_status(m34).upper() not in ("", "CONFIRMED"):
+            errors.append("rs1gt34 excel_plots.status must be CONFIRMED")
         stripped = replace(
-            m34, excel_plots={"status": "UNCONFIRMED", "series": ["vih_vs_vcc"]}
+            m34, excel_plots={"status": "CONFIRMED", "series": ["vih_vs_vcc"]}
         )
         miss = el.binding_errors(
             stripped,
@@ -1602,7 +1817,7 @@ def _excel_lock_ok() -> list[str]:
         illegal = replace(
             m34,
             excel_plots={
-                "status": "UNCONFIRMED",
+                "status": "CONFIRMED",
                 "series": [
                     "vih_vs_vcc",
                     "vil_vs_vcc",
@@ -1615,10 +1830,13 @@ def _excel_lock_ok() -> list[str]:
                 ],
             },
         )
-        bad = el.binding_errors(illegal, list(enabled_tests_for_part("rs1gt34") or []))
+        en34 = list(enabled_tests_for_part("rs1gt34") or [])
+        bad = el.binding_errors(illegal, en34)
         if not any("ioz" in e for e in bad):
             errors.append("ioz_vs_vcc on oe=none must FAIL")
-        if not any("delta_icc" in e for e in bad):
+        no_delta = [x for x in en34 if str(x).strip().lower() != "delta_icc"]
+        bad_d = el.binding_errors(illegal, no_delta)
+        if not any("delta_icc" in e for e in bad_d):
             errors.append("delta_icc_vs_vcc when not enabled must FAIL")
     m97 = load_product_model("rs1g97")
     if m97 is not None:
@@ -1785,6 +2003,8 @@ def _excel_lock_ok() -> list[str]:
             errors.append("header_allowed must reject invented G16/GBW columns")
         if not el.is_ultimate_path(Path("ultimate_manual.xlsx")):
             errors.append("is_ultimate_path must match filename-only ultimate_manual.xlsx")
+        if not el.is_ultimate_path(Path("pretty.xlsx")):
+            errors.append("is_ultimate_path must match filename-only pretty.xlsx")
         if not el.is_ultimate_path("jot_book.xlsx") or not el.is_ultimate_path("all-test.xlsx"):
             errors.append("is_ultimate_path must match jot / all-test filename tokens")
         if el.is_ultimate_path(Path("RS1GT34_Lab_Report_SOT23-5.xlsx")):
@@ -1820,6 +2040,17 @@ def _excel_lock_ok() -> list[str]:
             errors.append(
                 f"ultimate proposed path must raise UltimateWorkbook, got {type(exc).__name__}: {exc}"
             )
+        pretty = ctx.workbook_dir() / "pretty.xlsx"
+        extra_p = _WB()
+        extra_p.save(pretty)
+        extra_p.close()
+        if pretty.name in [p.name for p in el.golden_xlsx(ctx.workbook_dir())]:
+            errors.append("golden_xlsx must exclude pretty (never auto)")
+        fourth = el.write_path_b_workbook(ctx=ctx, model=m, report=report)
+        if el.is_ultimate_path(third["excel"]) or el.is_ultimate_path(fourth["excel"]):
+            errors.append("auto write must not target pretty/ultimate")
+        if Path(fourth["excel"]).resolve() == pretty.resolve():
+            errors.append("auto write path == pretty")
         class _SheetCtx:
             def __init__(self, inner):
                 self._inner = inner
@@ -1853,6 +2084,10 @@ def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
     errors += _no_part_name_ifs(_MODEL)
+    if _THRESHOLD_SEARCH.is_file():
+        errors += _no_part_name_ifs(_THRESHOLD_SEARCH)
+    else:
+        errors.append("ate/tests/logic/threshold_search.py missing")
     if _DC_ALIAS.is_file():
         errors += _no_part_name_ifs(_DC_ALIAS)
     else:
@@ -1865,7 +2100,8 @@ def check_logic_dc() -> list[str]:
     errors += _status_tokens_ok()
     errors += _rs1g97_holds()
     errors += _buf126_ok()
-    errors += _rs1gt34_draft_ok()
+    errors += _rs1gt34_ok()
+    errors += _threshold_search_ok()
     errors += _enabled_voh_vol_tables_ok()
     errors += _scale_and_overlay_ok()
     errors += _seelim_wrap_ok()

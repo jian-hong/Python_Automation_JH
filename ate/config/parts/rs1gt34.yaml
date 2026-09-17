@@ -1,7 +1,8 @@
-# RS1GT34 Logic buffer -- Path B DRAFT / UNCONFIRMED.
-# Numbers UNCONFIRMED until JH CONFIRM -- fail-closed for numbers green.
-# Copy from RS1GT34_card_DRAFT only. Do not invent extra loads / nets / 0.6.
-# No ioz (oe none). delta_icc disabled until JH CONFIRM maps ICCT.
+# RS1GT34 Logic buffer -- Path B CONFIRMED.
+# CONFIRMED_BY: Jian Hong @ 2026-09-18. Source: RS1GT34_card_CONFIRMED.md
+# LIVE session_2026-09-17_174350 measured; formal unlock = this CONFIRM.
+# Copy from attached CONFIRMED product_model. Do not invent extra loads / nets / 0.6.
+# No ioz (oe none). delta_icc ON -- ICCT 500uA @5.5 one_in@3.4 (not VCC-0.6).
 # Owner: Chun Tak / Core AE OK.
 
 part: RS1GT34
@@ -22,10 +23,9 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
-# UNCONFIRMED DRAFT card VOH/VOL. 100uA band expanded onto merged vcc_list
+# CONFIRMED VOH/VOL. 100uA band VCC-0.1 on merged vcc_list
 # (fixed 2.0/3.3 + range 4.5-5.5 step 0.1). High-load only at card-named VCC.
 # VOH min = VCC-0.1 at 100uA. PSU CH2 is Y-load (pin Y; Path B fixture).
-# Not Datasheet-signed. Not greenable.
 voh_table:
   - {id: VOH_2p0V_100uA, vcc: 2.0, ioh_a: -0.0001, spec_min: 1.9}
   - {id: VOH_3p3V_100uA, vcc: 3.3, ioh_a: -0.0001, spec_min: 3.2}
@@ -66,47 +66,51 @@ vol_table:
   - {id: VOL_5p5V_32mA, vcc: 5.5, iol_a: 0.032, spec_max: 0.45}
 
 # Path B DC ids. n=1 Y=A. No ioz (oe none). No vth (not Schmitt).
-# delta_icc off until JH CONFIRM maps ICCT (500uA @5.5V input@3.4V).
+# delta_icc ON -- ICCT mapped (500uA @5.5V one_in@3.4V). Do not invent 0.6.
 enabled_tests:
   - input_threshold
   - icc
   - ii
   - voh
   - vol
+  - delta_icc
 
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1GT34 / Path B DRAFT)"
+    label: "Logic board (RS1GT34 / Path B CONFIRMED)"
     board_class: general
     checklist:
-      - "RS1GT34 is a single non-inverting buffer. Path B DRAFT. UNCONFIRMED until JH CONFIRM. Not a bench green."
+      - "RS1GT34 is a single non-inverting buffer. Path B CONFIRMED Jian Hong 2026-09-18. This console check is not a Verify PASS claim."
       - "PSU_MSO: PSU CH1=VCC; PSU CH2=Y-load for voh/vol (pin Y, Path B fixture); PSU CH3=A; DMM/SCOPE on Y. NC not wired. Do not invent AWG Freq/Amp."
-      - "vcc_grid DRAFT: fixed 2.0 (VIH>=1.0 VIL<=0.3) / 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Numbers not greenable."
-      - "voh/vol UNCONFIRMED DRAFT tables (100uA on merged vcc_list + named high-load). II +/-1uA +25C judged; Full +/-5uA documented. ICC 1uA/+25C judged; Full 10uA documented."
-      - "delta_icc disabled until JH CONFIRM maps ICCT (500uA @5.5V input@3.4V). Do not invent delta_offset_v=0.6."
-      - "oe none: do not enable ioz. n=1. Owner Chun Tak / Core AE OK."
+      - "vcc_grid CONFIRMED: fixed 2.0 (VIH>=1.0 VIL<=0.3) / 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8)."
+      - "voh/vol CONFIRMED tables (100uA on merged vcc_list + named high-load). II +/-1uA +25C judged; Full +/-5uA documented. ICC 1uA/+25C judged; Full 10uA documented."
+      - "delta_icc ON: ICCT 500uA @5.5V one_in@3.4V. Do not invent delta_offset_v=0.6."
+      - "oe none: do not enable ioz. n=1. Owner Chun Tak / Core AE OK. Excel: auto overwrite Version; pretty never auto."
     tests:
       - input_threshold
       - icc
       - ii
       - voh
       - vol
+      - delta_icc
 
 product_model:
   part: RS1GT34
-  status: UNCONFIRMED
-  source_card: RS1GT34_card_DRAFT
-  truth_table_status: UNCONFIRMED
-  isolation_status: UNCONFIRMED
+  status: CONFIRMED
+  confirmed_by: Jian Hong
+  confirmed_at: "2026-09-18"
+  source_card: RS1GT34_card_CONFIRMED.md
+  truth_table_status: CONFIRMED
+  isolation_status: CONFIRMED
   schmitt: false
   oe: none
   output_pin: Y
   vcc_op_min: 2.0
   vcc_op_max: 5.5
   vcc_op_status: RANGE_METADATA
-  vcc_list_status: UNCONFIRMED
+  vcc_list_status: CONFIRMED
   logic_inputs: [A]
-  # DRAFT card: SOT23-5 1=NC 2=A 3=GND 4=Y 5=VCC
+  # CONFIRMED card: SOT23-5 1=NC 2=A 3=GND 4=Y 5=VCC
   pins:
     - {name: NC, role: nc, number: 1}
     - {name: A, role: input, number: 2}
@@ -115,15 +119,16 @@ product_model:
     - {name: VCC, role: vcc, number: 5}
   pin_drive:
     A: {src: psu, ch: 3}
+    VCC: {src: psu, ch: 1}
   vcc_grid:
-    status: UNCONFIRMED
+    status: CONFIRMED
     stimulus: PSU_MSO
     pass_mode: {VIH: min_only, VIL: max_only}
     fixed_points:
       - {vcc: 2.0, VIH_min_V: 1.0, VIL_max_V: 0.3}
       - {vcc: 3.3, VIH_min_V: 1.5, VIL_max_V: 0.55}
     ranges:
-      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min_V: 2.0, VIL_max_V: 0.8}
+      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min_V: 2.0, VIL_max_V: 0.8, label: "4.5-5.5 band"}
   recipe:
     threshold_step_v: 0.05
     settle_s: 0.05
@@ -132,11 +137,21 @@ product_model:
     stable_eps_A: null  # current settle: null = NON_TIGHT; do not invent uA
     settle_timeout_s: 2.0
     icc_corners: 2  # 2^1
-    # recipe.delta_offset_v omitted -- ICCT is 500uA @5.5V input@3.4V, not VCC-0.6
+    # recipe.delta_offset_v omitted -- ICCT is 500uA @5.5 one_in@3.4, not VCC-0.6
+    search:
+      status: PROPOSED_FROM_LIVE
+      vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
+      vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
+      step_ladder_V: [0.5, 0.2, 0.1, 0.05, 0.01]
+      step_select: "largest step compatible with card |limit|"
+      on_hit: {skip_rest_of_walk: true, rearm: true, restart_fraction_back: 0.3, next_smaller_step: true}
+      after_precision: {interpolate: true, skip_to: next_test_or_vcc}
+      coverage_order: [input_threshold, icc, ii, voh, vol, delta_icc]
   pass_mode:
     VIH: min_only
     VIL: max_only
     icc: max_only
+    delta_icc: max_only
     ii: max_only
     voh: min_only
     vol: max_only
@@ -144,20 +159,29 @@ product_model:
     VIH: min_only
     VIL: max_only
     icc: max_only
+    delta_icc: max_only
     ii: max_only
     voh: min_only
     vol: max_only
   dc_limits:
-    icc: {spec_id: ICC_uA, limit_mode: max_only, status: UNCONFIRMED, note: "DRAFT card +25C 1uA judged; Full 10uA documented not run-judge"}
-    delta_icc: {status: UNCONFIRMED, note: "disabled until JH CONFIRM maps ICCT 500uA @5.5V input@3.4V; do not invent delta_offset_v=0.6"}
-    ii: {spec_id: II_uA, limit_mode: max_only, status: UNCONFIRMED, note: "DRAFT card +/-1uA +25C judged; Full +/-5uA documented not run-judge"}
-    voh: {status: UNCONFIRMED, note: "wired UNCONFIRMED DRAFT IOH grid; PSU CH2 Y-load; not greenable"}
-    vol: {status: UNCONFIRMED, note: "wired UNCONFIRMED DRAFT IOL grid; PSU CH2 Y-load; not greenable"}
-    input_threshold: {status: UNCONFIRMED, note: "VIH/VIL from vcc_grid DRAFT; not Datasheet-signed"}
+    icc: {spec_id: ICC_uA, limit_mode: max_only, status: CONFIRMED, plus25C_max: 1.0, Full: 10.0}
+    delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only, status: CONFIRMED, map_from: ICCT_uA}
+    ICCT_uA:
+      status: CONFIRMED
+      Full: 500.0
+      vcc: 5.5
+      one_input_V: 3.4
+      map_to: delta_icc
+      pass_mode: max_only
+    ii: {spec_id: II_uA, limit_mode: max_only, status: CONFIRMED, plus25C_max: 1.0, Full: 5.0}
+    Ioff_uA: {plus25C_max: 1.0, Full: 10.0, note: "VCC=0; not IOZ"}
+    voh: {status: CONFIRMED, note: "CONFIRMED IOH grid; PSU CH2 Y-load"}
+    vol: {status: CONFIRMED, note: "CONFIRMED IOL grid; PSU CH2 Y-load"}
+    input_threshold: {status: CONFIRMED, note: "VIH/VIL from vcc_grid CONFIRMED"}
   wire_map:
     source: pins+pin_drive
-    status: UNCONFIRMED
-    note: "From DRAFT pins + pin_drive. PSU CH1=VCC. PSU CH2=Y-load (pin Y; voh/vol). PSU CH3=A. NC not wired. Do not invent AWG nets."
+    status: EDITABLE
+    note: "From CONFIRMED pins + pin_drive. PSU CH1=VCC. PSU CH2=Y-load (pin Y; voh/vol). PSU CH3=A. NC not wired. Do not invent AWG nets."
     psu:
       CH1: {pin: VCC, number: 5, role: vcc}
       CH2: {pin: Y, number: 4, role: output, use: load}
@@ -169,6 +193,10 @@ product_model:
         dmm: Y
         scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
       icc:
+        psu: [CH1, CH3]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      delta_icc:
         psu: [CH1, CH3]
         dmm: VCC
         scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
@@ -197,32 +225,34 @@ product_model:
     attach: "{test}/DUT_n/"
   workbook_policy:
     golden_auto: one_per_version_overwrite
+    auto: one_per_version_overwrite
     ultimate_manual: never_auto_write
+    pretty: never_auto_write
   excel_plots:
-    status: UNCONFIRMED
+    status: CONFIRMED
     series:
       - vih_vs_vcc
       - vil_vs_vcc
       - icc_vs_vcc
+      - delta_icc_vs_vcc
       - ii_vs_vcc
       - voh_at_ioh
       - vol_at_iol
-  # DRAFT card: n=1 Y=A (non-inverting buffer). UNCONFIRMED until JH CONFIRM.
+  # CONFIRMED card: n=1 Y=A (non-inverting buffer). Jian Hong 2026-09-18.
   truth_table:
-    status: UNCONFIRMED
-    source: "DRAFT card n=1 Y=A; not Datasheet-signed"
+    status: CONFIRMED
+    source: "RS1GT34 RevA.1.1 §4"
     rows:
       - {A: L, Y: L}
       - {A: H, Y: H}
   isolation:
-    status: UNCONFIRMED
-    source: "derived from truth_table (Y=A); UNCONFIRMED"
+    status: CONFIRMED
+    source: "derived from truth_table (Y=A); CONFIRMED"
     tests:
       A:
         - {sweep_pin: A, fix: {}, y_expect: track}
   gaps:
-    - "DRAFT / UNCONFIRMED until JH CONFIRM -- numbers not greenable"
-    - "voh_table/vol_table copied from DRAFT card (UNCONFIRMED); 100uA on merged vcc_list; high-load only at named VCC"
-    - "delta_icc disabled until JH CONFIRM maps ICCT (500uA @5.5V input@3.4V) -- do not invent delta_offset_v=0.6"
-    - "oe=none: do not enable ioz/ioff"
-    - "PSU_MSO: hide Freq/Amp; do not invent AWG nets"
+    - "stable_eps_A null -- NON_TIGHT current settle until AE sets"
+    - "IOZ OFF (no OE)"
+    - "ICCT maps to delta_icc: 500uA @5.5 one_in@3.4 -- do not invent delta_offset_v=0.6"
+

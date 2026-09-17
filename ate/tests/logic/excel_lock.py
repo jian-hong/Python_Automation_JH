@@ -21,10 +21,11 @@ from ate.tests.logic.product_model import ProductModel, icc_pins
 
 WORKBOOK_POLICY = "one_per_version_overwrite"
 ULTIMATE_POLICY = "never_auto_write"
+PRETTY_POLICY = ULTIMATE_POLICY
 
-# Filename / folder tokens that mark the jot book. Do not write auto runs there.
+# Filename / folder tokens that mark the jot / pretty book. Do not write auto runs there.
 _ULTIMATE_RX = re.compile(
-    r"(ultimate(_?manual)?|(^|[^a-z0-9])jot([^a-z0-9]|$)|all[-_]?test)",
+    r"(ultimate(_?manual)?|(^|[^a-z0-9])(jot|pretty)([^a-z0-9]|$)|all[-_]?test)",
     re.I,
 )
 
@@ -119,37 +120,59 @@ class UltimateWorkbook(RuntimeError):
 
 
 def workbook_policy_map(model: ProductModel | None) -> dict[str, str]:
+    """auto = golden_auto overwrite Version; pretty = never auto (ultimate_manual)."""
     if model is None:
         return {}
+    out: dict[str, str] = {}
     raw = getattr(model, "workbook_policy", None)
     if isinstance(raw, dict):
-        return {
+        out = {
             str(k).strip(): str(v or "").strip()
             for k, v in raw.items()
             if str(k).strip()
         }
-    if isinstance(raw, str) and raw.strip():
-        return {"golden_auto": raw.strip()}
-    plots = getattr(model, "excel_plots", None)
-    if isinstance(plots, dict):
-        nested = plots.get("policy") or plots.get("workbook_policy")
-        if isinstance(nested, dict):
-            return {
-                str(k).strip(): str(v or "").strip()
-                for k, v in nested.items()
-                if str(k).strip()
-            }
-        if nested not in (None, ""):
-            return {"golden_auto": str(nested).strip()}
-    return {}
+    elif isinstance(raw, str) and raw.strip():
+        out = {"golden_auto": raw.strip()}
+    else:
+        plots = getattr(model, "excel_plots", None)
+        if isinstance(plots, dict):
+            nested = plots.get("policy") or plots.get("workbook_policy")
+            if isinstance(nested, dict):
+                out = {
+                    str(k).strip(): str(v or "").strip()
+                    for k, v in nested.items()
+                    if str(k).strip()
+                }
+            elif nested not in (None, ""):
+                out = {"golden_auto": str(nested).strip()}
+    ga = str(out.get("golden_auto") or out.get("auto") or "").strip()
+    um = str(out.get("ultimate_manual") or out.get("pretty") or "").strip()
+    if ga:
+        out.setdefault("golden_auto", ga)
+        out.setdefault("auto", ga)
+    if um:
+        out.setdefault("ultimate_manual", um)
+        out.setdefault("pretty", um)
+    return out
 
 
 def golden_auto_policy(model: ProductModel | None) -> str:
-    return str(workbook_policy_map(model).get("golden_auto") or "").strip()
+    mp = workbook_policy_map(model)
+    return str(mp.get("golden_auto") or mp.get("auto") or "").strip()
+
+
+def auto_policy(model: ProductModel | None) -> str:
+    return golden_auto_policy(model)
 
 
 def ultimate_manual_policy(model: ProductModel | None) -> str:
-    return str(workbook_policy_map(model).get("ultimate_manual") or "").strip()
+    mp = workbook_policy_map(model)
+    return str(mp.get("ultimate_manual") or mp.get("pretty") or "").strip()
+
+
+def pretty_policy(model: ProductModel | None) -> str:
+    mp = workbook_policy_map(model)
+    return str(mp.get("pretty") or mp.get("ultimate_manual") or "").strip()
 
 
 def workbook_policy(model: ProductModel | None) -> str:
@@ -197,7 +220,12 @@ def policy_errors(model: ProductModel | None) -> list[str]:
         )
     if um != ULTIMATE_POLICY:
         errors.append(
-            f"{part}: workbook_policy.ultimate_manual must be {ULTIMATE_POLICY!r}, got {um!r}"
+            f"{part}: workbook_policy.ultimate_manual/pretty must be {ULTIMATE_POLICY!r}, got {um!r}"
+        )
+    pretty = pretty_policy(model)
+    if pretty != PRETTY_POLICY:
+        errors.append(
+            f"{part}: workbook_policy.pretty must be {PRETTY_POLICY!r} (never auto), got {pretty!r}"
         )
     return errors
 
@@ -645,7 +673,9 @@ def _write_setup(ws: Any, model: ProductModel) -> None:
         ("oe", model.oe_mode),
         ("workbook_policy", workbook_policy_map(model) or {"golden_auto": WORKBOOK_POLICY}),
         ("golden_auto", golden_auto_policy(model) or WORKBOOK_POLICY),
+        ("auto", golden_auto_policy(model) or WORKBOOK_POLICY),
         ("ultimate_manual", ultimate_manual_policy(model) or ULTIMATE_POLICY),
+        ("pretty", pretty_policy(model) or PRETTY_POLICY),
         ("vcc_list", list(model.vcc_list)),
         ("vcc_grid", dict(model.vcc_grid or {})),
         ("pass_mode", dict(model.pass_mode)),

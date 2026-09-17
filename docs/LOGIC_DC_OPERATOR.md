@@ -69,7 +69,7 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 
 1. Product-model schema load (`ate/config/parts/<key>.yaml` `product_model` / `logic_dc:`). Isolation derives from `truth_table` (Y tracks the swept pin; invert only if no track combo).
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
-3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **DRAFT / UNCONFIRMED until JH CONFIRM** -- numbers are not greenable.
+3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **CONFIRMED** (Jian Hong 2026-09-18) for the status gate only -- that is not a bench green.
 4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, stimulus PSU_MSO vs AWG, n) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` only (`vcc_grid`, merged `vcc_list`, `pass_mode` VIH=min_only / VIL=max_only, `sample_size`, `stable_eps_A`). Not xyflow. Visual tables still write pass_mode on the limits table.
 5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4. Timeout SIM raises. **Not a reproduce claim.**
 
@@ -84,14 +84,14 @@ After each PSU VCC switch and pin force: **PSU -> settle -> measure**. Voltage m
 | Id | Sense (from `logic_dc.py` INSTRUMENT_SENSE) | Notes |
 |----|-----------------------------------------------|-------|
 | ICC | DMM-on-VCC (DMM in series with PSU CH1 / DUT VCC) | All `2^n` corners. Null `stable_eps_A` = NON_TIGHT. Overlay amps for tight settle-to-stable |
-| ΔICC | DMM-on-VCC; one input at VCC-offset, others at rail | Needs `recipe.delta_offset_v` (97/126: 0.6). Do not invent the offset |
+| ΔICC | DMM-on-VCC; one input at VCC-offset or ICCT voltage, others at rail | 97/126: `recipe.delta_offset_v` 0.6. 34: ICCT 500uA @5.5V one_in@3.4 (`dc_limits.ICCT_uA`) -- do not invent 0.6 |
 | II | DMM in series with the swept input; force VI | Per input, VI=0 and VI=max |
-| VTH / VIH / VIL | Force unused ties from truth_table; DMM sense V(Y) | 97 Schmitt = VT+/VT- (range). 126 = VIH min_only / VIL max_only. 34 DRAFT: per-VCC limits from `vcc_grid` (UNCONFIRMED until JH CONFIRM -- not greenable) |
-| VOH | Force Y=H from truth_table; DMM sense V(Y); IOH via PSU CH2 | Loaded rows from `voh_table` (97/126 CONFIRMED; 34 UNCONFIRMED DRAFT). Judge **VOH >= min** (`min_only`) |
-| VOL | Force Y=L from truth_table; DMM sense V(Y); IOL via PSU CH2 | Loaded rows from `vol_table` (97/126 CONFIRMED; 34 UNCONFIRMED DRAFT). Judge **VOL <= max** (`max_only`) |
+| VTH / VIH / VIL | Force unused ties from truth_table; DMM sense V(Y) | 97 Schmitt = VT+/VT- (range). 126 = VIH min_only / VIL max_only. 34 CONFIRMED: per-VCC limits from `vcc_grid`; `recipe.search` / `threshold_search` (limit-scaled first step, on-hit skip, no reverse) |
+| VOH | Force Y=H from truth_table; DMM sense V(Y); IOH via PSU CH2 | Loaded rows from `voh_table` (97/126/34 CONFIRMED). Judge **VOH >= min** (`min_only`) |
+| VOL | Force Y=L from truth_table; DMM sense V(Y); IOL via PSU CH2 | Loaded rows from `vol_table` (97/126/34 CONFIRMED). Judge **VOL <= max** (`max_only`) |
 | IOZ | Only if OE exists. OE inactive; DMM in series with Y; PSU CH2 force Vout | 126: yes. 97 `oe: none`: do **not** tick ioz |
 
-PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC -- fixture, not a datasheet Vref) when a `voh_table`/`vol_table` exists (97/126 CONFIRMED; RS1GT34 UNCONFIRMED DRAFT tables -- pin Y, not a new net). RS1G97 pin C is PSU CH3 (checklist: AWG CH1=A CH2=B). RS1G126: AWG CH1=A CH2=OE; no C. RS1GT34 DRAFT PSU_MSO: PSU CH1=VCC, PSU CH2=Y-load for `voh`/`vol`, PSU CH3=A; DMM/SCOPE on Y; NC not wired; **do not invent AWG Freq/Amp**.
+PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC -- fixture, not a datasheet Vref) when a `voh_table`/`vol_table` exists (97/126/34 CONFIRMED -- pin Y, not a new net). RS1G97 pin C is PSU CH3 (checklist: AWG CH1=A CH2=B). RS1G126: AWG CH1=A CH2=OE; no C. RS1GT34 CONFIRMED PSU_MSO: PSU CH1=VCC, PSU CH2=Y-load for `voh`/`vol`, PSU CH3=A; DMM/SCOPE on Y; NC not wired; **do not invent AWG Freq/Amp**.
 
 ## Customise Parameters (`vcc_grid`)
 
@@ -106,7 +106,7 @@ Setup **Logic DC recipe** -- Customise Parameters (no xyflow):
 
 Runner merges `fixed_points` + `ranges` -> `vcc_list`. Per-VCC VIH/VIL from the owning fixed point or range. Exact-VCC fixed points overwrite range-step ownership.
 
-Numbers on `vcc_grid` stay **UNCONFIRMED until JH CONFIRM** -- fail-closed for numbers green.
+YAML `vcc_grid.status` CONFIRMED is Datasheet-signed (97/126/34). Overlay edits cannot promote unsigned SKUs. New SKUs stay UNCONFIRMED -- fail-closed for numbers green.
 
 Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/`.
 
@@ -114,10 +114,10 @@ Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/
 
 **Split:** two books, two jobs.
 
-- **golden_auto** = the chosen campaign Version `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`. `workbook_policy.golden_auto: one_per_version_overwrite`. Continue / Open Session / START / Fill Excel always overwrite-in-place **that** book. JSON->Excel from card-backed field ids only. Plots as already specified. Setup shows CONFIRMED/UNCONFIRMED.
-- **ultimate_manual** = a separate all-test jot workbook. `workbook_policy.ultimate_manual: never_auto_write`. NEVER the auto target. Do not write Path B auto runs into ultimate. Do not invent columns.
+- **auto** / **golden_auto** = the chosen campaign Version `#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/`. `workbook_policy.auto` / `golden_auto: one_per_version_overwrite`. Continue / Open Session / START / Fill Excel always overwrite-in-place **that** book. JSON->Excel from card-backed field ids only. Plots as already specified. Setup shows CONFIRMED/UNCONFIRMED.
+- **pretty** / **ultimate_manual** = a separate jot / pretty workbook. `workbook_policy.pretty` / `ultimate_manual: never_auto_write`. pretty never auto. NEVER the auto target. Do not write Path B auto runs into pretty or ultimate. Do not invent columns.
 
-Same session always overwrites the same golden_auto xlsx. Never an orphan second Version book (`_filled.xlsx` or another golden name). If Excel has the golden file locked, Fill Excel **FAIL**s (orphan) -- do not save a second path. If the auto dest is the jot book, Fill Excel **FAIL**s (`ultimate`).
+Same session always overwrites the same golden_auto xlsx. Never an orphan second Version book (`_filled.xlsx` or another golden name). If Excel has the golden file locked, Fill Excel **FAIL**s (orphan) -- do not save a second path. If the auto dest is the jot / pretty book, Fill Excel **FAIL**s (`ultimate`).
 
 Campaign tree (same copy-ready Version folder as above):
 
@@ -154,9 +154,9 @@ Auto plots when series data exists (from those headers):
 
 Series ids only: `vih_vs_vcc`, `vil_vs_vcc`, `icc_vs_vcc`, `voh_at_ioh`, `vol_at_iol`, `ii_vs_vcc`, `ioz_vs_vcc` if OE; `vtplus_vs_vcc` / `vtminus_vs_vcc` / `dvt_vs_vcc` if Schmitt; `delta_icc_vs_vcc` only if enabled+mapped.
 
-**Results -> Fill Excel numbers** on Path B overwrites the one Version **golden_auto** xlsx (`write_path_b_workbook`). Continue / Open Session bind fill/plot to that Version path only. `check_logic_dc` FAIL-closes an auto write path that equals **ultimate_manual**, an orphan second Version xlsx, invented columns, or an enabled test with series data but no `excel_plots` binding.
+**Results -> Fill Excel numbers** on Path B overwrites the one Version **auto** / **golden_auto** xlsx (`write_path_b_workbook`). Continue / Open Session bind fill/plot to that Version path only. pretty never auto. `check_logic_dc` FAIL-closes an auto write path that equals **pretty** / **ultimate_manual**, an orphan second Version xlsx, invented columns, or an enabled test with series data but no `excel_plots` binding.
 
-RS1GT34 `excel_plots.status` stays **UNCONFIRMED until JH CONFIRM** -- numbers not greenable.
+RS1GT34 `excel_plots.status` is **CONFIRMED** (Jian Hong 2026-09-18). `delta_icc_vs_vcc` is bound (ICCT mapped). No `ioz_vs_vcc` (`oe: none`). That status gate is not a bench green.
 
 ### OpAmp / imported VOX (not Path B)
 
@@ -190,7 +190,7 @@ Zip operators: `START.bat` (from `ATE_Console_Try_*.zip` or the copy-ready Versi
 
 - UI: `http://127.0.0.1:5174`
 - Worker JSON-RPC: `http://127.0.0.1:8766` (not 8765)
-- After `git pull` / zip refresh: **Ctrl+F5** (`app.js?v=20260917logicdc11`)
+- After `git pull` / zip refresh: **Ctrl+F5** (`app.js?v=20260918logicdc12`)
 - After `ate/tests/**` / worker changes: idle-restart worker (`restart_ate_worker.bat`), not mid-run, then Ctrl+F5
 
 Pick a **person** (not All) -> Apply campaign -> Discover -> Open Session -> tick tests -> START.
@@ -207,7 +207,7 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 4. Tick Path B DC: `input_threshold` (and/or `vth`), `icc`, `delta_icc`, `ii`, `voh`, `vol`. 126 also tick `ioz`. 97 must **not** tick `ioz` / `ioff`.
 5. START (not DEMO). Confirm an unstable DMM **settle timeout hard-FAIL**s (RuntimeError / FAIL) when `stable_eps_A` is grounded, not a last-reading PASS. Recipe timeout 2.0 s. Null `stable_eps_A` is NON_TIGHT (wait `settle_s` once); do not invent uA. Tight-settle claims stay FAIL-closed until overlay/panel sets `stable_eps_A`.
 6. On a stable bench: Results / `report.json` -- **VOH >= min** vs CONFIRMED `voh_table` / limits (`min_only`); **VOL <= max** vs CONFIRMED `vol_table` (`max_only`). Do not invent extra loads. After run, Continue shows save paths (`workbook/` + `sessions/report.json` + STS datalog + `{test}/DUT_n/records/`). On FAIL, attach photo to `{test}/DUT_n/`.
-7. Fill Excel: Path B overwrites the Version **golden_auto** xlsx (`excel_plots` / `golden_auto: one_per_version_overwrite`). Never write **ultimate_manual**. Never an orphan second Version book. Imported VOX still uses sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
+7. Fill Excel: Path B overwrites the Version **auto** / **golden_auto** xlsx (`excel_plots` / `auto: one_per_version_overwrite`). pretty never auto. Never write **pretty** / **ultimate_manual**. Never an orphan second Version book. Imported VOX still uses sheet_map / campaign_outline (above). Export STS if needed. No Verify PASS claim from this checklist.
 
 **RS1G97 extra**
 
@@ -219,13 +219,15 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 - VIH min_only / VIL max_only. OE active high. IOZ when OE inactive (data don't-care; Vout sweep per recipe `ioz_vcc_list` / `ioz_vout_list` already on the card -- do not invent).
 - ICC corners = 4 (A+OE).
 
-**RS1GT34 extra (DRAFT / UNCONFIRMED until JH CONFIRM)**
+**RS1GT34 extra (CONFIRMED Jian Hong 2026-09-18 -- not a bench green)**
 
 - Console up via **START.bat**. Campaign `#Test_Database/Logic/RS1GT34/...`. Owner note: Chun Tak / Core AE OK.
-- n=1. Y=A. Not Schmitt. `oe: none` -- do **not** tick ioz.
+- n=1. Y=A. Not Schmitt. `oe: none` -- do **not** tick ioz / ioff (Ioff is VCC=0; not IOZ).
 - Stimulus **PSU_MSO** -- hide Freq/Amp. PSU CH1=VCC, PSU CH2=Y-load for `voh`/`vol` (pin Y), PSU CH3=A, DMM/SCOPE Y. Do not invent AWG nets.
-- Tick Path B DC: `input_threshold`, `icc`, `ii`, `voh`, `vol`. Do **not** tick `delta_icc` until JH CONFIRM maps ICCT (500uA @5.5V input@3.4V). Do not invent `delta_offset_v=0.6`.
-- VOH/VOL from UNCONFIRMED DRAFT `voh_table`/`vol_table` (100uA on merged `vcc_list`; high-load only at 2.0/3.3/4.5/5.0/5.5). Judge **VOH >= min** (`min_only`) / **VOL <= max** (`max_only`). Numbers not greenable.
+- Tick Path B DC: `input_threshold`, `icc`, `ii`, `voh`, `vol`, `delta_icc`. `delta_icc` ON: ICCT 500uA @5.5V one_in@3.4. Do not invent `delta_offset_v=0.6`.
+- `input_threshold` uses `recipe.search` / `threshold_search.py`: limit-scaled first step (largest ladder step <= card |limit|), on-hit skip rest of walk, no reverse in a stage (VIH arm 0 up; VIL arm VCC down).
+- VOH/VOL from CONFIRMED `voh_table`/`vol_table` (100uA on merged `vcc_list`; high-load only at 2.0/3.3/4.5/5.0/5.5). Judge **VOH >= min** (`min_only`) / **VOL <= max** (`max_only`).
 - II: +/-1uA +25C judged (`II_uA`); Full +/-5uA documented (`II_FULL_uA`, no run-judge). ICC: 1uA +25C judged (`ICC_uA`); Full 10uA documented (`ICC_FULL_uA`).
-- `vcc_grid` DRAFT: fixed 2.0 (VIH>=1.0 VIL<=0.3), 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Preview merged `vcc_list` before START. Numbers not greenable until JH CONFIRM.
+- `vcc_grid` CONFIRMED: fixed 2.0 (VIH>=1.0 VIL<=0.3), 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Preview merged `vcc_list` before START.
+- Excel: auto overwrite Version; pretty never auto.
 - ICC corners = 2 (A). START.bat first. No Verify PASS.

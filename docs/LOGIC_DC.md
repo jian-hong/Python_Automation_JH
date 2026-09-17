@@ -42,7 +42,7 @@ product_model:
     pass_mode: {VIH: min_only, VIL: max_only}
     fixed_points: [{vcc: 2.0, VIH_min_V: 1.0, VIL_max_V: 0.3}]
     ranges: [{start: 4.5, stop: 5.5, step: 0.1, VIH_min_V: 2.0, VIL_max_V: 0.8, label: optional}]
-    status: UNCONFIRMED   # numbers not greenable until JH CONFIRM
+    status: CONFIRMED       # Datasheet-signed; UNCONFIRMED is not greenable
   pins:
     - {name: A, role: input}
     - {name: Y, role: output}
@@ -58,17 +58,24 @@ product_model:
     settle_s: 0.3
     stable_eps_V: 0.005
     stable_eps_A: null  # current: null = NON_TIGHT (wait settle_s once); set amps for eps/N; do not invent uA
-    delta_offset_v: 0.6   # dICC; omit if datasheet has no dICC
+    delta_offset_v: 0.6   # dICC; omit if datasheet has ICCT one_input_V instead (do not invent 0.6)
+    search:               # optional; missing keeps threshold_step_v walk
+      vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
+      vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
+      step_ladder_V: [0.5, 0.2, 0.1, 0.05, 0.01]
+      on_hit: {skip_rest_of_walk: true, rearm: true, next_smaller_step: true}
   gaps: []                # honest UNSURE / PROVISIONAL notes
-  # AE/FAE handoff (97/126): wire_map from CONFIRMED pins+pin_drive only.
+  # AE/FAE handoff (97/126/34): wire_map from CONFIRMED pins+pin_drive only.
   # settle_prompt (show wait). data_paths folder templates -- never invent nets/cells.
   workbook_policy:
-    golden_auto: one_per_version_overwrite   # Version workbook/ overwrite-in-place
-    ultimate_manual: never_auto_write         # jot book -- never the auto target
+    auto: one_per_version_overwrite            # alias of golden_auto
+    golden_auto: one_per_version_overwrite      # Version workbook/ overwrite-in-place
+    pretty: never_auto_write                  # pretty never auto
+    ultimate_manual: never_auto_write          # jot book -- never the auto target
   excel_plots:
     series: [vih_vs_vcc, vil_vs_vcc, icc_vs_vcc, voh_at_ioh, vol_at_iol, ii_vs_vcc]
     # ioz_vs_vcc only if OE; vtplus/vtminus/dvt if Schmitt; delta_icc_vs_vcc if enabled+mapped
-    # RS1GT34: status UNCONFIRMED -- numbers not greenable
+    # RS1GT34: status CONFIRMED (Jian Hong 2026-09-18); delta_icc_vs_vcc bound; no ioz
 ```
 
 Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_list`; `threshold_isolation: [{sweep, hold, y_tracks}]`. Shared runner: `ate/tests/logic/logic_dc.py` (import-format alias `ate/tests/logic/dc.py` -- not a second fork).
@@ -78,14 +85,14 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 ### What the shared runner derives
 
 - **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4.
-- **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`. Per-VCC VIH min / VIL max come from `vcc_grid` (owning fixed point or range band). Range steps inherit band limits -- never a fixed-point row. `vcc_grid.status` UNCONFIRMED is not greenable.
+- **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`. Per-VCC VIH min / VIL max come from `vcc_grid` (owning fixed point or range band). Range steps inherit band limits -- never a fixed-point row. `vcc_grid.status` UNCONFIRMED is not greenable. When `recipe.search` is present, `threshold_search.py` walks VIH up / VIL down: limit-scaled first step, on-hit skip rest, no reverse. Missing search keeps `threshold_step_v`.
 - **II** -- per input, VI=0 and VI=max.
-- **Delta ICC** -- one input at VCC-offset. RS1GT34 keeps `delta_icc` **disabled** until JH CONFIRM maps ICCT (500uA @5.5V input@3.4V). Do not invent `delta_offset_v=0.6`.
+- **Delta ICC** -- one input at VCC-offset, or at `dc_limits.ICCT_uA.one_input_V` when ICCT is mapped. RS1GT34 enables `delta_icc` from ICCT (500uA @5.5V one_in@3.4). Do not invent `delta_offset_v=0.6`.
 - **IOZ** -- only when OE/3-state exists. Do not enable `ioz` / `ioff` on parts with `oe: none`.
-- **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126 use the CONFIRMED Full IOH/IOL grid (same table). RS1GT34 uses UNCONFIRMED DRAFT-card tables (100uA expanded onto merged `vcc_list`; high-load only at card-named VCC; not greenable). No invented extra loads. `check_logic_dc` FAIL-closes if `voh`/`vol` is enabled but the table has no rows. Unloaded only when the table is absent and the id is not enabled.
+- **VOH/VOL** -- loaded rows from `voh_table` / `vol_table`. RS1G97/RS1G126/RS1GT34 use CONFIRMED tables (34: 100uA expanded onto merged `vcc_list`; high-load only at card-named VCC). No invented extra loads. `check_logic_dc` FAIL-closes if `voh`/`vol` is enabled but the table has no rows. Unloaded only when the table is absent and the id is not enabled.
 - **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default. If `stable_eps_A` is set (panel / overlay), eps/N + hard timeout FAIL (never last-reading). If null: tight-settle claims stay FAIL-closed; honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle). Not a DC limit.
-- **AE/FAE Continue** -- every enabled Path B id surfaces `wire_map` (CONFIRMED pins + `pin_drive` only; never invent nets), stimulus, `settle_prompt` (show wait), measure + `pass_mode`, FAIL attach, then `data_paths` save folders. `check_logic_dc` FAIL-closes empty `wire_map` / missing `data_paths` on 97/126.
-- **Excel lock** -- `workbook_policy.golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. `workbook_policy.ultimate_manual: never_auto_write` -- the all-test jot book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` stays UNCONFIRMED.
+- **AE/FAE Continue** -- every enabled Path B id surfaces `wire_map` (CONFIRMED pins + `pin_drive` only; never invent nets), stimulus, `settle_prompt` (show wait), measure + `pass_mode`, FAIL attach, then `data_paths` save folders. `check_logic_dc` FAIL-closes empty `wire_map` / missing `data_paths` on 97/126/34.
+- **Excel lock** -- `workbook_policy.auto` / `golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. `workbook_policy.pretty` / `ultimate_manual: never_auto_write` -- pretty never auto. The jot/pretty book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == pretty/ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` is CONFIRMED.
 
 ### TestSpec <-> OOP (Part / Pin / TruthTable / Isolation / Limit / Recipe)
 
@@ -103,7 +110,7 @@ See Lim (`seelim_dc.py` locator) and Ariff (`ariff_dc.py` RS1G08-class `voh_load
 
 OCR: PaddleOCR maps each token onto one card field (assign/edit/delete on the Logic DC panel). Do not install Baidu unless asked.
 
-RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
+RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18; `RS1GT34_card_CONFIRMED.md`). New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
 
 ### Version overlay
 
@@ -152,7 +159,7 @@ python -m ate.core.check_specs_datalog
 python -m ate.core.check_ui_contract
 ```
 
-A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 stays UNCONFIRMED (DRAFT card). Enabled `voh`/`vol` without table rows FAIL the same gate. A Path B run that writes the **ultimate_manual** jot book, creates a second orphan Version xlsx, invents columns, or has enabled series data with no `excel_plots` binding, FAIL the same gate.
+A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18) and passes the same status gate. Enabled `voh`/`vol` without table rows FAIL the same gate. SIM FAIL bars: reverse search, first step > |limit|, auto dest == pretty, invent 0.6, ioz on oe=none, unsigned greenable=False greens PASS. A Path B run that writes the **pretty** / **ultimate_manual** jot book, creates a second orphan Version xlsx, invents columns, or has enabled series data with no `excel_plots` binding, FAIL the same gate.
 
 ## Do not
 
@@ -165,5 +172,5 @@ A green check that never could fail is not a check. Do not claim bench PASS from
 - Invent `delta_offset_v=0.6` for RS1GT34 ICCT
 - Invent a uA `stable_eps_A` default, or reuse `stable_eps_V` as amps
 - Touch `family_ingest` / `FAMILY_PACKAGES` for a new RS1Gxx
-- Invent Excel cells / plot series / a second Version xlsx, or auto-write the ultimate_manual jot book
+- Invent Excel cells / plot series / a second Version xlsx, or auto-write the pretty / ultimate_manual jot book
 - Claim Verify PASS / Datasheet-signed from an UNCONFIRMED table
