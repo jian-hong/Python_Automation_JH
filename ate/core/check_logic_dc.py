@@ -18,6 +18,7 @@ from ate.tests.logic.product_model import (
     has_product_model,
     isolation_for,
     is_datasheet_signed,
+    is_unconfirmed_status,
     claimed_signed_without_datasheet,
     load_part_yaml,
     load_product_model,
@@ -114,6 +115,41 @@ def _row_key(row: dict[str, str]) -> tuple[str, str, str, str]:
     return (row.get("A", ""), row.get("B", ""), row.get("C", ""), row.get("Y", ""))
 
 
+def _fail_closed_until_signed(part: str, m) -> list[str]:
+    """UNCONFIRMED / signed-looking tokens fail-close until Datasheet-signed CONFIRM."""
+    errors: list[str] = []
+    if claimed_signed_without_datasheet(m.truth_table_status):
+        errors.append(
+            f"{part} truth_table.status={m.truth_table_status!r} must not claim confirm "
+            "without Datasheet-signed"
+        )
+    if claimed_signed_without_datasheet(m.isolation_status):
+        errors.append(
+            f"{part} isolation.status={m.isolation_status!r} must not claim confirm "
+            "without Datasheet-signed"
+        )
+    if is_datasheet_signed(m.truth_table_status) and is_datasheet_signed(m.isolation_status):
+        return errors
+    errors.append(
+        f"{part} truth_table.status={m.truth_table_status} isolation.status={m.isolation_status} "
+        "UNCONFIRMED (not Datasheet-signed CONFIRM; not greenable)"
+    )
+    return errors
+
+
+def _status_tokens_ok() -> list[str]:
+    """from_datasheet_function_table is not Datasheet-signed and is not greenable."""
+    errors: list[str] = []
+    bogus = "from_datasheet_function_table"
+    if is_datasheet_signed(bogus):
+        errors.append("from_datasheet_function_table must not be treated as Datasheet-signed")
+    if not is_unconfirmed_status(bogus):
+        errors.append("from_datasheet_function_table must fail-close as UNCONFIRMED (not greenable)")
+    if not claimed_signed_without_datasheet(bogus):
+        errors.append("from_datasheet_function_table must not look signed/confirmed")
+    return errors
+
+
 def _rs1g97_holds() -> list[str]:
     """Data holds for RS1G97. Does not treat the table as Datasheet-signed.
 
@@ -170,23 +206,7 @@ def _rs1g97_holds() -> list[str]:
         der_sigs = {(tuple(sorted(p.fix.items())), p.y_expect) for p in a}
         if not yaml_sigs.issubset(der_sigs):
             errors.append("rs1g97 YAML isolation must match derive_isolation(truth_table)")
-    if claimed_signed_without_datasheet(m.truth_table_status):
-        errors.append(
-            f"rs1g97 truth_table.status={m.truth_table_status!r} must not claim confirm "
-            "without Datasheet-signed"
-        )
-    if claimed_signed_without_datasheet(m.isolation_status):
-        errors.append(
-            f"rs1g97 isolation.status={m.isolation_status!r} must not claim confirm "
-            "without Datasheet-signed"
-        )
-    if is_datasheet_signed(m.truth_table_status) and is_datasheet_signed(m.isolation_status):
-        pass
-    else:
-        errors.append(
-            f"rs1g97 truth_table.status={m.truth_table_status} isolation.status={m.isolation_status} "
-            "UNCONFIRMED (not Datasheet-signed CONFIRM; not greenable)"
-        )
+    errors += _fail_closed_until_signed("rs1g97", m)
     if lookup_pass_mode(m, "VTPLUS_V", "input_threshold") != "range":
         errors.append("rs1g97 pass_mode VT+ must be range")
     if lookup_pass_mode(m, "VTMINUS_V", "input_threshold") != "range":
@@ -216,6 +236,8 @@ def _rs1g97_holds() -> list[str]:
     if "_mux97_isolation_ok" in src or "_mux97_isolation_ok" in _MODEL.read_text(encoding="utf-8"):
         errors.append("_mux97_isolation_ok must not remain as a green gate")
     return errors
+
+
 def _buf126_ok() -> list[str]:
     errors: list[str] = []
     m = load_product_model("rs1g126")
@@ -243,6 +265,20 @@ def _buf126_ok() -> list[str]:
         errors.append("rs1g126 pass_mode VIH must be min_only")
     if lookup_pass_mode(m, "VIL_V", "input_threshold") != "max_only":
         errors.append("rs1g126 pass_mode VIL must be max_only")
+    raw = load_part_yaml("rs1g126")
+    pm = raw.get("product_model") if isinstance(raw.get("product_model"), dict) else {}
+    tt = pm.get("truth_table") if isinstance(pm.get("truth_table"), dict) else {}
+    iso = pm.get("isolation") if isinstance(pm.get("isolation"), dict) else {}
+    for label, st in (
+        ("truth_table.status", (tt or {}).get("status")),
+        ("isolation.status", (iso or {}).get("status")),
+        ("truth_table_status", pm.get("truth_table_status")),
+        ("isolation_status", pm.get("isolation_status")),
+    ):
+        token = str(st or "").strip().lower().replace("_", "-")
+        if "from-datasheet" in token:
+            errors.append(f"rs1g126 {label}={st!r} must not look signed (use UNCONFIRMED)")
+    errors += _fail_closed_until_signed("rs1g126", m)
     return errors
 
 
@@ -352,6 +388,7 @@ def check_logic_dc() -> list[str]:
     if not has_product_model("rs1g08") or not has_product_model("rs1g97"):
         errors.append("rs1g08 and rs1g97 must carry product_model schema")
     errors += _and_isolation_ok()
+    errors += _status_tokens_ok()
     errors += _rs1g97_holds()
     errors += _buf126_ok()
     errors += _seelim_wrap_ok()

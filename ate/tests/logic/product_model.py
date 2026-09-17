@@ -41,6 +41,8 @@ _UNCONFIRMED_STATUSES = frozenset(
         "OCR",
         "OCR-FIT",
         "REVERSE-ENGINEERED",
+        "FROM-DATASHEET-FUNCTION-TABLE",
+        "FROM DATASHEET FUNCTION TABLE",
     }
 )
 _PASS_MODES = frozenset({"range", "min_only", "max_only"})
@@ -68,6 +70,8 @@ def is_unconfirmed_status(status: Any) -> bool:
         return True
     if "UNCONFIRMED" in s or "PROVISIONAL" in s or "HOLD-CONFIRM" in token:
         return True
+    if "FROM-DATASHEET" in token:
+        return True
     return False
 
 
@@ -78,9 +82,12 @@ def claimed_signed_without_datasheet(status: Any) -> bool:
     s = _norm_status(status)
     if not s:
         return False
+    token = s.replace(" ", "-")
     if s in ("CONFIRM", "CONFIRMED", "SIGNED", "DATASHEET"):
         return True
     if s.startswith("CONFIRM") or s == "GREEN":
+        return True
+    if "FROM-DATASHEET" in token:
         return True
     return False
 

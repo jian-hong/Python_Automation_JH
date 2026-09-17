@@ -11,8 +11,8 @@ One shared Logic DC runner (`ate/tests/logic/logic_dc.py`) driven by `product_mo
 
 - Logic registry is one id namespace: do not register a second `voh`/`vol`/`icc`. Dispatch on product_model vs vcca/vccb.
 - Do not invent truth rows or VOH/VOL IOH/IOL numbers. 97 table is UNCONFIRMED. VOH/VOL for 97/126 stay PROVISIONAL.
-- check_logic_dc is FAIL-CLOSED while 97 is UNCONFIRMED. Do not print OK / claim green.
-- 126 unused data ties are UNSURE; only OE-active isolation for A.
+- check_logic_dc is FAIL-CLOSED while 97 or 126 is UNCONFIRMED. Do not print OK / claim green.
+- 126 unused data ties and truth_table.status are UNCONFIRMED (not from_datasheet_function_table). Only OE-active isolation for A.
 - ten/tdis stay AC on 126.
 - PSU CH2 is Y-load/vref; RS1G97 pin C is PSU CH3 (PROVISIONAL fixture map).
 - Single-rail parts must not inherit RS0204 `vccb` from LOGIC_TEST_DEFAULTS.
