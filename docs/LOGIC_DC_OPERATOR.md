@@ -1,6 +1,6 @@
 # Path B Logic DC -- operator
 
-**PR #5 HEAD SHA:** `137fd6f`
+**PR #5 HEAD SHA:** `ad089e2`
 
 This file is the bench/operator map. Writer/import format stays in `docs/LOGIC_DC.md`. Verify is a separate agent. This page is **not** a reproduce claim and does **not** claim Verify PASS / bench green.
 
