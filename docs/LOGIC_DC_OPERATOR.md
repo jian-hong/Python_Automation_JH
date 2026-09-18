@@ -75,7 +75,7 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
 3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **CONFIRMED** (Jian Hong 2026-09-18) for the status gate only -- that is not a bench green.
 4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (pin/wiring map labels, 2Gxx dual-channel Continue switch, FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, per-band limits + `pass_mode` range/min-only/max-only, stimulus PSU_MSO vs AWG, n) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (`vcc_plan` alias of `vcc_grid`, merged `vcc_list`, `pass_mode`, `sample_size`, `stable_eps_A`). PSU_MSO hides Freq/Amp. Not xyflow. Visual tables still write pass_mode on the limits table.
-5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4, rs1g07 open-drain n=1=2. Timeout SIM raises. **Not a reproduce claim.**
+5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free Path B catalog: `python -m ate.core.check_logic_dc_sim` (overlay one VCC; `stable_eps_A` null = NON_TIGHT; G07 VOH SKIP; sequential 2^n SKIP). Timeout SIM raises. **Not a reproduce claim.**
 
 DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure. START.bat is still how the zip console comes up.
 
@@ -273,5 +273,28 @@ Eight overnight models are **CONFIRMED** for grounded extract/card fields (truth
 3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL). VT+/- / dVT CONFIRMED. Enable voh/vol (push_pull + CONFIRMED SoT tables). Data retention MAX stays UNSURE (PDF MIN 1.5 only).
 4. RS1G32 OR-2 other=L. RS1GT08/RS1GT32 TTL VCC 2.0-5.5; ICCT one_in@3.4 (not 0.6). VOH/VOL CONFIRMED SoT 6-load (TTL 0.1mA band + named 8/24/32mA).
 5. RS1G125 OE active-L -> tick ioz when OE inactive only (`recipe.ioz_when: oe_inactive`; force OE=H, never active L). Enable voh/vol (three_state + CONFIRMED SoT). RS164 sequential_shift_register -- do not tick Path B gate 2^n; VOH/VOL stay UNCONFIRMED (do not expand).
+6. RS1G123 / RS1G74 are **UNCONFIRMED sequential stubs** (extract pins + VCC range only). Function table glyph-garbled -- do not invent truth rows. VOH/VOL 100uA formula glyph-stripped -- do not invent loads. Path B gate 2^n / ICC / dICC / II / VOH / VOL / IOZ stay off until a Datasheet card. 74 ICCT VCC-0.6 on extract is unsigned -- delta_icc off. 123 extract names Schmitt on A/B but VT+/- numbers are missing -- schmitt stays false.
 
 No Verify PASS.
+
+## Ready vs Not ready (SIM only -- not bench green)
+
+`python -m ate.core.check_logic_dc_sim` on Logic Reference product_model SKUs (skip OpAmp/LDO/Switch/Level). Visa-free. Fail-closed on invent / `stable_eps_A` null / glyph gaps.
+
+| Part | SIM | Live | Gaps / blocked |
+|------|-----|------|----------------|
+| RS1GT34 | SIM green | VOH LIVE_PASS; VOL NOT_RUN | VOL needs board change -- do not invent VOL. Not bench green for other ids |
+| RS1G08 | SIM green | none | excel_lock OFF; `stable_eps_A` null NON_TIGHT |
+| RS1G07 | SIM green | none | VOH SKIP N_A -- do not invent VOH. VOL live still NOT_RUN |
+| RS1G14 | SIM green | none | data retention MAX UNSURE |
+| RS1G32 | SIM green | none | `stable_eps_A` null |
+| RS1GT08 | SIM green | none | TTL ICCT 3.4 -- do not invent 0.6 |
+| RS1GT32 | SIM green | none | TTL ICCT 3.4 -- do not invent 0.6 |
+| RS1G125 | SIM green | none | IOZ @3.6V UNSURE this turn |
+| RS1G97 | SIM green | none | CONFIRMED status gate only -- not a bench green |
+| RS1G126 | SIM green | none | CONFIRMED status gate only -- not a bench green |
+| RS164 | SIM skip (sequential) | none | not combinational 2^n; VOH/VOL UNCONFIRMED; Ioff+ICCT ABSENT |
+| RS1G123 | Not ready Path B DC | none | UNCONFIRMED sequential monostable stub. Datasheet card needed: function table, VT+/-, VOH/VOL loads, VIH/VIL |
+| RS1G74 | Not ready Path B DC | none | UNCONFIRMED sequential DFF stub. Datasheet card needed: function table, VOH/VOL loads, VIH/VIL, ICCT map |
+
+Skipped non-logic Reference (OpAmp/LDO/Switch/Level): RS0204, RS0302, RS12X, RS22X, RS62X, RS72X, RS82X, RS2323, RS3213, RS32X.

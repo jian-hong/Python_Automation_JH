@@ -1050,8 +1050,12 @@ def _expand_voh_vol_loads(model: ProductModel, which: str) -> list[dict[str, Any
     return rows
 
 
-def _voh_vol_table(part_key: str, which: str) -> list[dict[str, Any]]:
-    model = load_product_model(part_key)
+def _voh_vol_table(
+    part_key: str, which: str, model: Optional[ProductModel] = None
+) -> list[dict[str, Any]]:
+    """CONFIRMED loads on the run model (overlay vcc_list wins for band expand)."""
+    if model is None:
+        model = load_product_model(part_key)
     if model is not None:
         expanded = _expand_voh_vol_loads(model, which)
         if expanded:
@@ -1108,7 +1112,7 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
     with path_b_handoff(params, model, "voh"):
         ilim = _current_limit(params, model)
         key = str(getattr(params, "part", "") or "").lower()
-        table = _voh_vol_table(key, "voh")
+        table = _voh_vol_table(key, "voh", model=model)
         rows: list[dict[str, Any]] = []
         meas: list[dict[str, Any]] = []
         try:
@@ -1195,7 +1199,7 @@ def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
     with path_b_handoff(params, model, "vol"):
         ilim = _current_limit(params, model)
         key = str(getattr(params, "part", "") or "").lower()
-        table = _voh_vol_table(key, "vol")
+        table = _voh_vol_table(key, "vol", model=model)
         rows: list[dict[str, Any]] = []
         meas: list[dict[str, Any]] = []
         try:

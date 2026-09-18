@@ -2,6 +2,7 @@
 
 | Date | File | Keywords |
 |------|------|----------|
+| 2026-09-18 | 2026-09-18_logic-dc-sim.md | path-b, logic-dc, sim, check_logic_dc_sim, rs1g123, rs1g74, sequential, UNCONFIRMED, visa-free, NON_TIGHT, G07 VOH N_A, VOL NOT_RUN |
 | 2026-09-18 | 2026-09-18_gt34-voh-live.md | path-b, logic-dc, rs1gt34, VOH, VOL, LIVE_PASS, NOT_RUN, golden_auto, sessions, min_only, product_model.live, scale, 2Gxx, dual_channel_continue |
 | 2026-09-18 | 2026-09-18_sot-voh-vol-confirmed.md | path-b, logic-dc, VOH, VOL, dc_limits, SoT, CONFIRMED, expand, push_pull, three_state, rs1g07, rs1g08, rs1g14, rs1g125, rs1gt34 |
 | 2026-09-17 | 2026-09-17_path-b-logic-dc.md | path-b, logic-dc, product_model, isolation, rs1g97, rs1gt34, CONFIRMED, pass_mode, ioz, schmitt, seelim, eugene-console, wire_map, data_paths, NON_TIGHT, vcc_grid, PSU_MSO, customise-parameters, excel-lock, one_per_version_overwrite, golden_auto, ultimate_manual, never_auto_write, pretty, csv, path_b_write, recipe.search, threshold_search, icct, open-drain, sequential, rs1g07, rs1g08, rs1g14, rs1g32, rs1gt08, rs1gt32, rs1g125, rs164, report.pdf, dual_channel_continue, datapoints.csv |

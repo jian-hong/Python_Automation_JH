@@ -1466,6 +1466,10 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must name sessions/path_b_write.json fill log")
     if "RS1G08" not in text or "RS1G07" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name next Path B stubs RS1G08 and RS1G07")
+    if "check_logic_dc_sim" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name python -m ate.core.check_logic_dc_sim")
+    if "RS1G123" not in text or "RS1G74" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name RS1G123 / RS1G74 sequential stubs")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -3107,6 +3111,123 @@ def _dual_channel_recipe_ok() -> list[str]:
     return errors
 
 
+_SEQ_STUB_SKUS = ("rs1g123", "rs1g74")
+
+
+def _seq_stub_ok() -> list[str]:
+    """UNCONFIRMED sequential stubs (123/74). Not combinational 2^n. Do not invent loads."""
+    from ate.tests.logic import logic_dc as ldc
+
+    errors: list[str] = []
+    load_family("logic")
+    seen: set[str] = set()
+    for path in sorted(PARTS_DIR.glob("*.yaml")):
+        part = path.stem.lower()
+        if not has_product_model(part):
+            continue
+        m = load_product_model(part)
+        if m is None or not is_sequential(m):
+            continue
+        if is_datasheet_signed(m.status):
+            continue
+        seen.add(part)
+        if part in _DRAFT_SCAFFOLD_SKUS:
+            errors.append(f"{part}: UNCONFIRMED sequential stub must not join CONFIRMED DRAFT scaffold")
+        if not is_unconfirmed_status(m.status):
+            errors.append(f"{part} sequential stub status must be UNCONFIRMED, got {m.status!r}")
+        if is_datasheet_signed(m.truth_table_status):
+            errors.append(f"{part} truth_table.status must stay UNCONFIRMED (glyph table; do not invent rows)")
+        if m.truth_table:
+            errors.append(f"{part} truth_table.rows must stay empty (do not invent sequential function rows)")
+        if not _isolation_na(m):
+            errors.append(f"{part} sequential isolation must be N_A, got {m.isolation_status!r}")
+        if m.schmitt:
+            errors.append(f"{part} schmitt must stay false until VT+/- card (do not invent)")
+        rec = m.recipe if isinstance(m.recipe, dict) else {}
+        if rec.get("stable_eps_A") is not None:
+            errors.append(f"{part} recipe.stable_eps_A must stay null (fail-closed; do not invent uA)")
+        if rec.get("delta_offset_v") is not None:
+            errors.append(f"{part} must not invent recipe.delta_offset_v")
+        if dual_channel_continue(m):
+            errors.append(f"{part} must not set dual_channel_continue (1Gxx; 2Gxx only)")
+        en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
+        for banned in ("icc", "delta_icc", "input_threshold", "vth", "voh", "vol", "ioz"):
+            if banned in en:
+                errors.append(f"{part}: sequential must not enable Path B {banned}")
+        plan = sim_icc_plan(m)
+        if int(plan.get("n") or 0) != 0:
+            errors.append(f"{part} sim_icc_plan n must be 0 (not combinational 2^n), got {plan}")
+        try:
+            ldc._run_icc(None, _params(part=part, vcc=5.0))
+            errors.append(f"Verify FAIL bar: icc on sequential {part} must raise")
+        except RuntimeError as exc:
+            msg = str(exc).lower()
+            if "sequential" not in msg and "2^n" not in msg and "2n" not in msg:
+                errors.append(f"icc {part} must say sequential / not 2^n, got {exc!r}")
+        except Exception as exc:
+            errors.append(f"icc {part} must raise RuntimeError, got {type(exc).__name__}: {exc}")
+        try:
+            ldc._run_delta_icc(None, _params(part=part, vcc=5.0))
+            errors.append(f"Verify FAIL bar: delta_icc on sequential {part} must raise")
+        except RuntimeError as exc:
+            if "sequential" not in str(exc).lower():
+                errors.append(f"delta_icc {part} must say sequential, got {exc!r}")
+        except Exception as exc:
+            errors.append(f"delta_icc {part} must raise RuntimeError, got {type(exc).__name__}: {exc}")
+        voh = _dc_block(m, "VOH", "voh")
+        vol = _dc_block(m, "VOL", "vol")
+        if voh.get("loads"):
+            errors.append(f"{part} UNCONFIRMED VOH must not carry loads (do not invent from glyph extract)")
+        if vol.get("loads"):
+            errors.append(f"{part} UNCONFIRMED VOL must not carry loads (do not invent from glyph extract)")
+        if ldc._voh_vol_table(part, "voh") or ldc._voh_vol_table(part, "vol"):
+            errors.append(f"{part} UNCONFIRMED VOH/VOL must not expand (fail-closed; do not invent)")
+        raw = load_part_yaml(part)
+        pm = raw.get("product_model") if isinstance(raw.get("product_model"), dict) else raw
+        src = str((pm or {}).get("source_extract") or "")
+        extract = Path(__file__).resolve().parents[2] / src if src else None
+        if not src or extract is None or not extract.is_file():
+            errors.append(f"{part} source_extract must point at an existing datasheet text extract")
+        gaps = " ".join(str(x) for x in (m.gaps or [])).lower()
+        if "datasheet" not in gaps:
+            errors.append(f"{part} gaps must say Datasheet card needed")
+        if "invent" not in gaps:
+            errors.append(f"{part} gaps must forbid inventing sequential / VOH-VOL rows")
+        if "glyph" not in gaps and "garbled" not in gaps:
+            errors.append(f"{part} gaps must name glyph-garbled extract (function table / 100uA)")
+        if claimed_signed_without_datasheet(m.status):
+            errors.append(f"{part} status must not look signed")
+    for need in _SEQ_STUB_SKUS:
+        if need not in seen:
+            errors.append(f"{need}: UNCONFIRMED sequential stub missing (Logic Reference)")
+    m123 = load_product_model("rs1g123")
+    if m123 is not None:
+        pc = str((m123.raw or {}).get("product_class") or "")
+        runner = str((m123.recipe or {}).get("runner") or "")
+        if "monostable" not in pc.lower() or "monostable" not in runner.lower():
+            errors.append("rs1g123 product_class/recipe.runner must be sequential_monostable")
+        if round(float(m123.vcc_op_min or 0), 6) != 2.0 or round(float(m123.vcc_op_max or 0), 6) != 5.5:
+            errors.append(f"rs1g123 VCC op must be extract 2.0-5.5, got {m123.vcc_op_min}..{m123.vcc_op_max}")
+        if set(m123.logic_inputs) != {"A", "B", "CLR"}:
+            errors.append(f"rs1g123 logic_inputs must be A/B/CLR from extract pins, got {m123.logic_inputs}")
+    m74 = load_product_model("rs1g74")
+    if m74 is not None:
+        pc = str((m74.raw or {}).get("product_class") or "")
+        runner = str((m74.recipe or {}).get("runner") or "")
+        if "dff" not in pc.lower() or "dff" not in runner.lower():
+            errors.append("rs1g74 product_class/recipe.runner must be sequential_dff")
+        if round(float(m74.vcc_op_min or 0), 6) != 1.65 or round(float(m74.vcc_op_max or 0), 6) != 5.5:
+            errors.append(f"rs1g74 VCC op must be extract 1.65-5.5, got {m74.vcc_op_min}..{m74.vcc_op_max}")
+        if set(m74.logic_inputs) != {"CLK", "D", "CLR", "PRE"}:
+            errors.append(f"rs1g74 logic_inputs must be CLK/D/CLR/PRE from extract pins, got {m74.logic_inputs}")
+        icct = _dc_block(m74, "ICCT_uA", "ICCT")
+        if str(icct.get("status") or "").upper().replace("-", "_") not in ("UNCONFIRMED", "ABSENT", "N_A", "NA"):
+            errors.append(f"rs1g74 ICCT must stay UNCONFIRMED/ABSENT (do not enable delta_icc), got {icct.get('status')!r}")
+        if icct.get("one_input_V") is not None or icct.get("offset_v") is not None:
+            errors.append("rs1g74 must not map ICCT VCC-0.6 into Path B delta_icc without a Datasheet card")
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -3143,6 +3264,10 @@ def check_logic_dc() -> list[str]:
     errors += _physics_fail_bars_ok()
     errors += _sts_latest_ok()
     errors += _dual_channel_recipe_ok()
+    errors += _seq_stub_ok()
+    from ate.core.check_logic_dc_sim import check_logic_dc_sim
+
+    errors += check_logic_dc_sim()
     load_family("opamp")
     return errors
 

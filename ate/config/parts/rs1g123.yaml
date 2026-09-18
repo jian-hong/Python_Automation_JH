@@ -23,4 +23,78 @@ fixture_modes:
     board_class: general
     checklist:
       - "RS1G123 is a monostable. Timing recipe is part-specific -- Wrap a golden if needed."
+      - "Path B sequential stub UNCONFIRMED -- do not tick gate 2^n ICC/VOH/VOL. Datasheet card needed."
     tests: [tp, supply_current]
+
+# UNCONFIRMED Path B stub. Sequential monostable -- not combinational 2^n.
+# Pins + VCC range from extract / limits. Function table glyph-garbled -- do not invent rows.
+# VOH/VOL 100uA formula glyph-stripped -- do not copy loads. Datasheet card needed.
+product_model:
+  part: RS1G123
+  status: UNCONFIRMED
+  source_extract: ate/config/datasheets/text/rs1g123.txt
+  package: VSSOP8
+  product_class: sequential_monostable
+  schmitt: false
+  oe: none
+  output_pin: Q
+  output_type: push_pull
+  vcc_op_min: 2.0
+  vcc_op_max: 5.5
+  vcc_op_status: RANGE_METADATA
+  logic_inputs:
+  - A
+  - B
+  - CLR
+  pins:
+  - {name: A, role: input, number: 1, note: "falling-edge; extract pin name glyph-stripped"}
+  - {name: B, role: input, number: 2}
+  - {name: CLR, role: input, number: 3, note: "Clear active-L from pin description"}
+  - {name: GND, role: gnd, number: 4}
+  - {name: Q, role: output, number: 5}
+  - {name: CEXT, role: nc, number: 6, note: "external capacitor only"}
+  - {name: REXT_CEXT, role: nc, number: 7, note: "external R/C; not a logic input"}
+  - {name: VCC, role: vcc, number: 8}
+  truth_table:
+    status: UNCONFIRMED
+    kind: sequential_functional
+    note: extract function table glyph-garbled; Datasheet card needed. Do not invent rows.
+    rows: []
+  isolation:
+    status: N_A
+    note: sequential monostable -- not gate isolation
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: PSU_MSO
+    note: recommended VIH/VIL table missing from extract; do not invent
+    fixed_points: []
+    ranges: []
+  pass_mode:
+    icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: 100uA formula glyph-stripped (VCC 0.1); do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: do not invent IOL rows from garbled extract
+    ICC_uA:
+      status: UNCONFIRMED
+      note: extract quiescent 20uA @5.5 -- Path A supply_current only; not gate 2^n
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: sequential_monostable
+  gaps:
+  - UNCONFIRMED stub -- Datasheet card needed; not a bench green
+  - sequential monostable -- Path B gate 2^n / ICC / dICC / VOH / VOL / II SKIP
+  - function table glyph-garbled -- do not invent truth rows
+  - VOH/VOL 100uA formula glyph-stripped -- do not invent loads
+  - recommended VIH/VIL table missing from extract -- do not invent
+  - extract names Schmitt on A/B; VT+/- numbers missing -- schmitt false until card
+  - stable_eps_A null

@@ -87,7 +87,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 
 ### What the shared runner derives
 
-- **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4, 07 open-drain n=1 = 2. Sequential (`product_class: sequential_shift_register`) is not combinational 2^n -- Path B gate ICC is FAIL-closed.
+- **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4, 07 open-drain n=1 = 2. Sequential (`product_class` / `recipe.runner` contains `sequential`, including RS164 shift-register and RS1G123 / RS1G74 UNCONFIRMED stubs) is not combinational 2^n -- Path B gate ICC is FAIL-closed.
 - **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`. Per-VCC VIH min / VIL max come from `vcc_grid` (owning fixed point or range band). Range steps inherit band limits -- never a fixed-point row. `vcc_grid.status` UNCONFIRMED is not greenable. When `recipe.search` is present, `threshold_search.py` walks VIH up / VIL down: limit-scaled first step, on-hit skip rest, no reverse. Missing search keeps `threshold_step_v`.
 - **II** -- per input, VI=0 and VI=max.
 - **Delta ICC** -- one input at VCC-offset, or at `dc_limits.ICCT_uA.one_input_V` when ICCT is mapped. RS1GT34 enables `delta_icc` from ICCT (500uA @5.5V one_in@3.4). Do not invent `delta_offset_v=0.6`. CMOS cards may map `ICCT_uA.offset_v` (on the card, not invented).
@@ -160,13 +160,14 @@ Default: AWG CH1..CH2 then PSU CH2, CH3. **PSU CH1 is VCC. PSU CH2 is Y-load/vre
 ```
 python -m ate.core.check_add_test
 python -m ate.core.check_logic_dc
+python -m ate.core.check_logic_dc_sim
 python -m ate.core.check_family_load
 python -m ate.core.check_test_detect
 python -m ate.core.check_specs_datalog
 python -m ate.core.check_ui_contract
 ```
 
-A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18) and passes the same status gate. G08/G07/G14/G32/GT08/GT32/G125/RS164 grounded truth/pins/isolation are CONFIRMED (Jian Hong 2026-09-17); vcc_grid CONFIRMED from SoT/card (Jian Hong 2026-09-18) unlocks the threshold numbers gate. Enabled `voh`/`vol` without table rows FAIL the same gate. SIM FAIL bars: reverse search, first step > |limit|, auto dest == pretty, invent 0.6, ioz on oe=none, unsigned greenable=False greens PASS. A Path B run that writes the **pretty** / **ultimate_manual** jot book, creates a second orphan Version xlsx, invents columns, or has enabled series data with no `excel_plots` binding, FAIL the same gate.
+A green check that never could fail is not a check. Do not claim bench PASS from SIM. Operator Ready vs Not ready (SIM green / sequential skip / stub gaps) lives in `docs/LOGIC_DC_OPERATOR.md`. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18) and passes the same status gate. G08/G07/G14/G32/GT08/GT32/G125/RS164 grounded truth/pins/isolation are CONFIRMED (Jian Hong 2026-09-17); vcc_grid CONFIRMED from SoT/card (Jian Hong 2026-09-18) unlocks the threshold numbers gate. RS1G123 / RS1G74 stay UNCONFIRMED sequential stubs (extract pins + VCC range only; glyph function table / 100uA formula -- do not invent). Enabled `voh`/`vol` without table rows FAIL the same gate. SIM FAIL bars: reverse search, first step > |limit|, auto dest == pretty, invent 0.6, ioz on oe=none, unsigned greenable=False greens PASS. A Path B run that writes the **pretty** / **ultimate_manual** jot book, creates a second orphan Version xlsx, invents columns, or has enabled series data with no `excel_plots` binding, FAIL the same gate.
 
 ## Do not
 
@@ -182,3 +183,4 @@ A green check that never could fail is not a check. Do not claim bench PASS from
 - Invent Excel cells / plot series / a second Version xlsx, or auto-write the pretty / ultimate_manual jot book
 - Invent a 2G part YAML without a Datasheet card
 - Claim Verify PASS / Datasheet-signed from an UNCONFIRMED table
+- Invent RS1G123 / RS1G74 function rows or VOH/VOL loads from glyph-garbled extract
