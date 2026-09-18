@@ -1,0 +1,104 @@
+# RS1G00 NAND-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
+# ate_ds_extract/models missing in workspace -- locks from JH scale-wave only.
+
+part: RS1G00
+model: RS1G00
+component: Logic
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+part_key: rs1g00
+product_class: logic
+vcc: 5.0
+current_limit: 0.05
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+enabled_tests:
+  - tp
+  - supply_current
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1G00 NAND)"
+    board_class: general
+    checklist:
+      - "RS1G00 NAND-2. UNCONFIRMED -- numbers HOLD. Do not copy G08 CMOS bands."
+      - "oe none. IOZ OFF. ICCT ABSENT -- delta_icc from delta_icc_uA only; do not invent offset_v."
+    tests: [tp, supply_current]
+
+product_model:
+  part: RS1G00
+  status: UNCONFIRMED
+  package: SC70-5
+  product_class: gate_nand2
+  schmitt: false
+  oe: none
+  output_pin: Y
+  output_type: push_pull
+  logic_inputs:
+  - A
+  - B
+  pins:
+  - {name: A, role: input}
+  - {name: B, role: input}
+  - {name: GND, role: gnd}
+  - {name: Y, role: output}
+  - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+  truth_table:
+    status: UNCONFIRMED
+    kind: combinational
+    note: NAND Y=NOT(A AND B). Function lock only. Numbers HOLD.
+    rows:
+    - {A: H, B: H, Y: L}
+    - {A: L, B: H, Y: H}
+    - {A: H, B: L, Y: H}
+    - {A: L, B: L, Y: H}
+  isolation:
+    status: UNCONFIRMED
+    note: NAND other=H -> invert. Do not copy G08 AND track.
+    tests:
+      A:
+      - {sweep_pin: A, fix: {B: H}, y_expect: invert}
+      B:
+      - {sweep_pin: B, fix: {A: H}, y_expect: invert}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: AWG
+    note: Numbers HOLD. Do not copy G08 CMOS 0.65/0.15.
+    ranges: []
+    fixed_points: []
+  pass_mode:
+    icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: do not invent loads
+    ICCT_uA:
+      status: ABSENT
+      note: ICCT ABSENT -- do not invent offset_v / one_input_V
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD. delta_icc from this block only; ICCT ABSENT is not a map
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: gate_nand2
+    dual_channel_continue: false
+  gaps:
+  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - NAND other=H invert; oe none; IOZ OFF
+  - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
+  - do not invent VOH/VOL loads
+  - stable_eps_A null

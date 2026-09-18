@@ -12,6 +12,6 @@ recipe:
 
 When `dual_channel_continue` is true, the runner ORs that flag onto Path B specs at run (registry stays `dual_channel=False`; do not wrap `TestSpec.run`). Operator Continue: Channel A, then Channel B. `recipe.channels` is the channel list. Default CHA then CHB when the flag is on and channels are omitted.
 
-1Gxx cards (RS1G97 / RS1G126 / RS1GT34 and overnight DRAFTs) leave the flag unset/false. Dual-channel Continue is **2Gxx only**.
+1Gxx cards (RS1G97 / RS1G126 / RS1GT34 / overnight CONFIRMED / next-wave G00/G02/G04/G86) leave the flag unset/false. Dual-channel Continue is **2Gxx only**.
 
-No fake `rs2g*.yaml` without a Datasheet card. No 2G models exist in this inventory -- Continue path is ready; do not invent cards.
+RS2G08 / RS2G32 are **UNCONFIRMED** stubs (`recipe.dual_channel_continue: true`, `channels: [CHA, CHB]`). Numbers HOLD. No CONFIRM. Do not invent OE/IOZ. Extra `rs2g*.yaml` without a Datasheet card stays forbidden. CONFIRMED unlock needs a Datasheet card.

@@ -1,0 +1,102 @@
+# RS1G02 NOR-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
+# TTL-style VIH/VIL (not G08 CMOS). Band numbers HOLD until Datasheet CONFIRM.
+
+part: RS1G02
+model: RS1G02
+component: Logic
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+part_key: rs1g02
+product_class: logic
+vcc: 5.0
+current_limit: 0.05
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+enabled_tests:
+  - tp
+  - supply_current
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1G02 NOR)"
+    board_class: general
+    checklist:
+      - "RS1G02 NOR-2. UNCONFIRMED -- numbers HOLD."
+      - "TTL-style VIH/VIL -- do not copy G08 CMOS 0.65/0.15 bands."
+    tests: [tp, supply_current]
+
+product_model:
+  part: RS1G02
+  status: UNCONFIRMED
+  package: SC70-5
+  product_class: gate_nor2
+  schmitt: false
+  oe: none
+  output_pin: Y
+  output_type: push_pull
+  logic_inputs:
+  - A
+  - B
+  pins:
+  - {name: A, role: input}
+  - {name: B, role: input}
+  - {name: GND, role: gnd}
+  - {name: Y, role: output}
+  - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+  truth_table:
+    status: UNCONFIRMED
+    kind: combinational
+    note: NOR Y=NOT(A OR B). Function lock only. Numbers HOLD.
+    rows:
+    - {A: L, B: L, Y: H}
+    - {A: H, B: L, Y: L}
+    - {A: L, B: H, Y: L}
+    - {A: H, B: H, Y: L}
+  isolation:
+    status: UNCONFIRMED
+    note: NOR other=L -> invert. Do not copy G32 OR track.
+    tests:
+      A:
+      - {sweep_pin: A, fix: {B: L}, y_expect: invert}
+      B:
+      - {sweep_pin: B, fix: {A: L}, y_expect: invert}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: AWG
+    kind: TTL
+    note: TTL-style VIH/VIL (not G08 CMOS 0.65*VCC / 0.15*VCC). Numbers HOLD.
+    ranges: []
+    fixed_points: []
+  pass_mode:
+    icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: do not invent loads
+    ICCT_uA:
+      status: ABSENT
+      note: do not invent ICCT
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: gate_nor2
+    dual_channel_continue: false
+  gaps:
+  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - NOR other=L invert; oe none; IOZ OFF
+  - TTL-style VIH/VIL -- do not copy G08 CMOS bands
+  - do not invent VOH/VOL / ICCT
+  - stable_eps_A null

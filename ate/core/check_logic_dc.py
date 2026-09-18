@@ -33,6 +33,7 @@ from ate.tests.logic.product_model import (
     isolation_for_run,
     is_datasheet_signed,
     is_open_drain,
+    is_parked,
     is_push_pull,
     is_sequential,
     is_three_state,
@@ -78,7 +79,7 @@ _PATH_B_IDS = (
     "ioz",
 )
 
-# CONFIRMED Path B SIM walk (JH 11). Archive 123/74 optional; missing does not block green.
+# CONFIRMED Path B SIM walk (JH 11). Archive 123/74 optional PARKED if present; missing does not block green.
 _CONFIRMED_SIM_PARTS = (
     "rs1gt34",
     "rs1g97",
@@ -93,6 +94,7 @@ _CONFIRMED_SIM_PARTS = (
     "rs164",
 )
 _ARCHIVE_SIM_PARTS = ("rs1g74", "rs1g123")
+_NEXT_WAVE_SKUS = ("rs1g00", "rs1g02", "rs1g04", "rs1g86", "rs2g08", "rs2g32")
 
 
 def _params(**kw):
@@ -1498,9 +1500,15 @@ def _operator_doc_ok() -> list[str]:
     if "check_logic_dc_sim" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name python -m ate.core.check_logic_dc_sim")
     if "RS1G123" not in text or "RS1G74" not in text:
-        errors.append("LOGIC_DC_OPERATOR.md must name RS1G123 / RS1G74 as dropped/archive")
+        errors.append("LOGIC_DC_OPERATOR.md must name RS1G123 / RS1G74 as dropped/archive PARKED")
     if "dropped" not in text.lower() and "archive" not in text.lower():
         errors.append("LOGIC_DC_OPERATOR.md must mark RS1G123 / RS1G74 dropped/archive (not Path B scale)")
+    if "PARKED" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must mark RS1G74 / RS1G123 PARKED")
+    if "RS1G00" not in text or "RS2G08" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name next-wave RS1G00 / RS2G08")
+    if "numbers HOLD" not in text and "Numbers HOLD" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must say next-wave numbers HOLD")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -3084,13 +3092,15 @@ def _sts_latest_ok() -> list[str]:
 
 
 def _dual_channel_recipe_ok() -> list[str]:
-    """Future 2Gxx Continue flag. No fake 2G YAML. Path B registry stays dual_channel=False."""
+    """2Gxx Continue flag. UNCONFIRMED 08/32 stubs only. Path B registry stays dual_channel=False."""
     errors: list[str] = []
-    fake2g = sorted(PARTS_DIR.glob("rs2g*.yaml"))
-    if fake2g:
-        errors.append(
-            f"must not invent 2G part YAML without Datasheet card, got {[p.name for p in fake2g]}"
-        )
+    extra2g = [
+        p.name
+        for p in sorted(PARTS_DIR.glob("rs2g*.yaml"))
+        if p.stem.lower() not in ("rs2g08", "rs2g32")
+    ]
+    if extra2g:
+        errors.append(f"must not invent extra 2G part YAML, got {extra2g}")
     schema_txt = CARD_FIELDS_SCHEMA_PATH.read_text(encoding="utf-8")
     if "recipe.dual_channel_continue" not in schema_txt or "recipe.channels" not in schema_txt:
         errors.append("card_fields.schema.yaml must name recipe.dual_channel_continue / recipe.channels")
@@ -3101,12 +3111,17 @@ def _dual_channel_recipe_ok() -> list[str]:
     rtxt = runner_src.read_text(encoding="utf-8")
     if "_apply_part_dual_channel" not in rtxt:
         errors.append("runner must honor recipe.dual_channel_continue (not hardcode OpAmp)")
-    for part in ("rs1g97", "rs1g126", "rs1gt34") + _DRAFT_SCAFFOLD_SKUS:
+    for part in ("rs1g97", "rs1g126", "rs1gt34") + _DRAFT_SCAFFOLD_SKUS + (
+        "rs1g00",
+        "rs1g02",
+        "rs1g04",
+        "rs1g86",
+    ):
         m = load_product_model(part)
         if m is None:
             continue
         if dual_channel_continue(m):
-            errors.append(f"{part} must not set dual_channel_continue without a 2G Datasheet card")
+            errors.append(f"{part} must not set dual_channel_continue (1Gxx; 2Gxx only)")
     load_family("logic")
     icc = get("icc")
     if icc is None or icc.dual_channel:
@@ -3141,6 +3156,176 @@ def _dual_channel_recipe_ok() -> list[str]:
             errors.append("dual-channel doc must say OpAmp pattern reused as DATA")
         if "Datasheet" not in txt:
             errors.append("dual-channel doc must forbid fake 2G YAML without Datasheet card")
+        if "RS2G08" not in txt or "RS2G32" not in txt:
+            errors.append("LOGIC_DC_DUAL_CHANNEL.md must name UNCONFIRMED RS2G08 / RS2G32 stubs")
+    return errors
+
+
+def _grid_copies_g08_cmos(m) -> bool:
+    """True when vcc_grid copies G08 CMOS 0.65*VCC / 0.15*VCC bands."""
+    grid = m.vcc_grid if isinstance(getattr(m, "vcc_grid", None), dict) else {}
+    rows = list(grid.get("ranges") or []) + list(grid.get("fixed_points") or [])
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        vil = _formula_tok(row.get("VIL_max") or row.get("VIL_max_V"))
+        vih = _formula_tok(row.get("VIH_min") or row.get("VIH_min_V"))
+        if vil.replace("0.15*", "0.15*") == "0.15*VCC" or vil == "0.15*VCC":
+            return True
+        if vih == "0.65*VCC":
+            return True
+    return False
+
+
+def _next_wave_ok() -> list[str]:
+    """UNCONFIRMED G00/G02/G04/G86/2G08/2G32 locks. Numbers HOLD. No CONFIRM."""
+    from ate.tests.logic import logic_dc as ldc
+
+    errors: list[str] = []
+    load_family("logic")
+    for part in _NEXT_WAVE_SKUS:
+        if not has_product_model(part):
+            errors.append(f"{part} UNCONFIRMED product_model missing (next-wave bind)")
+            continue
+        m = load_product_model(part)
+        if m is None:
+            errors.append(f"{part} product_model failed to load")
+            continue
+        if is_parked(m):
+            errors.append(f"{part} next-wave must not be PARKED")
+        if is_datasheet_signed(m.status) or is_datasheet_signed(m.truth_table_status):
+            errors.append(f"{part} must stay UNCONFIRMED (numbers HOLD; no CONFIRM)")
+        if not is_unconfirmed_status(m.status):
+            errors.append(f"{part} status must be UNCONFIRMED, got {m.status!r}")
+        gst = str((m.vcc_grid or {}).get("status") or "")
+        if is_datasheet_signed(gst):
+            errors.append(f"{part} vcc_grid must stay UNCONFIRMED (numbers HOLD), got {gst!r}")
+        if m.has_oe():
+            errors.append(f"{part}: invent OE -> FAIL")
+        en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
+        if "ioz" in en:
+            errors.append(f"{part}: invent IOZ enabled -> FAIL")
+        try:
+            ldc._run_ioz(None, _params(part=part, vcc=5.0))
+            errors.append(f"{part} ioz must raise (oe none)")
+        except RuntimeError as exc:
+            msg = str(exc).lower()
+            if "not applicable" not in msg and "oe is none" not in msg:
+                errors.append(f"{part} ioz must say oe none, got {exc!r}")
+        except Exception as exc:
+            errors.append(f"{part} ioz must raise RuntimeError, got {type(exc).__name__}: {exc}")
+        icct = _dc_block(m, "ICCT_uA", "ICCT")
+        st_icct = str(icct.get("status") or "").upper().replace("-", "_")
+        if st_icct not in ("ABSENT", "N_A", "NA", "UNCONFIRMED"):
+            errors.append(f"{part} ICCT must stay ABSENT/UNCONFIRMED, got {icct.get('status')!r}")
+        if icct.get("one_input_V") is not None or icct.get("offset_v") is not None:
+            errors.append(f"{part}: invent ICCT map -> FAIL")
+        if (m.recipe or {}).get("delta_offset_v") is not None:
+            errors.append(f"{part}: invent recipe.delta_offset_v from ICCT -> FAIL")
+        if ldc._voh_vol_table(part, "voh") or ldc._voh_vol_table(part, "vol"):
+            errors.append(f"{part} UNCONFIRMED VOH/VOL must not expand (do not invent loads)")
+        rec = m.recipe if isinstance(m.recipe, dict) else {}
+        if rec.get("stable_eps_A") is not None:
+            errors.append(f"{part} recipe.stable_eps_A must stay null")
+        runner = str(rec.get("runner") or "").lower().replace("-", "_")
+        pc = str((m.raw or {}).get("product_class") or "").lower().replace("-", "_")
+        a_iso = isolation_for(m, "A") or []
+        b_iso = isolation_for(m, "B") or []
+        if part == "rs1g00":
+            if "nand" not in runner or "nand" not in pc:
+                errors.append("rs1g00 runner/product_class must be gate_nand2")
+            if not any(p.fix.get("B") == "H" and p.y_expect == "invert" for p in a_iso):
+                errors.append("rs1g00 NAND isolation A must invert with B=H")
+            if st_icct not in ("ABSENT", "N_A", "NA"):
+                errors.append("rs1g00 ICCT must stay ABSENT (delta_icc from delta_icc_uA only)")
+            if ldc._icct_blob(m):
+                errors.append("rs1g00 must not map ICCT into Path B delta_icc")
+            if dual_channel_continue(m):
+                errors.append("rs1g00 is 1Gxx -- dual_channel_continue off")
+        elif part == "rs1g02":
+            if "nor" not in runner or "nor" not in pc:
+                errors.append("rs1g02 runner/product_class must be gate_nor2")
+            if not any(p.fix.get("B") == "L" and p.y_expect == "invert" for p in a_iso):
+                errors.append("rs1g02 NOR isolation A must invert with B=L")
+            if _grid_copies_g08_cmos(m):
+                errors.append("rs1g02 must use TTL-style VIH/VIL (not G08 CMOS 0.65/0.15)")
+            kind = str((m.vcc_grid or {}).get("kind") or "").upper()
+            if kind and kind != "TTL":
+                errors.append(f"rs1g02 vcc_grid.kind must be TTL (not CMOS), got {kind!r}")
+            if dual_channel_continue(m):
+                errors.append("rs1g02 is 1Gxx -- dual_channel_continue off")
+        elif part == "rs1g04":
+            if "inv" not in runner or "inv" not in pc:
+                errors.append("rs1g04 runner/product_class must be gate_inv")
+            if set(m.logic_inputs) != {"A"}:
+                errors.append(f"rs1g04 logic_inputs must be A only (n=1), got {m.logic_inputs}")
+            if not any(p.y_expect == "invert" for p in a_iso):
+                errors.append("rs1g04 isolation A must invert (Y=NOT A)")
+            nc = [p for p in m.pins if p.name == "NC"]
+            if not nc or str(nc[0].role or "").lower() != "nc":
+                errors.append("rs1g04 NC pin must be role nc (NC not OE)")
+            if "NC" in set(m.logic_inputs) or str(m.oe_pin or "").upper() == "NC":
+                errors.append("rs1g04 NC must not be a logic input or OE")
+            if dual_channel_continue(m):
+                errors.append("rs1g04 is 1Gxx -- dual_channel_continue off")
+        elif part == "rs1g86":
+            if "xor" not in runner or "xor" not in pc:
+                errors.append("rs1g86 runner/product_class must be gate_xor2")
+            if not any(p.fix.get("B") == "L" and p.y_expect == "track" for p in a_iso):
+                errors.append("rs1g86 XOR isolation A must track with B=L")
+            if not any(p.fix.get("B") == "H" and p.y_expect == "invert" for p in a_iso):
+                errors.append("rs1g86 XOR isolation A must invert with B=H")
+            if not any(p.fix.get("A") == "L" and p.y_expect == "track" for p in b_iso):
+                errors.append("rs1g86 XOR isolation B must track with A=L")
+            if not any(p.fix.get("A") == "H" and p.y_expect == "invert" for p in b_iso):
+                errors.append("rs1g86 XOR isolation B must invert with A=H")
+            found_vil = False
+            for row in (m.vcc_grid or {}).get("ranges") or []:
+                if not isinstance(row, dict):
+                    continue
+                try:
+                    if abs(float(row.get("start")) - 1.65) > 1e-9:
+                        continue
+                    if abs(float(row.get("stop")) - 1.95) > 1e-9:
+                        continue
+                except (TypeError, ValueError):
+                    continue
+                vil = _formula_tok(row.get("VIL_max") or row.get("VIL_max_V"))
+                if vil in ("0.20*VCC", "0.2*VCC"):
+                    found_vil = True
+                if vil == "0.15*VCC":
+                    errors.append("rs1g86 must not copy G08 VIL 0.15*VCC")
+            if not found_vil:
+                errors.append("rs1g86 VIL at 1.65-1.95 must be 0.20*VCC from card")
+            lim165 = lookup_vcc_grid_limits(m, 1.65) or {}
+            got_vil = lim165.get("VIL_max_V")
+            try:
+                if got_vil is None or abs(float(got_vil) - 0.20 * 1.65) > 1e-9:
+                    errors.append(
+                        f"rs1g86 VIL@1.65 must eval card 0.20*VCC={0.20 * 1.65}, got {got_vil}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(f"rs1g86 VIL@1.65 formula eval failed, got {got_vil!r}")
+            if dual_channel_continue(m):
+                errors.append("rs1g86 is 1Gxx -- dual_channel_continue off")
+        elif part in ("rs2g08", "rs2g32"):
+            if not dual_channel_continue(m):
+                errors.append(f"{part} must set recipe.dual_channel_continue CHA then CHB")
+            if recipe_channels(m) != ["CHA", "CHB"]:
+                errors.append(f"{part} skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+            if part == "rs2g08":
+                if "and" not in runner:
+                    errors.append("rs2g08 runner must be dual_and2")
+                if not any(p.fix.get("B") == "H" and p.y_expect == "track" for p in a_iso):
+                    errors.append("rs2g08 AND isolation A must track with B=H")
+            else:
+                if "or" not in runner:
+                    errors.append("rs2g32 runner must be dual_or2")
+                if not any(p.fix.get("B") == "L" and p.y_expect == "track" for p in a_iso):
+                    errors.append("rs2g32 OR isolation A must track with B=L")
+            fake = SimpleNamespace(recipe=dict(rec))
+            if merge_recipe_channels(fake, ["CHA"]) != ["CHA", "CHB"]:
+                errors.append(f"{part} merge_recipe_channels CHA-only must expand CHA then CHB")
     return errors
 
 
@@ -3233,6 +3418,12 @@ def _seq_stub_ok() -> list[str]:
             errors.append(f"{part} gaps must name glyph-garbled extract (function table / 100uA)")
         if claimed_signed_without_datasheet(m.status):
             errors.append(f"{part} status must not look signed")
+        if part in _ARCHIVE_SIM_PARTS and not is_parked(m):
+            errors.append(f"{part} must be PARKED (JH dropped; keep UNCONFIRMED; Path B off)")
+        if part in _ARCHIVE_SIM_PARTS and "parked" not in gaps:
+            errors.append(f"{part} gaps must say PARKED (JH dropped)")
+        if part in _ARCHIVE_SIM_PARTS and str(raw.get("status") or "").strip().upper() != "PARKED":
+            errors.append(f"{part} part yaml status must be PARKED (product_model.status stays UNCONFIRMED)")
     m123 = load_product_model("rs1g123")
     if m123 is not None:
         pc = str((m123.raw or {}).get("product_class") or "")
@@ -3442,7 +3633,7 @@ def _sim_power_on_protected(psu, channel, voltage, current_limit, ovp=None, ocp=
 
 def _confirmed_sim_sweep_ok() -> list[str]:
     """Walk enabled Path B DC TestSpec.run for CONFIRMED parts. Visa-free SIM."""
-    from ate.core.check_logic_dc_sim import _ACTIVE_LOGIC, _ARCHIVE_LOGIC
+    from ate.core.check_logic_dc_sim import _ACTIVE_LOGIC, _ARCHIVE_LOGIC, _NEXT_WAVE_LOGIC
     from ate.core.specs import enrich_measurement
     from ate.tests.logic import logic_dc as ldc
     from ate.tests.logic.product_model import DriveMap
@@ -3453,6 +3644,11 @@ def _confirmed_sim_sweep_ok() -> list[str]:
         errors.append("CONFIRMED SIM walk must match the 11 CONFIRMED _ACTIVE_LOGIC set")
     if frozenset(_ARCHIVE_SIM_PARTS) != frozenset(_ARCHIVE_LOGIC):
         errors.append("archive SIM parts must match dropped RS1G74 / RS1G123 set")
+    if frozenset(_NEXT_WAVE_SKUS) != frozenset(_NEXT_WAVE_LOGIC):
+        errors.append("next-wave SKUs must match sim _NEXT_WAVE_LOGIC")
+    if set(_NEXT_WAVE_SKUS) & set(_CONFIRMED_SIM_PARTS):
+        errors.append("next-wave UNCONFIRMED must not join CONFIRMED SIM set")
+
     load_family("logic")
 
     for hold in _ARCHIVE_SIM_PARTS:
@@ -3465,6 +3661,8 @@ def _confirmed_sim_sweep_ok() -> list[str]:
             )
         if not is_sequential(m_hold):
             errors.append(f"{hold} archive: must stay sequential (not combinational 2^n)")
+        if not is_parked(m_hold):
+            errors.append(f"{hold} archive: must stay PARKED (JH dropped)")
         if m_hold.schmitt:
             errors.append(f"{hold} archive: must not invent schmitt VT+/-")
         en = {str(x).strip().lower() for x in (enabled_tests_for_part(hold) or [])}
@@ -3747,6 +3945,7 @@ def check_logic_dc() -> list[str]:
     errors += _physics_fail_bars_ok()
     errors += _sts_latest_ok()
     errors += _dual_channel_recipe_ok()
+    errors += _next_wave_ok()
     errors += _seq_stub_ok()
     from ate.core.check_logic_dc_sim import check_logic_dc_sim
 

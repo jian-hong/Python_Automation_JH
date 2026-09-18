@@ -2,6 +2,7 @@
 
 | Date | File | Keywords |
 |------|------|----------|
+| 2026-09-18 | 2026-09-18_scale-wave-park.md | path-b, PARKED, rs1g74, rs1g123, rs1g00, rs1g02, rs1g04, rs1g86, rs2g08, rs2g32, UNCONFIRMED, numbers HOLD, dual_channel_continue |
 | 2026-09-18 | 2026-09-18_drop-g74-g123-scale11.md | path-b, logic-dc, sim, archive, rs1g123, rs1g74, dropped, 11 CONFIRMED, 2Gxx, RS74AUP1G07, dc.py |
 | 2026-09-18 | 2026-09-18_sim-first-confirmed.md | path-b, logic-dc, SIM, TestSpec.run, interpolate, vplus, PSU CH3, 0.65*VCC, Schmitt VT, rs164, archive |
 | 2026-09-18 | 2026-09-18_logic-dc-sim.md | path-b, logic-dc, sim, check_logic_dc_sim, rs1g123, rs1g74, sequential, UNCONFIRMED, visa-free, NON_TIGHT, G07 VOH N_A, VOL NOT_RUN |

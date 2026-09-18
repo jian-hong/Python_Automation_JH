@@ -10,6 +10,7 @@ version: Version_1
 sample_size: 4
 year: "2026"
 part_key: rs1g74
+status: PARKED
 product_class: logic
 vcc: 5.0
 current_limit: 0.10
@@ -25,15 +26,16 @@ fixture_modes:
     board_class: general
     checklist:
       - "RS1G74 is a DFF. Clock/Q slots via Wrap -- do not copy RS1G08 AND tables."
-      - "Path B sequential stub UNCONFIRMED -- do not tick gate 2^n ICC/VOH/VOL. Datasheet card needed."
+      - "PARKED (JH dropped 2026-09-18). UNCONFIRMED archive. Do not tick Path B gate 2^n."
     tests: [tp, supply_current]
 
-# UNCONFIRMED Path B stub. Sequential DFF -- not combinational 2^n.
+# PARKED UNCONFIRMED archive. Sequential DFF -- not combinational 2^n.
 # Pins + VCC 1.65-5.5 + ICC Full 10uA from extract / limits. Function table glyph-garbled.
 # VOH 100uA IOH glyph-stripped -- do not invent loads. Datasheet card needed.
 product_model:
   part: RS1G74
   status: UNCONFIRMED
+  parked: true
   source_extract: ate/config/datasheets/text/rs1g74.txt
   package: VSSOP8
   product_class: sequential_dff
@@ -97,6 +99,7 @@ product_model:
     settle_timeout_s: 2.0
     runner: sequential_dff_clr_pre
   gaps:
+  - PARKED -- JH dropped 2026-09-18. UNCONFIRMED archive. Do not enable Path B gate 2^n.
   - UNCONFIRMED stub -- Datasheet card needed; not a bench green
   - sequential DFF -- Path B gate 2^n / ICC / dICC / VOH / VOL / II SKIP
   - function table glyph-garbled -- do not invent truth rows

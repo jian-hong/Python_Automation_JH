@@ -20,6 +20,7 @@ from ate.tests.logic import logic_dc as ldc
 from ate.tests.logic.product_model import (
     has_product_model,
     is_open_drain,
+    is_parked,
     is_sequential,
     live_session,
     load_product_model,
@@ -53,6 +54,15 @@ _ACTIVE_LOGIC = (
 )
 # Dropped from Path B scale. Optional UNCONFIRMED archive -- do not block green.
 _ARCHIVE_LOGIC = frozenset({"rs1g123", "rs1g74"})
+# UNCONFIRMED next-wave bind. Numbers HOLD. Not in mandatory SIM.
+_NEXT_WAVE_LOGIC = (
+    "rs1g00",
+    "rs1g02",
+    "rs1g04",
+    "rs1g86",
+    "rs2g08",
+    "rs2g32",
+)
 
 
 def _nosleep(*_a: Any, **_k: Any) -> None:
@@ -320,10 +330,12 @@ def check_logic_dc_sim() -> list[str]:
             errors.append(f"_ACTIVE_LOGIC must be the 11 CONFIRMED SKUs, got {len(_ACTIVE_LOGIC)}")
         if _ARCHIVE_LOGIC & set(_ACTIVE_LOGIC):
             errors.append("RS1G123 / RS1G74 archive must not join mandatory SIM set")
+        if set(_NEXT_WAVE_LOGIC) & set(_ACTIVE_LOGIC):
+            errors.append("next-wave UNCONFIRMED must not join mandatory SIM set")
         seen: set[str] = set()
         for path in sorted(PARTS_DIR.glob("*.yaml")):
             part = path.stem.lower()
-            if part in _ARCHIVE_LOGIC:
+            if part not in _ACTIVE_LOGIC:
                 continue
             if not has_product_model(part):
                 continue
@@ -394,12 +406,13 @@ def part_sim_status() -> list[dict[str, Any]]:
                 continue
             if is_sequential(m):
                 st = str(m.status or "")
+                parked = "PARKED; " if is_parked(m) else ""
                 rows.append(
                     {
                         "part": part,
-                        "ready": "SIM skip (sequential)",
+                        "ready": "PARKED (sequential)" if is_parked(m) else "SIM skip (sequential)",
                         "reason": (
-                            f"not combinational 2^n; status={st or 'UNCONFIRMED'}; "
+                            f"{parked}not combinational 2^n; status={st or 'UNCONFIRMED'}; "
                             "Path B gate DC off"
                         ),
                     }
@@ -432,11 +445,42 @@ def part_sim_status() -> list[dict[str, Any]]:
                     }
                 )
         for part in sorted(_ARCHIVE_LOGIC):
+            m = load_product_model(part) if has_product_model(part) else None
+            if m is not None and is_parked(m):
+                rows.append(
+                    {
+                        "part": part,
+                        "ready": "PARKED",
+                        "reason": (
+                            "JH dropped; UNCONFIRMED archive; sequential -- "
+                            "FAIL if treated as gate 2^n"
+                        ),
+                    }
+                )
+            else:
+                rows.append(
+                    {
+                        "part": part,
+                        "ready": "dropped/archive",
+                        "reason": "optional UNCONFIRMED stub; not Path B scale; no invent VT+/- / gate 2^n",
+                    }
+                )
+        for part in _NEXT_WAVE_LOGIC:
+            m = load_product_model(part) if has_product_model(part) else None
+            if m is None:
+                rows.append(
+                    {
+                        "part": part,
+                        "ready": "UNCONFIRMED (numbers HOLD)",
+                        "reason": "next-wave bind missing; not Datasheet-signed; not bench green",
+                    }
+                )
+                continue
             rows.append(
                 {
                     "part": part,
-                    "ready": "dropped/archive",
-                    "reason": "optional UNCONFIRMED stub; not Path B scale; no invent VT+/- / gate 2^n",
+                    "ready": "UNCONFIRMED (numbers HOLD)",
+                    "reason": "Path B process only; not Datasheet-signed; not bench green",
                 }
             )
     finally:

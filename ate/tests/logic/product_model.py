@@ -372,6 +372,28 @@ def is_sequential(model: Any) -> bool:
     return False
 
 
+def is_parked(model: Any) -> bool:
+    """JH-dropped SKU. Stay UNCONFIRMED; Path B gate ids stay off. Not a CONFIRM."""
+    raw = _raw_blob(model)
+    parked = raw.get("parked")
+    if parked is True:
+        return True
+    token = str(parked or "").strip().upper().replace("-", "_").replace(" ", "_")
+    if token in ("TRUE", "YES", "1", "PARKED"):
+        return True
+    gaps = getattr(model, "gaps", None)
+    if not isinstance(gaps, list):
+        gaps = raw.get("gaps") if isinstance(raw.get("gaps"), list) else []
+    if any("PARKED" in str(x).upper() for x in gaps):
+        return True
+    part = str(getattr(model, "part", "") or raw.get("part") or "").strip()
+    if part:
+        top = str(load_part_yaml(part).get("status") or "").strip().upper().replace("-", "_")
+        if top == "PARKED":
+            return True
+    return False
+
+
 def _recipe_blob(model: Any) -> dict[str, Any]:
     recipe = getattr(model, "recipe", None)
     if isinstance(recipe, dict):
