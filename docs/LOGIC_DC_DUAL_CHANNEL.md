@@ -14,4 +14,4 @@ When `dual_channel_continue` is true, the runner ORs that flag onto Path B specs
 
 1Gxx cards (RS1G97 / RS1G126 / RS1GT34 and overnight DRAFTs) leave the flag unset/false. Dual-channel Continue is **2Gxx only**.
 
-No fake `rs2g*.yaml` without a Datasheet card.
+No fake `rs2g*.yaml` without a Datasheet card. No 2G models exist in this inventory -- Continue path is ready; do not invent cards.

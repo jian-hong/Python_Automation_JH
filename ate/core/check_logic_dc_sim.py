@@ -2,8 +2,9 @@
 
 Run: python -m ate.core.check_logic_dc_sim
 
-Covers the Logic Reference product_model set. Overlay one VCC so SIM stays
-fast. stable_eps_A stays null (NON_TIGHT). Do not invent limits.
+Covers the 11 CONFIRMED Logic product_model SKUs. Overlay one VCC so SIM stays
+fast. stable_eps_A stays null (NON_TIGHT). RS1G123 / RS1G74 are dropped/archive
+(optional UNCONFIRMED stubs -- not in this mandatory set). Do not invent limits.
 """
 from __future__ import annotations
 
@@ -36,7 +37,8 @@ _PATH_B_DC = (
     "ioz",
 )
 
-_REFERENCE_LOGIC = (
+# Mandatory Path B SIM set (JH 11 CONFIRMED). Sequential skip OK for rs164.
+_ACTIVE_LOGIC = (
     "rs1gt34",
     "rs1g08",
     "rs1g07",
@@ -48,9 +50,9 @@ _REFERENCE_LOGIC = (
     "rs164",
     "rs1g97",
     "rs1g126",
-    "rs1g123",
-    "rs1g74",
 )
+# Dropped from Path B scale. Optional UNCONFIRMED archive -- do not block green.
+_ARCHIVE_LOGIC = frozenset({"rs1g123", "rs1g74"})
 
 
 def _nosleep(*_a: Any, **_k: Any) -> None:
@@ -309,14 +311,20 @@ def _assert_ran(part: str, tid: str, model: Any) -> list[str]:
 
 
 def check_logic_dc_sim() -> list[str]:
-    """SIM every Logic product_model DC id that physics allows. No invent."""
+    """SIM the 11 CONFIRMED Logic SKUs. Archive 123/74 do not block green."""
     errors: list[str] = []
     load_family("logic")
     saved = _patch_sleep()
     try:
+        if len(_ACTIVE_LOGIC) != 11:
+            errors.append(f"_ACTIVE_LOGIC must be the 11 CONFIRMED SKUs, got {len(_ACTIVE_LOGIC)}")
+        if _ARCHIVE_LOGIC & set(_ACTIVE_LOGIC):
+            errors.append("RS1G123 / RS1G74 archive must not join mandatory SIM set")
         seen: set[str] = set()
         for path in sorted(PARTS_DIR.glob("*.yaml")):
             part = path.stem.lower()
+            if part in _ARCHIVE_LOGIC:
+                continue
             if not has_product_model(part):
                 continue
             seen.add(part)
@@ -356,12 +364,12 @@ def check_logic_dc_sim() -> list[str]:
                     errors.append("rs1gt34 live.vol must stay NOT_RUN (no VOL live this turn)")
                 if vol_l.get("measured") is not None or vol_l.get("rows"):
                     errors.append("rs1gt34 must not invent VOL live measured")
-        missing = [p for p in _REFERENCE_LOGIC if p not in seen and has_product_model(p)]
-        for part in _REFERENCE_LOGIC:
+        for part in _ACTIVE_LOGIC:
             if not has_product_model(part):
-                errors.append(f"{part}: product_model missing (Logic Reference SIM)")
+                errors.append(f"{part}: product_model missing (11 CONFIRMED SIM)")
+        missing = [p for p in _ACTIVE_LOGIC if p not in seen]
         if missing:
-            errors.append(f"SIM missed loaded parts {missing}")
+            errors.append(f"SIM missed active parts {missing}")
     finally:
         _unpatch(saved)
     return errors
@@ -373,7 +381,7 @@ def part_sim_status() -> list[dict[str, Any]]:
     load_family("logic")
     saved = _patch_sleep()
     try:
-        for part in _REFERENCE_LOGIC:
+        for part in _ACTIVE_LOGIC:
             m = load_product_model(part) if has_product_model(part) else None
             if m is None:
                 rows.append(
@@ -423,6 +431,14 @@ def part_sim_status() -> list[dict[str, Any]]:
                         "reason": extra + "visa-free Path B catalog; not bench green",
                     }
                 )
+        for part in sorted(_ARCHIVE_LOGIC):
+            rows.append(
+                {
+                    "part": part,
+                    "ready": "dropped/archive",
+                    "reason": "optional UNCONFIRMED stub; not Path B scale; no invent VT+/- / gate 2^n",
+                }
+            )
     finally:
         _unpatch(saved)
     return rows
@@ -431,7 +447,7 @@ def part_sim_status() -> list[dict[str, Any]]:
 def main() -> int:
     errors = check_logic_dc_sim()
     rows = part_sim_status()
-    print("Logic Reference SIM (visa-free; not a Verify PASS / not bench green)")
+    print("Logic 11 CONFIRMED SIM (visa-free; not a Verify PASS / not bench green)")
     for row in rows:
         print(f"  {row['part']}: {row['ready']} -- {row['reason']}")
     if errors:

@@ -1,3 +1,5 @@
+# ARCHIVE / DROPPED from Path B scale (JH 2026-09-18). Optional UNCONFIRMED stub.
+# Do not invent VT+/- or gate 2^n. Not in SIM mandatory set (the 11 CONFIRMED).
 # RS1G74 D flip-flop -- Qualification Main VSSOP8.
 
 part: RS1G74

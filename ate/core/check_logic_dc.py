@@ -78,7 +78,7 @@ _PATH_B_IDS = (
     "ioz",
 )
 
-# CONFIRMED Path B SIM walk (JH 2026-09-18). HOLD SKUs: UNCONFIRMED sequential stubs; Path B OFF.
+# CONFIRMED Path B SIM walk (JH 11). Archive 123/74 optional; missing does not block green.
 _CONFIRMED_SIM_PARTS = (
     "rs1gt34",
     "rs1g97",
@@ -92,7 +92,7 @@ _CONFIRMED_SIM_PARTS = (
     "rs1g125",
     "rs164",
 )
-_HOLD_SIM_PARTS = ("rs1g74", "rs1g123")
+_ARCHIVE_SIM_PARTS = ("rs1g74", "rs1g123")
 
 
 def _params(**kw):
@@ -1498,7 +1498,9 @@ def _operator_doc_ok() -> list[str]:
     if "check_logic_dc_sim" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name python -m ate.core.check_logic_dc_sim")
     if "RS1G123" not in text or "RS1G74" not in text:
-        errors.append("LOGIC_DC_OPERATOR.md must name RS1G123 / RS1G74 sequential stubs")
+        errors.append("LOGIC_DC_OPERATOR.md must name RS1G123 / RS1G74 as dropped/archive")
+    if "dropped" not in text.lower() and "archive" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must mark RS1G123 / RS1G74 dropped/archive (not Path B scale)")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -3142,16 +3144,12 @@ def _dual_channel_recipe_ok() -> list[str]:
     return errors
 
 
-_SEQ_STUB_SKUS = ("rs1g123", "rs1g74")
-
-
 def _seq_stub_ok() -> list[str]:
-    """UNCONFIRMED sequential stubs (123/74). Not combinational 2^n. Do not invent loads."""
+    """Optional UNCONFIRMED archive (123/74). Missing is OK. Present: no invent / no 2^n."""
     from ate.tests.logic import logic_dc as ldc
 
     errors: list[str] = []
     load_family("logic")
-    seen: set[str] = set()
     for path in sorted(PARTS_DIR.glob("*.yaml")):
         part = path.stem.lower()
         if not has_product_model(part):
@@ -3161,7 +3159,6 @@ def _seq_stub_ok() -> list[str]:
             continue
         if is_datasheet_signed(m.status):
             continue
-        seen.add(part)
         if part in _DRAFT_SCAFFOLD_SKUS:
             errors.append(f"{part}: UNCONFIRMED sequential stub must not join CONFIRMED DRAFT scaffold")
         if not is_unconfirmed_status(m.status):
@@ -3236,9 +3233,6 @@ def _seq_stub_ok() -> list[str]:
             errors.append(f"{part} gaps must name glyph-garbled extract (function table / 100uA)")
         if claimed_signed_without_datasheet(m.status):
             errors.append(f"{part} status must not look signed")
-    for need in _SEQ_STUB_SKUS:
-        if need not in seen:
-            errors.append(f"{need}: UNCONFIRMED sequential stub missing (Logic Reference)")
     m123 = load_product_model("rs1g123")
     if m123 is not None:
         pc = str((m123.raw or {}).get("product_class") or "")
@@ -3448,31 +3442,35 @@ def _sim_power_on_protected(psu, channel, voltage, current_limit, ovp=None, ocp=
 
 def _confirmed_sim_sweep_ok() -> list[str]:
     """Walk enabled Path B DC TestSpec.run for CONFIRMED parts. Visa-free SIM."""
+    from ate.core.check_logic_dc_sim import _ACTIVE_LOGIC, _ARCHIVE_LOGIC
     from ate.core.specs import enrich_measurement
     from ate.tests.logic import logic_dc as ldc
     from ate.tests.logic.product_model import DriveMap
     import psu_setup
 
     errors: list[str] = []
+    if frozenset(_CONFIRMED_SIM_PARTS) != frozenset(_ACTIVE_LOGIC):
+        errors.append("CONFIRMED SIM walk must match the 11 CONFIRMED _ACTIVE_LOGIC set")
+    if frozenset(_ARCHIVE_SIM_PARTS) != frozenset(_ARCHIVE_LOGIC):
+        errors.append("archive SIM parts must match dropped RS1G74 / RS1G123 set")
     load_family("logic")
 
-    for hold in _HOLD_SIM_PARTS:
+    for hold in _ARCHIVE_SIM_PARTS:
         m_hold = load_product_model(hold) if has_product_model(hold) else None
         if m_hold is None:
-            errors.append(f"{hold} HOLD: UNCONFIRMED sequential stub missing")
             continue
         if is_datasheet_signed(m_hold.status) or is_datasheet_signed(m_hold.truth_table_status):
             errors.append(
-                f"{hold} HOLD: must stay UNCONFIRMED (no CONFIRMED unlock without Datasheet card)"
+                f"{hold} archive: must stay UNCONFIRMED (no CONFIRMED unlock without Datasheet card)"
             )
         if not is_sequential(m_hold):
-            errors.append(f"{hold} HOLD: must stay sequential (not combinational 2^n)")
+            errors.append(f"{hold} archive: must stay sequential (not combinational 2^n)")
         if m_hold.schmitt:
-            errors.append(f"{hold} HOLD: must not invent schmitt VT+/-")
+            errors.append(f"{hold} archive: must not invent schmitt VT+/-")
         en = {str(x).strip().lower() for x in (enabled_tests_for_part(hold) or [])}
         for tid in _PATH_B_IDS:
             if tid in en:
-                errors.append(f"{hold} HOLD: must not enable Path B {tid}")
+                errors.append(f"{hold} archive: must not enable Path B {tid}")
 
     m08 = load_product_model("rs1g08")
     if m08 is not None:

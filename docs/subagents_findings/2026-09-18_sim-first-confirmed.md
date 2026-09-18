@@ -13,4 +13,4 @@ FAIL fixes:
 - Schmitt VT+/- attach CONFIRMED range min/max from `vcc_grid` (not plain VIH).
 - SIM DUT is edge-aware combinational so search rearm un-trips (Schmitt-hold would keep Y high and freeze coarse 1.0/1.5 midpoint).
 
-HOLD: rs1g74 / rs1g123 UNCONFIRMED sequential stubs (Path B ids OFF; no CONFIRMED unlock; no invent VT+/-). RS164 Path B ids OFF. G07 voh OFF. G97 ioz OFF. Do not invent limits. Not Verify PASS.
+Archive (dropped, not Path B scale): rs1g74 / rs1g123 optional UNCONFIRMED sequential stubs if yaml present (Path B ids OFF; no CONFIRMED unlock; no invent VT+/-). Missing does not block green. RS164 Path B ids OFF. G07 voh OFF. G97 ioz OFF. Do not invent limits. Not Verify PASS.
