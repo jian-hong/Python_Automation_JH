@@ -42,7 +42,7 @@ fixture_modes:
 product_model:
   part: RS1G14
   status: CONFIRMED
-  source_card: RS1G14_card_DRAFT.md
+  source_card: RS1G14_card_CONFIRMED.md
   package: SC70-5
   schmitt: true
   oe: none
@@ -83,7 +83,7 @@ product_model:
         fix: {}
         y_expect: invert
   vcc_grid:
-    status: UNSURE
+    status: CONFIRMED
     stimulus: PSU_MSO
     kind: schmitt_VT
     fixed_points:
@@ -138,7 +138,7 @@ product_model:
       - 1.95
       - 2.25
     ranges: []
-    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
+    note: CONFIRMED Schmitt VT+/- / dVT from RS1G14_card_CONFIRMED (SoT copy; do not invent)
   pass_mode:
     vth_vt_plus: range
     vth_vt_minus: range
@@ -250,10 +250,11 @@ product_model:
   - delta_icc
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
-  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - vcc_grid/vcc_plan CONFIRMED Schmitt VT+/- / dVT from signed card/SoT; do not invent extra rows
   - Schmitt VT+/- range -- not plain VIH/VIL
   - IOZ OFF
   - voh/vol not enabled (no table rows)
-  - VT grid numbers from card stay in yaml; vcc_grid.status UNSURE until extract-signed
-  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
-    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.
+  - VT+/- / dVT CONFIRMED from RS1G14_card_CONFIRMED (spot-check vs card)
+  - Data retention MAX UNSURE (PDF MIN 1.5 only -- do not invent MAX)
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from signed card/SoT). Fail-closed remain
+    stable_eps_A null; data retention MAX UNSURE; do not invent.

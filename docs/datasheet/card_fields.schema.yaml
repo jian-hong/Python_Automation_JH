@@ -210,7 +210,7 @@ fields:
     note: >
       User-facing Version overlay alias of vcc_grid. Save writes the same
       mapping. Per-band limits + pass_mode range/min-only/max-only.
-      Do not invent 9.1 VIH/VIL numbers.
+      Copy card/SoT VIH/VIL (or VT+/-) only. Do not invent numbers.
   - key: recipe
     oop: Recipe
     type: json

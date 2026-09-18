@@ -1002,7 +1002,7 @@ def vcc_grid_unconfirmed(model: Any) -> bool:
         return False
     if grid.get("fixed_points") in (None, []) and grid.get("ranges") in (None, []) and not grid.get("status"):
         return False
-    # Do not inherit product_model.status CONFIRMED -- 9.1 VIH/VIL can stay UNSURE.
+    # Do not inherit product_model.status CONFIRMED -- vcc_grid.status is its own numbers gate.
     st = grid.get("status") or "UNCONFIRMED"
     if is_datasheet_signed(st):
         return False

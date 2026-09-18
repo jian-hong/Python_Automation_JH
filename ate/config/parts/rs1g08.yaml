@@ -120,7 +120,7 @@ fixture_modes:
 product_model:
   part: RS1G08
   status: CONFIRMED
-  source_card: RS1G08_card_DRAFT.md
+  source_card: RS1G08_card_CONFIRMED.md
   package: SC70-5
   packages_note: SOT23-5 / SC70-5 / XDFN -- do not merge SKUs; campaign package stays SOT23
   schmitt: false
@@ -185,7 +185,7 @@ product_model:
           A: H
         y_expect: track
   vcc_grid:
-    status: UNSURE
+    status: CONFIRMED
     stimulus: PSU_MSO
     pass_mode:
       VIH: min_only
@@ -216,7 +216,7 @@ product_model:
       VIL_max: 0.15*VCC
       label: 4.5-5.5
     fixed_points: []
-    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
+    note: CONFIRMED from RS1G08_card_CONFIRMED VIH/VIL bands (SoT copy; do not invent extra rows)
   pass_mode:
     VIH: min_only
     VIL: max_only
@@ -329,12 +329,12 @@ product_model:
   - delta_icc
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
-  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - vcc_grid/vcc_plan CONFIRMED from signed card/SoT VIH/VIL bands; do not invent extra rows
   - IOZ OFF (no OE)
   - stable_eps_A null
   - excel_plots omitted -- keep sheet_map paste.values
   - VOH first-row IOH current glyph-missing in extract -- not copied as 100uA
   - IOH -24mA VCC glyph-missing in extract -- row omitted
   - Ariff voh_table/vol_table campaign kept; do not copy extract 9.2 over Ariff
-  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
-    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from signed card/SoT). Fail-closed remain
+    stable_eps_A null; glyph-missing uA/mA omitted; G07 VOH N_A; RS164 Ioff+ICCT ABSENT; retention MAX if missing.

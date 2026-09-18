@@ -27,7 +27,7 @@ fixture_modes:
 product_model:
   part: RS164
   status: CONFIRMED
-  source_card: RS164_card_DRAFT.md
+  source_card: RS164_card_CONFIRMED.md
   package: SOP14
   product_class: sequential_shift_register
   schmitt: false
@@ -119,7 +119,7 @@ product_model:
     status: N_A
     note: sequential -- use functional/shift coverage, not gate isolation
   vcc_grid:
-    status: UNSURE
+    status: CONFIRMED
     stimulus: PSU_MSO
     pass_mode:
       VIH: min_only
@@ -146,7 +146,7 @@ product_model:
       VIH_min: 0.7*VCC
       VIL_max: 0.3*VCC
     fixed_points: []
-    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
+    note: CONFIRMED from SoT VIH/VIL bands (0.7x/0.3x VCC; do not invent extra rows)
   pass_mode:
     VIH: min_only
     VIL: max_only
@@ -196,6 +196,9 @@ product_model:
     ICCT_uA:
       status: ABSENT
       note: not in §8.4 -- do not invent; disable delta_icc
+    Ioff_uA:
+      status: ABSENT
+      note: not on card -- do not invent; not IOZ
   recipe:
     settle_s: 0.05
     stable_n: 3
@@ -212,11 +215,11 @@ product_model:
   enabled_tests_model: []
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
-  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - vcc_grid/vcc_plan CONFIRMED from SoT VIH/VIL bands; do not invent extra rows
   - SEQUENTIAL -- Path B gate runner insufficient; needs CLK/CLR functional recipe
   - ICCT/Ioff absent on card -- delta_icc off
   - IOZ OFF
   - gate 2^n / ICC / dICC DISABLED
   - isolation N_A (sequential, not gate isolation)
-  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
-    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; Ioff+ICCT ABSENT (delta_icc off); sequential not 2^n; do not invent.

@@ -2217,12 +2217,45 @@ _DRAFT_GATE_SKUS = (
 )
 _DRAFT_SCAFFOLD_SKUS = _DRAFT_GATE_SKUS + ("rs164",)
 
+# RS1G08_card_CONFIRMED VIH/VIL table (spot-check vs signed card; do not invent).
+_G08_BANDS = (
+    {
+        "start": 1.65,
+        "stop": 1.95,
+        "step": 0.1,
+        "VIH_min": "0.65*VCC",
+        "VIL_max": "0.15*VCC",
+    },
+    {
+        "start": 2.3,
+        "stop": 2.7,
+        "step": 0.1,
+        "VIH_min_V": 1.7,
+        "VIL_max_V": 0.3,
+    },
+    {
+        "start": 3.0,
+        "stop": 3.6,
+        "step": 0.1,
+        "VIH_min_V": 2.2,
+        "VIL_max_V": 0.4,
+    },
+    {
+        "start": 4.5,
+        "stop": 5.5,
+        "step": 0.1,
+        "VIH_min": "0.7*VCC",
+        "VIL_max": "0.15*VCC",
+    },
+)
+
+# RS1G14_card_CONFIRMED VT+/VT-/dVT (spot-check vs signed card; do not invent).
 _G14_VT = {
-    1.65: {"VT_plus": [0.75, 1.05], "VT_minus": [0.3, 0.6]},
-    2.3: {"VT_plus": [1.25, 1.55], "VT_minus": [0.35, 0.65]},
-    3.0: {"VT_plus": [1.5, 2.1], "VT_minus": [0.45, 0.75]},
-    4.5: {"VT_plus": [2.3, 3.0], "VT_minus": [0.7, 1.0]},
-    5.5: {"VT_plus": [2.8, 3.4], "VT_minus": [0.85, 1.15]},
+    1.65: {"VT_plus": [0.75, 1.05], "VT_minus": [0.3, 0.6], "dVT": [0.35, 0.6]},
+    2.3: {"VT_plus": [1.25, 1.55], "VT_minus": [0.35, 0.65], "dVT": [0.6, 1.2]},
+    3.0: {"VT_plus": [1.5, 2.1], "VT_minus": [0.45, 0.75], "dVT": [1.05, 1.65]},
+    4.5: {"VT_plus": [2.3, 3.0], "VT_minus": [0.7, 1.0], "dVT": [1.6, 2.0]},
+    5.5: {"VT_plus": [2.8, 3.4], "VT_minus": [0.85, 1.15], "dVT": [1.95, 2.25]},
 }
 
 
@@ -2245,8 +2278,36 @@ def _recipe_search_ok(part: str, m) -> list[str]:
     return errors
 
 
+def _formula_tok(val: Any) -> str:
+    return str(val or "").replace(" ", "").replace("x", "*").replace("X", "*").replace("×", "*")
+
+
+def _band_matches(got: dict[str, Any], want: dict[str, Any]) -> bool:
+    try:
+        if abs(float(got.get("start")) - float(want["start"])) > 1e-9:
+            return False
+        if abs(float(got.get("stop")) - float(want["stop"])) > 1e-9:
+            return False
+        if abs(float(got.get("step") or 0.1) - float(want.get("step") or 0.1)) > 1e-9:
+            return False
+    except (TypeError, ValueError):
+        return False
+    for key in ("VIH_min", "VIL_max"):
+        if key in want and _formula_tok(got.get(key)) != _formula_tok(want[key]):
+            return False
+    for key in ("VIH_min_V", "VIL_max_V"):
+        if key not in want:
+            continue
+        try:
+            if abs(float(got.get(key)) - float(want[key])) > 1e-9:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
 def _unsigned_draft_ok(part: str, m) -> list[str]:
-    """JH room CONFIRM: grounded status/truth/isolation CONFIRMED. 9.1 vcc_grid stays UNSURE."""
+    """Grounded status/truth/isolation CONFIRMED. CONFIRMED vcc_grid unlocks threshold numbers."""
     errors: list[str] = []
     if not is_datasheet_signed(m.status):
         errors.append(
@@ -2266,18 +2327,21 @@ def _unsigned_draft_ok(part: str, m) -> list[str]:
             f"{part} isolation.status must be CONFIRMED (grounded), got {m.isolation_status!r}"
         )
     gst = str((m.vcc_grid or {}).get("status") or "")
-    if is_datasheet_signed(gst):
+    if not is_datasheet_signed(gst):
         errors.append(
-            f"{part} vcc_grid.status must stay UNSURE (9.1 PDF-image / not greenable), got {gst!r}"
+            f"{part} vcc_grid.status must be CONFIRMED (SoT/card VIH/VIL or VT+/- unlocks numbers), got {gst!r}"
         )
-    elif not is_unconfirmed_status(gst):
-        errors.append(f"{part} vcc_grid.status must be UNSURE/UNCONFIRMED, got {gst!r}")
+    if vcc_grid_unconfirmed(m):
+        errors.append(f"{part} vcc_grid must be Datasheet-signed CONFIRMED (threshold numbers gate)")
+    rec = m.recipe if isinstance(m.recipe, dict) else {}
+    if rec.get("stable_eps_A") is not None:
+        errors.append(f"{part} recipe.stable_eps_A must stay null (fail-closed; do not invent uA)")
     errors += _fail_closed_until_signed(part, m)
     return errors
 
 
 def _draft_scaffold_ok() -> list[str]:
-    """Path B 8-SKU scaffold. JH CONFIRMED grounded fields. 9.1 / glyph gaps stay UNSURE."""
+    """Path B 8-SKU scaffold. CONFIRMED vcc_grid unlocks numbers. Glyph/ABSENT gaps stay fail-closed."""
     from ate.tests.logic import logic_dc as ldc
 
     errors: list[str] = []
@@ -2308,6 +2372,8 @@ def _draft_scaffold_ok() -> list[str]:
 
     if el.uses_excel_lock(m08):
         errors.append("rs1g08 must keep sheet_map paste.values (no Path B excel_lock)")
+    if el.uses_excel_lock(m07):
+        errors.append("rs1g07 must keep sheet_map paste.values (no Path B excel_lock)")
 
     for part, m in (
         ("rs1g08", m08),
@@ -2320,6 +2386,18 @@ def _draft_scaffold_ok() -> list[str]:
         ("rs164", m164),
     ):
         errors += _unsigned_draft_ok(part, m)
+
+    # G08 signed-card VIH/VIL bands (spot-check vs RS1G08_card_CONFIRMED).
+    grid08 = m08.vcc_grid or {}
+    ranges08 = [r for r in (grid08.get("ranges") or []) if isinstance(r, dict)]
+    if len(ranges08) != len(_G08_BANDS):
+        errors.append(f"rs1g08 vcc_grid.ranges must be {len(_G08_BANDS)} card bands, got {len(ranges08)}")
+    for want in _G08_BANDS:
+        if not any(_band_matches(got, want) for got in ranges08):
+            errors.append(f"rs1g08 missing signed-card VIH/VIL band {want}")
+    fp08 = grid08.get("fixed_points") or []
+    if fp08 not in (None, [], ()):
+        errors.append("rs1g08 must not invent discrete 2.0/3.3 VIH/VIL fixed_points (card is CMOS bands only)")
 
     for part in _DRAFT_GATE_SKUS:
         m = load_product_model(part)
@@ -2359,6 +2437,10 @@ def _draft_scaffold_ok() -> list[str]:
     en07 = set(enabled_tests_for_part("rs1g07") or [])
     if "voh" in en07:
         errors.append("rs1g07 must not enable voh (open-drain)")
+    voh07 = m07.dc_limits.get("VOH") if isinstance(m07.dc_limits, dict) else {}
+    voh07_st = str((voh07 or {}).get("status") or "").strip().upper().replace("/", "_").replace("-", "_")
+    if voh07_st not in ("N_A", "NA"):
+        errors.append(f"rs1g07 VOH.status must be N_A (open-drain), got {(voh07 or {}).get('status')!r}")
     if "ioz" in en07:
         errors.append("rs1g07 must not enable ioz (Y=Z is not IOZ)")
     if "vol" not in en07:
@@ -2421,10 +2503,23 @@ def _draft_scaffold_ok() -> list[str]:
             continue
         plus = pt.get("VT_plus") or pt.get("VT+")
         minus = pt.get("VT_minus") or pt.get("VT-")
+        dvt = pt.get("dVT") or pt.get("delta_VT") or pt.get("dvt")
         if list(plus or []) != want["VT_plus"]:
             errors.append(f"rs1g14 VT+ @ {vcc} must be {want['VT_plus']}, got {plus}")
         if list(minus or []) != want["VT_minus"]:
             errors.append(f"rs1g14 VT- @ {vcc} must be {want['VT_minus']}, got {minus}")
+        if list(dvt or []) != want["dVT"]:
+            errors.append(f"rs1g14 dVT @ {vcc} must be {want['dVT']}, got {dvt}")
+    gaps14 = " ".join(str(x) for x in (m14.gaps or []))
+    if "retention" not in gaps14.lower() or "unsure" not in gaps14.lower():
+        errors.append("rs1g14 must keep data retention MAX UNSURE (PDF MIN 1.5 only)")
+    blob14 = load_part_yaml("rs1g14")
+    pm14 = blob14.get("product_model") if isinstance(blob14.get("product_model"), dict) else blob14
+    ret14 = (pm14 or {}).get("data_retention") if isinstance(pm14, dict) else None
+    if isinstance(ret14, dict):
+        mx = ret14.get("max_V")
+        if mx not in (None, "", "UNSURE", "unsure"):
+            errors.append(f"rs1g14 must not invent data retention MAX, got {mx!r}")
     a14 = isolation_for(m14, "A")
     if not any(p.y_expect == "invert" for p in a14):
         errors.append("rs1g14 isolation A must invert (Y=NOT A)")
@@ -2495,6 +2590,10 @@ def _draft_scaffold_ok() -> list[str]:
         errors.append(f"G125 ioz must force OE inactive H only, got {vec125}")
     if vec125.get("OE") == "L":
         errors.append("Verify FAIL bar: G125 ioz must not force OE active L")
+    ranges125 = [r for r in ((m125.vcc_grid or {}).get("ranges") or []) if isinstance(r, dict)]
+    low125 = next((r for r in ranges125 if abs(float(r.get("start") or 0) - 1.65) < 1e-9), None)
+    if low125 is None or _formula_tok(low125.get("VIL_max")) != _formula_tok("0.3*VCC"):
+        errors.append("rs1g125 VIL 1.65-1.95 must stay 0.3*VCC (not G08 0.15*VCC)")
     src_ioz = inspect.getsource(ldc._run_ioz)
     if "ioz_force_vector" not in src_ioz:
         errors.append("logic_dc _run_ioz must use ioz_force_vector (OE inactive only)")
@@ -2537,6 +2636,13 @@ def _draft_scaffold_ok() -> list[str]:
     icct164 = dc164.get("ICCT_uA") if isinstance(dc164.get("ICCT_uA"), dict) else {}
     if str(icct164.get("status") or "").strip().upper() != "ABSENT":
         errors.append(f"rs164 ICCT_uA.status must be ABSENT, got {icct164.get('status')!r}")
+    ioff164 = dc164.get("Ioff_uA") if isinstance(dc164.get("Ioff_uA"), dict) else dc164.get("IOFF_uA")
+    if not isinstance(ioff164, dict):
+        ioff164 = {}
+    if str(ioff164.get("status") or "").strip().upper() != "ABSENT":
+        errors.append(f"rs164 Ioff_uA.status must be ABSENT, got {ioff164.get('status')!r}")
+    if any(k in ioff164 for k in ("Full", "plus25C_max", "max", "max_uA") if ioff164.get(k) not in (None, "", "ABSENT")):
+        errors.append("rs164 must not invent Ioff numbers (ABSENT; delta_icc off)")
     runner = str((m164.recipe or {}).get("runner") or "")
     if "sequential" not in runner.lower():
         errors.append(f"rs164 recipe.runner must be sequential_shift_register, got {runner!r}")

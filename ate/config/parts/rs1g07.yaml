@@ -61,7 +61,7 @@ fixture_modes:
 product_model:
   part: RS1G07
   status: CONFIRMED
-  source_card: RS1G07_card_DRAFT.md
+  source_card: RS1G07_card_CONFIRMED.md
   package: SC70-5
   packages_note: SOT23-5 / SC70-5 (=SOT353) -- campaign package stays SOT23
   schmitt: false
@@ -106,7 +106,7 @@ product_model:
         y_expect: track
         note: VOL when Y=L; Z when A=H -- not VOH
   vcc_grid:
-    status: UNSURE
+    status: CONFIRMED
     stimulus: PSU_MSO
     pass_mode:
       VIH: min_only
@@ -137,7 +137,7 @@ product_model:
       VIL_max: 0.15*VCC
       label: 4.5-5.5
     fixed_points: []
-    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
+    note: CONFIRMED from SoT VIH/VIL bands (same CMOS table as G08; do not invent extra rows)
   pass_mode:
     VIH: min_only
     VIL: max_only
@@ -223,7 +223,7 @@ product_model:
   - delta_icc
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
-  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - vcc_grid/vcc_plan CONFIRMED from SoT VIH/VIL bands; do not invent extra rows
   - VOH N/A open-drain -- do not enable voh
   - Y=Z when A=H is open-drain OFF -- not OE-gated IOZ
   - stable_eps_A null
@@ -231,5 +231,5 @@ product_model:
   - IOL 24mA VCC glyph-missing in extract -- row omitted
   - excel_lock OFF (sheet_map paste.values) until excel_plots signed -- do not bind excel_plots
   - VOL 4 extract-explicit IOL rows CONFIRMED; do not invent extra loads
-  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
-    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; VOH N_A; glyph-missing 100uA/24mA on vol_table; do not invent.

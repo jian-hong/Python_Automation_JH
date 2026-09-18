@@ -93,7 +93,7 @@ fixture_modes:
 product_model:
   part: RS1GT08
   status: CONFIRMED
-  source_card: RS1GT08_card_DRAFT.md
+  source_card: RS1GT08_card_CONFIRMED.md
   package: SC70-5
   schmitt: false
   oe: none
@@ -149,7 +149,7 @@ product_model:
           A: H
         y_expect: track
   vcc_grid:
-    status: UNSURE
+    status: CONFIRMED
     stimulus: PSU_MSO
     pass_mode:
       VIH: min_only
@@ -167,7 +167,7 @@ product_model:
       step: 0.1
       VIH_min_V: 2.0
       VIL_max_V: 0.8
-    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
+    note: CONFIRMED from SoT TTL VIH/VIL (fixed 2.0/3.3 + range 4.5-5.5; do not invent)
   pass_mode:
     VIH: min_only
     VIL: max_only
@@ -280,9 +280,9 @@ product_model:
   - delta_icc
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
-  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - vcc_grid/vcc_plan CONFIRMED from SoT TTL VIH/VIL; do not invent extra rows
   - IOZ OFF
   - TTL VCC 2.0-5.5
   - ICCT one_in 3.4 -- do not invent 0.6
-  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
-    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; glyph-missing uA/mA omitted; do not invent.

@@ -110,7 +110,7 @@ Setup **Logic DC recipe** -- Customise Parameters (no xyflow):
 
 Runner merges `fixed_points` + `ranges` -> `vcc_list`. Per-VCC VIH/VIL from the owning fixed point or range. Exact-VCC fixed points overwrite range-step ownership.
 
-YAML `vcc_grid.status` CONFIRMED is Datasheet-signed (97/126/34). Overlay edits cannot promote unsigned SKUs. New SKUs stay UNCONFIRMED -- fail-closed for numbers green.
+YAML `vcc_grid.status` CONFIRMED is Datasheet-signed (97/126/34 and the 8 SoT SKUs: 08/07/14/32/GT08/GT32/G125/RS164). Overlay edits cannot promote unsigned SKUs. New SKUs stay UNCONFIRMED -- fail-closed for numbers green.
 
 Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/`.
 
@@ -252,11 +252,11 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 
 **JH room CONFIRM (grounded fields only -- 2026-09-17; not a bench green)**
 
-Eight overnight DRAFT models are **CONFIRMED** for grounded extract/card fields (truth_table / pins / isolation / oe / open_drain / sequential). `vcc_grid` / `vcc_plan` 9.1 VIH/VIL stay **UNSURE** (PDF table image -- do not invent). Glyph-missing uA/mA rows stay omitted. GT34 already CONFIRMED (2026-09-18). STS latest `report.pdf` copies measured rows with Pass criteria / How met (never invent pass numbers). Dual Excel: golden_auto overwrite + pretty never auto; `sessions/csv/` + `sessions/path_b_write.json`.
+Eight overnight models are **CONFIRMED** for grounded extract/card fields (truth_table / pins / isolation / oe / open_drain / sequential) and for `vcc_grid` / `vcc_plan` VIH/VIL (G14 VT+/-) copied from signed card / box SoT (Jian Hong 2026-09-18). Do not invent extra rows. Fail-closed remain: `stable_eps_A` null, retention MAX if missing, RS164 Ioff+ICCT ABSENT (delta_icc off), G07 VOH N_A, glyph-missing uA/mA rows. GT34 already CONFIRMED (2026-09-18). STS latest `report.pdf` copies measured rows with Pass criteria / How met (never invent pass numbers). Dual Excel: golden_auto overwrite + pretty never auto; `sessions/csv/` + `sessions/path_b_write.json`.
 
-1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock. VIH/VIL 9.1 PDF image -- UNSURE. Do not copy extract 9.2 over Ariff voh_table. Light-load 100uA and IOH -24mA VCC glyph-missing -- omitted.
-2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ. VOL = extract-explicit IOL only (4/8/16/32mA, CONFIRMED). Do not invent 100uA or 24mA VCC.
-3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL). VT grid stays in yaml; vcc_grid.status UNSURE until extract-signed.
+1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock. VIH/VIL four CMOS bands CONFIRMED from signed card (1.65-1.95 0.65x/0.15x; 2.3-2.7 1.7/0.3; 3-3.6 2.2/0.4; 4.5-5.5 0.7x/0.15x). Do not copy extract 9.2 over Ariff voh_table. Light-load 100uA and IOH -24mA VCC glyph-missing on campaign tables -- omitted.
+2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ. VOL = extract-explicit IOL only (4/8/16/32mA, CONFIRMED). Do not invent 100uA or 24mA VCC. VIH/VIL same CMOS bands CONFIRMED from SoT.
+3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL). VT+/- / dVT CONFIRMED from signed card. Data retention MAX stays UNSURE (PDF MIN 1.5 only).
 4. RS1G32 OR-2 other=L. RS1GT08/RS1GT32 TTL VCC 2.0-5.5; ICCT one_in@3.4 (not 0.6).
 5. RS1G125 OE active-L -> tick ioz when OE inactive only (`recipe.ioz_when: oe_inactive`; force OE=H, never active L). RS164 sequential_shift_register -- do not tick Path B gate 2^n.
 
