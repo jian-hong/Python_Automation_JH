@@ -84,6 +84,7 @@ fixture_modes:
       - "PSU_MSO: PSU CH1=VCC; PSU CH2=Y-load for voh/vol (pin Y, Path B fixture); PSU CH3=A; DMM/SCOPE on Y. NC not wired. Do not invent AWG Freq/Amp."
       - "vcc_grid CONFIRMED: fixed 2.0 (VIH>=1.0 VIL<=0.3) / 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8)."
       - "voh/vol CONFIRMED tables (100uA on merged vcc_list + named high-load). II +/-1uA +25C judged; Full +/-5uA documented. ICC 1uA/+25C judged; Full 10uA documented."
+      - "JH room 2026-09-18: VOH LIVE SUCCESS (min_only high-load PASS). Board still VOH-wired. VOL needs board change -- do not invent VOL. Not a Verify PASS / not bench-green for other tests."
       - "delta_icc ON: ICCT 500uA @5.5V one_in@3.4V. Do not invent delta_offset_v=0.6."
       - "oe none: do not enable ioz. n=1. Owner Chun Tak / Core AE OK. Excel: auto overwrite Version; pretty never auto."
     tests:
@@ -243,6 +244,24 @@ product_model:
     report_pdf: report.pdf
     records: "{test}/DUT_n/records/"
     attach: "{test}/DUT_n/"
+  # Session notes. Sibling of data_paths -- not a data_paths key (97/126/34 exact-match).
+  live:
+    voh:
+      status: LIVE_PASS
+      when: "2026-09-18"
+      session_note: "JH room VOH LIVE SUCCESS. Board still wired for VOH. VOL needs board change -- do not invent VOL."
+      golden_auto: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+      sessions: sessions/
+      pass_mode: min_only
+      rows:
+        - {IOH_mA: -8, vcc: 2.0, spec_min: 1.6, measured: 1.7089, result: PASS}
+        - {IOH_mA: -24, vcc: 3.3, spec_min: 2.5, measured: 2.8968, result: PASS}
+        - {IOH_mA: -32, vcc: 4.5, spec_min: 3.8, measured: 4.0695, result: PASS}
+        - {IOH_mA: -32, vcc: 5.0, spec_min: 4.2, measured: 4.5867, result: PASS}
+        - {IOH_mA: -32, vcc: 5.5, spec_min: 4.8, measured: 5.0992, result: PASS}
+    vol:
+      status: NOT_RUN
+      note: "board change required; do not invent VOL measured"
   workbook_policy:
     golden_auto: one_per_version_overwrite
     auto: one_per_version_overwrite
@@ -275,4 +294,5 @@ product_model:
     - "stable_eps_A null -- NON_TIGHT current settle until AE sets"
     - "IOZ OFF (no OE)"
     - "ICCT maps to delta_icc: 500uA @5.5 one_in@3.4 -- do not invent delta_offset_v=0.6"
+    - "VOL LIVE NOT_RUN -- board change required; do not invent VOL measured"
 

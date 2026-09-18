@@ -1914,6 +1914,16 @@ def missing_data_path_keys(model: ProductModel) -> list[str]:
     return missing
 
 
+def live_session(model: Any) -> dict[str, Any]:
+    """Optional product_model.live (sibling of data_paths). golden_auto / sessions notes.
+
+    Not a data_paths key -- 97/126/34 DATA_PATH_TEMPLATES stay exact-match.
+    """
+    raw = _raw_blob(model)
+    live = raw.get("live")
+    return dict(live) if isinstance(live, dict) else {}
+
+
 def _stable_eps_a_null(model: ProductModel) -> bool:
     raw = (model.recipe or {}).get("stable_eps_A")
     if raw is None:

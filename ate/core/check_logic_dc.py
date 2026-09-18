@@ -40,6 +40,7 @@ from ate.tests.logic.product_model import (
     iter_logic_corners,
     ioz_force_vector,
     known_pin_names,
+    live_session,
     load_card_fields_schema,
     load_part_yaml,
     load_product_model,
@@ -1065,6 +1066,89 @@ def _rs1gt34_ok() -> list[str]:
     model_src = _MODEL.read_text(encoding="utf-8")
     if "merge_vcc_grid" not in model_src or "lookup_vcc_grid_limits" not in model_src:
         errors.append("product_model must merge vcc_grid fixed+ranges and lookup per-VCC limits")
+    errors += _gt34_voh_live_ok(m)
+    return errors
+
+
+_GT34_VOH_LIVE = (
+    (-8.0, 2.0, 1.6, 1.7089),
+    (-24.0, 3.3, 2.5, 2.8968),
+    (-32.0, 4.5, 3.8, 4.0695),
+    (-32.0, 5.0, 4.2, 4.5867),
+    (-32.0, 5.5, 4.8, 5.0992),
+)
+
+
+def _gt34_voh_live_ok(m) -> list[str]:
+    """JH room 2026-09-18 VOH LIVE on GT34. VOL NOT_RUN. Do not invent VOL / copy LIVE."""
+    errors: list[str] = []
+    if "live" in (m.data_paths or {}):
+        errors.append(
+            "rs1gt34 live must not be a data_paths key (97/126/34 exact-match templates)"
+        )
+    live = live_session(m)
+    voh_live = live.get("voh") if isinstance(live.get("voh"), dict) else {}
+    vol_live = live.get("vol") if isinstance(live.get("vol"), dict) else {}
+    if str(voh_live.get("status") or "").strip().upper() != "LIVE_PASS":
+        errors.append(f"rs1gt34 live.voh.status must be LIVE_PASS, got {voh_live.get('status')!r}")
+    if str(voh_live.get("pass_mode") or "").strip().lower().replace("-", "_") != "min_only":
+        errors.append("rs1gt34 live.voh.pass_mode must be min_only")
+    if "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/" not in str(
+        voh_live.get("golden_auto") or ""
+    ):
+        errors.append("rs1gt34 live.voh must note golden_auto Version workbook path")
+    if "sessions" not in str(voh_live.get("sessions") or "").lower():
+        errors.append("rs1gt34 live.voh must note sessions/ path")
+    rows = [r for r in (voh_live.get("rows") or []) if isinstance(r, dict)]
+    got_live: list[tuple[float, float, float, float]] = []
+    for row in rows:
+        try:
+            got_live.append(
+                (
+                    round(float(row.get("IOH_mA")), 6),
+                    round(float(row.get("vcc")), 6),
+                    round(float(row.get("spec_min")), 6),
+                    round(float(row.get("measured")), 6),
+                )
+            )
+        except (TypeError, ValueError):
+            errors.append(f"rs1gt34 live.voh row malformed: {row}")
+            continue
+        if str(row.get("result") or "").strip().upper() != "PASS":
+            errors.append(f"rs1gt34 live.voh row must be PASS, got {row}")
+    want_live = [
+        (round(a, 6), round(b, 6), round(c, 6), round(d, 6)) for a, b, c, d in _GT34_VOH_LIVE
+    ]
+    if got_live != want_live:
+        errors.append(f"rs1gt34 live.voh rows must match JH room VOH LIVE table, got {got_live}")
+    if str(vol_live.get("status") or "").strip().upper().replace("-", "_") != "NOT_RUN":
+        errors.append(
+            f"rs1gt34 live.vol.status must be NOT_RUN (board change), got {vol_live.get('status')!r}"
+        )
+    if vol_live.get("measured") is not None or vol_live.get("rows"):
+        errors.append("rs1gt34 live.vol must not invent measured / rows (VOL NOT_RUN)")
+    note = str(vol_live.get("note") or "")
+    if "board change" not in note.lower() or "invent" not in note.lower():
+        errors.append("rs1gt34 live.vol note must say board change / do not invent VOL")
+    for path in sorted(PARTS_DIR.glob("*.yaml")):
+        key = path.stem.lower()
+        if key == "rs1gt34" or not has_product_model(key):
+            continue
+        other = load_product_model(key)
+        if other is None:
+            continue
+        ol = live_session(other)
+        ovoh = ol.get("voh") if isinstance(ol.get("voh"), dict) else {}
+        ovol = ol.get("vol") if isinstance(ol.get("vol"), dict) else {}
+        ost = str(ovoh.get("status") or "").strip().upper().replace("-", "_")
+        if ost in ("LIVE_PASS", "LIVE", "PASS"):
+            errors.append(f"{key} must not claim VOH LIVE (GT34 only this session; not bench-green)")
+        if ovol.get("measured") is not None or (
+            isinstance(ovol.get("rows"), list) and ovol.get("rows")
+        ):
+            errors.append(f"{key} must not invent VOL live measured")
+        if key == "rs1g07" and (ovoh.get("loads") or ovoh.get("rows")):
+            errors.append("rs1g07 must not invent VOH live (VOH N_A)")
     return errors
 
 
@@ -1290,6 +1374,14 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must name golden_auto datapoints.csv sidecar")
     if "LOGIC_DC_DUAL_CHANNEL.md" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must point at docs/LOGIC_DC_DUAL_CHANNEL.md")
+    if "1.7089" not in text or "LIVE" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must record GT34 VOH LIVE measured 1.7089")
+    if "do not invent VOL" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must say do not invent VOL")
+    if "no per-board" not in text.lower() and "per-board voh" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must say no per-board VOH script")
+    if "2Gxx only" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must say dual-channel Continue is 2Gxx only")
     if "records/" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name {test}/DUT_n/records/")
     if "START.bat" not in text or "127.0.0.1:5174" not in text or "8766" not in text:
@@ -2831,6 +2923,17 @@ def _draft_scaffold_ok() -> list[str]:
         errors.append("product_model.py must expose is_open_drain / is_sequential (no part-name ifs)")
     if "is_push_pull" not in src_model or "is_three_state" not in src_model or "voh_series_allowed" not in src_model:
         errors.append("product_model.py must expose is_push_pull / is_three_state / voh_series_allowed")
+    if "live_session" not in src_model:
+        errors.append("product_model must expose live_session (golden_auto / sessions notes; not a data_paths key)")
+    y_src = _fn_src(src_ldc, "_apply_y_vector")
+    if not y_src or "want_bits" not in y_src:
+        errors.append("_apply_y_vector must prefer truth_table all-high/all-low when that vector exists")
+    voh_src = _fn_src(src_ldc, "_run_voh_path_b")
+    vol_src = _fn_src(src_ldc, "_run_vol_path_b")
+    if not voh_src or "_voh_vol_table" not in voh_src or "_apply_y_vector" not in voh_src:
+        errors.append("_run_voh_path_b must use product_model table + all-high vector (no per-board VOH script)")
+    if not vol_src or "_voh_vol_table" not in vol_src or "_apply_y_vector" not in vol_src:
+        errors.append("_run_vol_path_b must use product_model table + all-low vector (no per-board VOL script)")
     return errors
 
 

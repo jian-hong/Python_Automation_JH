@@ -114,6 +114,12 @@ YAML `vcc_grid.status` CONFIRMED is Datasheet-signed (97/126/34 and the 8 SoT SK
 
 Do not invent extra IOH/IOL rows. Path B prefers CONFIRMED `dc_limits.VOH/VOL.loads` (formula **VCC-0.1** only). Campaign Ariff `voh_table`/`vol_table` stay on 08/32/GT08/GT32 (Path A). G07 campaign `vol_table` stays 4 extract rows; SoT 0.1mA/24mA live in `dc_limits.VOL` only.
 
+## Scale to other boards / parts
+
+No per-board VOH script. Path B loads come from that SKU's CONFIRMED `dc_limits.VOH/VOL.loads` (expand onto merged `vcc_list`; formula **VCC-0.1** only). Stimulus uses truth_table all-high (VOH) / all-low (VOL) when that vector exists. Add a SKU: part yaml + limits + product_model; do not fork `logic_dc.py`. Dual-channel Continue is **2Gxx only** -- 1Gxx cards leave `recipe.dual_channel_continue` off.
+
+Optional `product_model.live` (sibling of `data_paths`, not a data_paths key) records a bench session against golden_auto / `sessions/`. Do not copy LIVE measured numbers onto other SKUs. Do not invent VOL.
+
 ## Dual-channel Continue (future 2Gxx)
 
 OpAmp dual Continue is reused as DATA, not hardcoded OpAmp. See `docs/LOGIC_DC_DUAL_CHANNEL.md`.
@@ -244,7 +250,15 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 - Stimulus **PSU_MSO** -- hide Freq/Amp. PSU CH1=VCC, PSU CH2=Y-load for `voh`/`vol` (pin Y), PSU CH3=A, DMM/SCOPE Y. Do not invent AWG nets.
 - Tick Path B DC: `input_threshold`, `icc`, `ii`, `voh`, `vol`, `delta_icc`. `delta_icc` ON: ICCT 500uA @5.5V one_in@3.4. Do not invent `delta_offset_v=0.6`.
 - `input_threshold` uses `recipe.search` / `threshold_search.py`: limit-scaled first step (largest ladder step <= card |limit|), on-hit skip rest of walk, no reverse in a stage (VIH arm 0 up; VIL arm VCC down).
-- VOH/VOL from CONFIRMED `voh_table`/`vol_table` (100uA on merged `vcc_list`; high-load only at 2.0/3.3/4.5/5.0/5.5). Judge **VOH >= min** (`min_only`) / **VOL <= max** (`max_only`).
+- VOH/VOL from CONFIRMED `dc_limits` loads / `voh_table`/`vol_table` (100uA on merged `vcc_list`; high-load only at 2.0/3.3/4.5/5.0/5.5). Judge **VOH >= min** (`min_only`) / **VOL <= max** (`max_only`).
+- JH room 2026-09-18 **VOH LIVE SUCCESS** (`min_only`). Board still wired for VOH. VOL needs board change -- **do not invent VOL**. Recorded in `product_model.live` (golden_auto Version `workbook/` + `sessions/`). Not a Verify PASS. Not bench-green for other tests or other SKUs.
+
+| IOH | VCC | min | measured | result |
+| -8 mA | 2.0 | 1.6 | 1.7089 | PASS |
+| -24 mA | 3.3 | 2.5 | 2.8968 | PASS |
+| -32 mA | 4.5 | 3.8 | 4.0695 | PASS |
+| -32 mA | 5.0 | 4.2 | 4.5867 | PASS |
+| -32 mA | 5.5 | 4.8 | 5.0992 | PASS |
 - II: +/-1uA +25C judged (`II_uA`); Full +/-5uA documented (`II_FULL_uA`, no run-judge). ICC: 1uA +25C judged (`ICC_uA`); Full 10uA documented (`ICC_FULL_uA`).
 - `vcc_grid` CONFIRMED: fixed 2.0 (VIH>=1.0 VIL<=0.3), 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8). Preview merged `vcc_list` before START.
 - Excel: auto overwrite Version; pretty never auto.
