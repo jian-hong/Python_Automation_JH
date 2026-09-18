@@ -9,7 +9,7 @@ JH dropped G74/G123 -- part yaml `status: PARKED`, `product_model.status` stays 
 
 ## locks
 
-- G00 NAND other=H invert; ICCT ABSENT; delta_icc from delta_icc_uA only
+- G00 NAND other=H invert; ICCT ABSENT on all six; delta_icc from delta_icc_uA only (no invent ICCT map / numbers)
 - G02 NOR other=L invert; TTL-style VIH/VIL -- FAIL G08 CMOS 0.65/0.15 copy
 - G04 inverter n=1; NC not OE; IOZ OFF
 - G86 XOR track+invert; VIL 0.20*VCC @1.65-1.95 from card

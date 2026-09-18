@@ -78,6 +78,9 @@ product_model:
     ICCT_uA:
       status: ABSENT
       note: do not invent ICCT
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD. delta_icc from this block only; ICCT ABSENT is not a map
   recipe:
     settle_s: 0.05
     stable_n: 3
@@ -89,5 +92,6 @@ product_model:
   gaps:
   - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
   - inverter n=1 Y=NOT A; NC not OE; IOZ OFF
+  - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
   - do not invent VOH/VOL / ICCT / VIH/VIL
   - stable_eps_A null

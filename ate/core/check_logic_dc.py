@@ -3216,12 +3216,27 @@ def _next_wave_ok() -> list[str]:
             errors.append(f"{part} ioz must raise RuntimeError, got {type(exc).__name__}: {exc}")
         icct = _dc_block(m, "ICCT_uA", "ICCT")
         st_icct = str(icct.get("status") or "").upper().replace("-", "_")
-        if st_icct not in ("ABSENT", "N_A", "NA", "UNCONFIRMED"):
-            errors.append(f"{part} ICCT must stay ABSENT/UNCONFIRMED, got {icct.get('status')!r}")
+        if st_icct not in ("ABSENT", "N_A", "NA"):
+            errors.append(f"{part} ICCT must stay ABSENT (delta_icc from delta_icc_uA only), got {icct.get('status')!r}")
         if icct.get("one_input_V") is not None or icct.get("offset_v") is not None:
             errors.append(f"{part}: invent ICCT map -> FAIL")
+        if ldc._icct_blob(m):
+            errors.append(f"{part}: invent ICCT map into Path B delta_icc -> FAIL")
         if (m.recipe or {}).get("delta_offset_v") is not None:
             errors.append(f"{part}: invent recipe.delta_offset_v from ICCT -> FAIL")
+        if "delta_icc" in en:
+            errors.append(f"{part}: invent delta_icc enabled -> FAIL")
+        dicc = _dc_block(m, "delta_icc_uA", "delta_icc")
+        if not dicc:
+            errors.append(f"{part} delta_icc_uA block missing (ICCT ABSENT ≠ invent ICCT)")
+        else:
+            st_d = str(dicc.get("status") or "").upper().replace("-", "_")
+            if st_d not in ("UNCONFIRMED", "ABSENT", "N_A", "NA"):
+                errors.append(f"{part} delta_icc_uA must stay UNCONFIRMED (numbers HOLD), got {dicc.get('status')!r}")
+            for banned_k in ("max", "typ", "limit", "value", "uA", "max_uA", "min"):
+                if dicc.get(banned_k) not in (None, "", [], ()):
+                    errors.append(f"{part}: invent delta_icc_uA number -> FAIL")
+                    break
         if ldc._voh_vol_table(part, "voh") or ldc._voh_vol_table(part, "vol"):
             errors.append(f"{part} UNCONFIRMED VOH/VOL must not expand (do not invent loads)")
         rec = m.recipe if isinstance(m.recipe, dict) else {}
@@ -3236,10 +3251,6 @@ def _next_wave_ok() -> list[str]:
                 errors.append("rs1g00 runner/product_class must be gate_nand2")
             if not any(p.fix.get("B") == "H" and p.y_expect == "invert" for p in a_iso):
                 errors.append("rs1g00 NAND isolation A must invert with B=H")
-            if st_icct not in ("ABSENT", "N_A", "NA"):
-                errors.append("rs1g00 ICCT must stay ABSENT (delta_icc from delta_icc_uA only)")
-            if ldc._icct_blob(m):
-                errors.append("rs1g00 must not map ICCT into Path B delta_icc")
             if dual_channel_continue(m):
                 errors.append("rs1g00 is 1Gxx -- dual_channel_continue off")
         elif part == "rs1g02":

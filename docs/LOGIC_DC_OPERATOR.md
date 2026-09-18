@@ -275,7 +275,7 @@ Eight overnight models are **CONFIRMED** for grounded extract/card fields (truth
 5. RS1G125 OE active-L -> tick ioz when OE inactive only (`recipe.ioz_when: oe_inactive`; force OE=H, never active L). Enable voh/vol (three_state + CONFIRMED SoT). RS164 sequential_shift_register -- do not tick Path B gate 2^n; VOH/VOL stay UNCONFIRMED (do not expand).
 **Dropped / archive (not Path B scale):** RS1G123 / RS1G74 stay optional **PARKED** UNCONFIRMED stubs. Missing yaml does not block green. Do not invent VT+/- or gate 2^n. If yaml is present: Path B gate 2^n stay off; 74 runner `sequential_dff_clr_pre` (alias `sequential_dff`); 123 runner `sequential_monostable_rc`; 123 ICCT ABSENT; schmitt false. `check_logic_dc` FAILs if treated as gate 2^n.
 
-**Next-wave UNCONFIRMED (numbers HOLD; no CONFIRM; `ate_ds_extract/models` not in workspace):** RS1G00 NAND other=H invert, ICCT ABSENT (delta_icc from `delta_icc_uA` only). RS1G02 NOR other=L invert, TTL-style VIH/VIL (not G08 CMOS). RS1G04 inverter n=1, NC not OE, IOZ OFF. RS1G86 XOR dual isolation track+invert; VIL 0.20*VCC at 1.65-1.95 from card. RS2G08 / RS2G32 dual AND/OR with `recipe.dual_channel_continue` CHA then CHB. Invent OE/IOZ/ICCT or skip CHA->CHB FAILs.
+**Next-wave UNCONFIRMED (numbers HOLD; no CONFIRM; `ate_ds_extract/models` not in workspace):** All six ICCT ABSENT -- delta_icc from `delta_icc_uA` only (do not invent ICCT). RS1G00 NAND other=H invert; oe none; IOZ OFF. RS1G02 NOR other=L invert, TTL-style VIH/VIL (not G08 CMOS). RS1G04 inverter n=1, NC not OE, IOZ OFF. RS1G86 XOR dual isolation track+invert; VIL 0.20*VCC at 1.65-1.95 from card. RS2G08 / RS2G32 dual AND/OR with `recipe.dual_channel_continue` CHA then CHB. Invent OE/IOZ/ICCT or skip CHA->CHB FAILs.
 
 No Verify PASS.
 

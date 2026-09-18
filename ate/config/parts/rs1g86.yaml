@@ -93,6 +93,9 @@ product_model:
     ICCT_uA:
       status: ABSENT
       note: do not invent ICCT
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD. delta_icc from this block only; ICCT ABSENT is not a map
   recipe:
     settle_s: 0.05
     stable_n: 3
@@ -105,5 +108,6 @@ product_model:
   - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
   - XOR dual isolation track+invert; oe none; IOZ OFF
   - VIL 0.20*VCC @1.65-1.95 from card; do not copy G08 0.15*VCC
-  - VIH / VOH / VOL / ICCT HOLD -- do not invent
+  - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
+  - VIH / VOH / VOL HOLD -- do not invent
   - stable_eps_A null
