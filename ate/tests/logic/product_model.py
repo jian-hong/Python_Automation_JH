@@ -845,6 +845,27 @@ def _grid_limit_pair(row: dict[str, Any]) -> tuple[Optional[float], Optional[flo
     return vih, vil
 
 
+def _eval_vcc_limit(raw: Any, vcc: float) -> Optional[float]:
+    """Card formulas only: number, VCC-0.1, or N*VCC. Do not invent other expressions."""
+    n = _opt_float(raw)
+    if n is not None:
+        return n
+    s = str(raw or "").strip().upper().replace(" ", "")
+    if not s:
+        return None
+    if s == "VCC-0.1":
+        return float(vcc) - 0.1
+    if s.endswith("*VCC"):
+        coef = _opt_float(s[:-4])
+        if coef is not None:
+            return coef * float(vcc)
+    if s.startswith("VCC*"):
+        coef = _opt_float(s[4:])
+        if coef is not None:
+            return coef * float(vcc)
+    return None
+
+
 def _step_band(start: float, stop: float, step: float) -> list[float]:
     """Inclusive start..stop. Range steps inherit band limits -- not stored as fixed rows."""
     try:
@@ -963,26 +984,36 @@ def vcc_grid_owned(grid: Any) -> dict[float, dict[str, Any]]:
     g = normalize_vcc_grid(grid)
     owned: dict[float, dict[str, Any]] = {}
     for band in g.get("ranges") or []:
-        rec_base = {
-            "VIH_min_V": band.get("VIH_min_V"),
-            "VIL_max_V": band.get("VIL_max_V"),
-            "source": "range",
-        }
+        rec_base = {"source": "range"}
         label = band.get("label")
         if label:
             rec_base["label"] = label
+        for k, val in band.items():
+            if k in ("start", "stop", "step", "label", "VIH_min_V", "VIL_max_V"):
+                continue
+            rec_base[k] = val
         for v in _step_band(band["start"], band["stop"], band["step"]):
             item = dict(rec_base)
             item["vcc"] = v
+            item["VIH_min_V"] = _eval_vcc_limit(band.get("VIH_min_V"), v) or _eval_vcc_limit(
+                band.get("VIH_min"), v
+            )
+            item["VIL_max_V"] = _eval_vcc_limit(band.get("VIL_max_V"), v) or _eval_vcc_limit(
+                band.get("VIL_max"), v
+            )
             owned[_vcc_key(v)] = item
     for pt in g.get("fixed_points") or []:
         v = _vcc_key(pt["vcc"])
-        owned[v] = {
-            "vcc": v,
-            "VIH_min_V": pt.get("VIH_min_V"),
-            "VIL_max_V": pt.get("VIL_max_V"),
-            "source": "fixed",
-        }
+        rec = dict(pt)
+        rec["vcc"] = v
+        rec["VIH_min_V"] = _eval_vcc_limit(pt.get("VIH_min_V"), v) or _eval_vcc_limit(
+            pt.get("VIH_min"), v
+        )
+        rec["VIL_max_V"] = _eval_vcc_limit(pt.get("VIL_max_V"), v) or _eval_vcc_limit(
+            pt.get("VIL_max"), v
+        )
+        rec["source"] = "fixed"
+        owned[v] = rec
     return owned
 
 
@@ -1512,15 +1543,19 @@ def _pin_drive(blob: dict[str, Any], logic_inputs: list[str], oe_pin: str, oe_mo
         stim = _stimulus_token(grid.get("stimulus"))
     if stim == "PSU_MSO":
         # CH1 is VCC. CH2 reserved for Y-load when voh/vol tables exist.
-        # Default leftover inputs at CH3+ (do not steal CH2 for an input).
-        psu_ch = 3
+        # One leftover input at PSU CH3. Further leftovers default to AWG CH1+
+        # (DP832 has no CH4; do not steal CH2 for an input).
+        psu_left = True
+        awg_ch = 1
         for name in names:
             if name in out:
                 continue
-            if psu_ch == 2:
-                psu_ch = 3
-            out[name] = DriveMap(src="psu", ch=psu_ch)
-            psu_ch += 1
+            if psu_left:
+                out[name] = DriveMap(src="psu", ch=3)
+                psu_left = False
+            else:
+                out[name] = DriveMap(src="awg", ch=awg_ch)
+                awg_ch += 1
         return out
     awg_ch = 1
     psu_ch = 2

@@ -154,6 +154,15 @@ def _provisional_dc(model: ProductModel, test_id: str) -> bool:
         keys: tuple[str, ...] = ("VOH", "voh")
     elif low == "vol":
         keys = ("VOL", "vol")
+    elif low == "delta_icc":
+        # Unsigned ICCT must not green delta_icc. Still run process via _icct_blob.
+        keys = ("delta_icc", "DELTA_ICC", "ICCT_uA", "ICCT", "icct")
+    elif low == "icc":
+        keys = ("icc", "ICC", "ICC_uA")
+    elif low == "ioz":
+        keys = ("ioz", "IOZ", "IOZ_uA")
+    elif low == "ii":
+        keys = ("ii", "II", "II_uA")
     else:
         keys = (tid, low, tid.upper())
     for key in keys:
@@ -162,11 +171,21 @@ def _provisional_dc(model: ProductModel, test_id: str) -> bool:
             continue
         st = str(block.get("status") or "").strip().upper().replace("-", "_")
         if st in ("N_A", "NA", "ABSENT"):
-            return False
+            continue
         if is_unconfirmed_status(block.get("status")):
             return True
         return False
     return False
+
+
+def _band_lo_hi(raw: Any) -> tuple[Optional[float], Optional[float]]:
+    """CONFIRMED VT+/- range pair from vcc_grid. Empty if the card has no band."""
+    if isinstance(raw, (list, tuple)) and len(raw) >= 2:
+        try:
+            return float(raw[0]), float(raw[1])
+        except (TypeError, ValueError):
+            return None, None
+    return None, None
 
 
 def _meas(
@@ -696,12 +715,60 @@ def _run_input_threshold(instr, params: Any) -> dict[str, Any]:
         if schmitt:
             summary = f"VTH n={len(rows)} last VT+={last.get('VT+')} VT-={last.get('VT-')}"
             meas = []
+            for rec in rows:
+                if not isinstance(rec, dict) or rec.get("status") == "UNSURE":
+                    continue
+                vcc = rec.get("VCC")
+                tag = str(vcc).replace(".", "p")
+                lim = lookup_vcc_grid_limits(model, vcc) or {}
+                plo, phi = _band_lo_hi(lim.get("VT_plus") or lim.get("VT+"))
+                mlo, mhi = _band_lo_hi(lim.get("VT_minus") or lim.get("VT-"))
+                if rec.get("VT+") is not None:
+                    row = _meas(model, f"VTPLUS_{tag}V", rec["VT+"], "V", test_id="input_threshold")
+                    if plo is not None:
+                        row["min"] = plo
+                    if phi is not None:
+                        row["max"] = phi
+                    row["pass_mode"] = (
+                        lookup_pass_mode(model, "VTPLUS_V", "input_threshold") or "range"
+                    )
+                    meas.append(row)
+                if rec.get("VT-") is not None:
+                    row = _meas(model, f"VTMINUS_{tag}V", rec["VT-"], "V", test_id="input_threshold")
+                    if mlo is not None:
+                        row["min"] = mlo
+                    if mhi is not None:
+                        row["max"] = mhi
+                    row["pass_mode"] = (
+                        lookup_pass_mode(model, "VTMINUS_V", "input_threshold") or "range"
+                    )
+                    meas.append(row)
             vt_p = [r.get("VT+") for r in rows if r.get("VT+") is not None]
             vt_m = [r.get("VT-") for r in rows if r.get("VT-") is not None]
             if vt_p:
-                meas.append(_meas(model, "VTPLUS_V", vt_p[-1], "V", test_id="input_threshold"))
+                last_p = _meas(model, "VTPLUS_V", vt_p[-1], "V", test_id="input_threshold")
+                lim_last = lookup_vcc_grid_limits(model, last.get("VCC")) or {}
+                plo, phi = _band_lo_hi(lim_last.get("VT_plus") or lim_last.get("VT+"))
+                if plo is not None:
+                    last_p["min"] = plo
+                if phi is not None:
+                    last_p["max"] = phi
+                last_p["pass_mode"] = (
+                    lookup_pass_mode(model, "VTPLUS_V", "input_threshold") or "range"
+                )
+                meas.append(last_p)
             if vt_m:
-                meas.append(_meas(model, "VTMINUS_V", vt_m[-1], "V", test_id="input_threshold"))
+                last_m = _meas(model, "VTMINUS_V", vt_m[-1], "V", test_id="input_threshold")
+                lim_last = lookup_vcc_grid_limits(model, last.get("VCC")) or {}
+                mlo, mhi = _band_lo_hi(lim_last.get("VT_minus") or lim_last.get("VT-"))
+                if mlo is not None:
+                    last_m["min"] = mlo
+                if mhi is not None:
+                    last_m["max"] = mhi
+                last_m["pass_mode"] = (
+                    lookup_pass_mode(model, "VTMINUS_V", "input_threshold") or "range"
+                )
+                meas.append(last_m)
         else:
             summary = f"VTH n={len(rows)} last VIH={last.get('VIH')} VIL={last.get('VIL')}"
             meas = []
@@ -1095,6 +1162,29 @@ def _apply_y_vector(instr, model: ProductModel, high: bool, vcc: float, ilim: fl
     return chosen
 
 
+def _psu_ch_drives_logic(model: ProductModel, ch: int) -> bool:
+    """True when a logic/OE pin_drive uses this PSU channel (not VCC / Y)."""
+    skip = {"VCC", "VDD", str(model.output_pin or "Y").upper()}
+    for name, dm in (model.pin_drive or {}).items():
+        if str(name).upper() in skip:
+            continue
+        if getattr(dm, "src", "") == "psu" and int(getattr(dm, "ch", 0) or 0) == int(ch):
+            return True
+    return False
+
+
+def _logic_vplus(model: ProductModel, part_key: str) -> Optional[float]:
+    """Campaign vplus_v is OpAmp CH3. Skip when PSU CH3 is a Path B input."""
+    if _psu_ch_drives_logic(model, 3):
+        return None
+    raw = load_part_yaml(part_key).get("vplus_v") or model.recipe.get("vplus_v")
+    try:
+        v = float(raw or 0)
+    except (TypeError, ValueError):
+        return None
+    return v or None
+
+
 def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
     # INSTRUMENT_SENSE VOH: force Y-high; DMM sense V(Y). Loaded IOH only from voh_table.
     model = _model(params)
@@ -1121,7 +1211,7 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
             if table:
                 from psu_setup import power_off, power_on_protected
 
-                vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
+                vplus = _logic_vplus(model, key)
                 for entry in table:
                     vcc = float(entry["vcc"])
                     spec = entry.get("spec_min")
@@ -1206,7 +1296,7 @@ def _run_vol_path_b(instr, params: Any) -> dict[str, Any]:
             if table:
                 from psu_setup import power_off, power_on_protected
 
-                vplus = float(load_part_yaml(key).get("vplus_v") or model.recipe.get("vplus_v") or 0) or None
+                vplus = _logic_vplus(model, key)
                 for entry in table:
                     vcc = float(entry["vcc"])
                     spec = entry.get("spec_max")

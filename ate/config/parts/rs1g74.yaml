@@ -93,7 +93,7 @@ product_model:
     stable_eps_V: 0.005
     stable_eps_A: null
     settle_timeout_s: 2.0
-    runner: sequential_dff
+    runner: sequential_dff_clr_pre
   gaps:
   - UNCONFIRMED stub -- Datasheet card needed; not a bench green
   - sequential DFF -- Path B gate 2^n / ICC / dICC / VOH / VOL / II SKIP

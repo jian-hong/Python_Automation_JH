@@ -2,6 +2,7 @@
 
 | Date | File | Keywords |
 |------|------|----------|
+| 2026-09-18 | 2026-09-18_sim-first-confirmed.md | path-b, logic-dc, SIM, TestSpec.run, interpolate, vplus, PSU CH3, 0.65*VCC, Schmitt VT, rs164, HOLD |
 | 2026-09-18 | 2026-09-18_logic-dc-sim.md | path-b, logic-dc, sim, check_logic_dc_sim, rs1g123, rs1g74, sequential, UNCONFIRMED, visa-free, NON_TIGHT, G07 VOH N_A, VOL NOT_RUN |
 | 2026-09-18 | 2026-09-18_gt34-voh-live.md | path-b, logic-dc, rs1gt34, VOH, VOL, LIVE_PASS, NOT_RUN, golden_auto, sessions, min_only, product_model.live, scale, 2Gxx, dual_channel_continue |
 | 2026-09-18 | 2026-09-18_sot-voh-vol-confirmed.md | path-b, logic-dc, VOH, VOL, dc_limits, SoT, CONFIRMED, expand, push_pull, three_state, rs1g07, rs1g08, rs1g14, rs1g125, rs1gt34 |

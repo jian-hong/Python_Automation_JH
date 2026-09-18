@@ -179,7 +179,7 @@ def _interpolate(
             first_after = None
         elif last_before is not None and first_after is None:
             first_after = (vin, y)
-            break
+            # Do not break: later finer stages replace this pair.
     if last_before is None or first_after is None:
         return samples[-1][0]
     x0, y0 = last_before
@@ -252,10 +252,11 @@ def run_search_stage(
             sign = 1.0 if rising else -1.0
             back = float(hit_vin) - sign * frac * float(step)
             has_pre = hit_idx is not None and hit_idx > 0
-            pre = samples[hit_idx - 1][0] if has_pre else arm
+            # hit_idx is this stage's points index, not samples.
+            pre = float(points[hit_idx - 1]) if has_pre else arm
             arm = min(pre, back) if rising else max(pre, back)
             arm = min(float(vcc), max(0.0, arm))
-            prev = samples[hit_idx - 1][1] if has_pre else None
+            prev = None
         step = smaller[0]
     vin_out = (
         _interpolate(samples, mid=mid_v, y_expect=y_expect, rising=rising)

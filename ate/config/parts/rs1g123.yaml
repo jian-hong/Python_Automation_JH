@@ -83,13 +83,16 @@ product_model:
     ICC_uA:
       status: UNCONFIRMED
       note: extract quiescent 20uA @5.5 -- Path A supply_current only; not gate 2^n
+    ICCT_uA:
+      status: ABSENT
+      note: extract has no ICCT map -- Path B delta_icc OFF; do not invent offset_v
   recipe:
     settle_s: 0.05
     stable_n: 3
     stable_eps_V: 0.005
     stable_eps_A: null
     settle_timeout_s: 2.0
-    runner: sequential_monostable
+    runner: sequential_monostable_rc
   gaps:
   - UNCONFIRMED stub -- Datasheet card needed; not a bench green
   - sequential monostable -- Path B gate 2^n / ICC / dICC / VOH / VOL / II SKIP
@@ -97,4 +100,5 @@ product_model:
   - VOH/VOL 100uA formula glyph-stripped -- do not invent loads
   - recommended VIH/VIL table missing from extract -- do not invent
   - extract names Schmitt on A/B; VT+/- numbers missing -- schmitt false until card
+  - ICCT ABSENT -- delta_icc off (do not invent)
   - stable_eps_A null

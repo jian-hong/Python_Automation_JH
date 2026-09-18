@@ -78,6 +78,22 @@ _PATH_B_IDS = (
     "ioz",
 )
 
+# CONFIRMED Path B SIM walk (JH 2026-09-18). HOLD SKUs: UNCONFIRMED sequential stubs; Path B OFF.
+_CONFIRMED_SIM_PARTS = (
+    "rs1gt34",
+    "rs1g97",
+    "rs1g126",
+    "rs1g08",
+    "rs1g07",
+    "rs1g14",
+    "rs1g32",
+    "rs1gt08",
+    "rs1gt32",
+    "rs1g125",
+    "rs164",
+)
+_HOLD_SIM_PARTS = ("rs1g74", "rs1g123")
+
 
 def _params(**kw):
     base = dict(vcc=5.0, part="", current_limit_a=0.05, pause_hook=None)
@@ -1252,6 +1268,19 @@ def _threshold_search_ok() -> list[str]:
         errors.append(
             "Verify FAIL bar: on-hit skip must not visit VCC after coarse VIH hit"
         )
+    fine = dict(blob)
+    on_hit_f = dict(on_hit)
+    on_hit_f["next_smaller_step"] = True
+    fine["on_hit"] = on_hit_f
+    r_f = run_search_stage(
+        _vih, vcc=2.0, rising=True, limit=1.0, search=fine, y_expect="track"
+    )
+    if r_f.vin is not None and abs(float(r_f.vin) - 1.25) < 1e-9:
+        errors.append(
+            "Verify FAIL bar: interpolate must use finest crossing, not coarse 1.0/1.5 midpoint"
+        )
+    if r_f.vin is None or abs(float(r_f.vin) - 1.15) > 0.08:
+        errors.append(f"search VIH interpolate must land near trip 1.15, got {r_f.vin}")
     noskip = dict(blob)
     on_hit_n = dict(on_hit)
     on_hit_n["skip_rest_of_walk"] = False
@@ -2913,6 +2942,8 @@ def _draft_scaffold_ok() -> list[str]:
     src_model = _MODEL.read_text(encoding="utf-8")
     if "is_open_drain" not in src_ldc or "is_sequential" not in src_ldc:
         errors.append("logic_dc.py must fail-close open-drain VOH / sequential ICC via generic flags")
+    if "_logic_vplus" not in src_ldc or "_psu_ch_drives_logic" not in src_ldc:
+        errors.append("VOH/VOL must not steal PSU CH3 vplus when pin_drive uses CH3 as an input")
     if "voh_series_allowed" not in src_ldc:
         errors.append("logic_dc.py must gate voh on voh_series_allowed (push_pull/three_state)")
     exp_src = _fn_src(src_ldc, "_expand_voh_vol_loads")
@@ -3143,6 +3174,14 @@ def _seq_stub_ok() -> list[str]:
             errors.append(f"{part} sequential isolation must be N_A, got {m.isolation_status!r}")
         if m.schmitt:
             errors.append(f"{part} schmitt must stay false until VT+/- card (do not invent)")
+        grid = m.vcc_grid if isinstance(m.vcc_grid, dict) else {}
+        for pt in list(grid.get("fixed_points") or []) + list(grid.get("ranges") or []):
+            if not isinstance(pt, dict):
+                continue
+            for k in ("VT_plus", "VT_minus", "VT+", "VT-", "dVT", "delta_VT"):
+                if pt.get(k) not in (None, "", [], ()):
+                    errors.append(f"{part} must not invent VT+/- without a Datasheet VT card")
+                    break
         rec = m.recipe if isinstance(m.recipe, dict) else {}
         if rec.get("stable_eps_A") is not None:
             errors.append(f"{part} recipe.stable_eps_A must stay null (fail-closed; do not invent uA)")
@@ -3210,6 +3249,12 @@ def _seq_stub_ok() -> list[str]:
             errors.append(f"rs1g123 VCC op must be extract 2.0-5.5, got {m123.vcc_op_min}..{m123.vcc_op_max}")
         if set(m123.logic_inputs) != {"A", "B", "CLR"}:
             errors.append(f"rs1g123 logic_inputs must be A/B/CLR from extract pins, got {m123.logic_inputs}")
+        icct123 = _dc_block(m123, "ICCT_uA", "ICCT")
+        st123 = str(icct123.get("status") or "").upper().replace("-", "_")
+        if st123 not in ("ABSENT", "N_A", "NA"):
+            errors.append("rs1g123 ICCT must stay ABSENT (delta_icc OFF; extract has no ICCT map)")
+        if icct123.get("one_input_V") is not None or icct123.get("offset_v") is not None:
+            errors.append("rs1g123 must not map ICCT into Path B delta_icc")
     m74 = load_product_model("rs1g74")
     if m74 is not None:
         pc = str((m74.raw or {}).get("product_class") or "")
@@ -3225,6 +3270,446 @@ def _seq_stub_ok() -> list[str]:
             errors.append(f"rs1g74 ICCT must stay UNCONFIRMED/ABSENT (do not enable delta_icc), got {icct.get('status')!r}")
         if icct.get("one_input_V") is not None or icct.get("offset_v") is not None:
             errors.append("rs1g74 must not map ICCT VCC-0.6 into Path B delta_icc without a Datasheet card")
+    return errors
+
+
+def _sim_path_b_ids(part: str) -> list[str]:
+    """fixture_modes.SIM.tests if present, else enabled_tests intersect Path B DC ids."""
+    yaml = load_part_yaml(part)
+    fx = yaml.get("fixture_modes") if isinstance(yaml.get("fixture_modes"), dict) else {}
+    sim = fx.get("SIM") if isinstance(fx, dict) else None
+    if isinstance(sim, dict) and isinstance(sim.get("tests"), list) and sim["tests"]:
+        ids = [str(x).strip() for x in sim["tests"] if str(x).strip()]
+    else:
+        ids = [str(x).strip() for x in (enabled_tests_for_part(part) or []) if str(x).strip()]
+    return [i for i in ids if i in _PATH_B_IDS]
+
+
+class _SimVisa:
+    def __init__(self, bench: "_SimBench", name: str) -> None:
+        self.bench = bench
+        self.name = name
+
+    def write(self, cmd: str = "", *_a, **_k) -> None:
+        self.bench.write(self.name, str(cmd or ""))
+
+    def query(self, cmd: str = "", *_a, **_k) -> str:
+        return self.bench.query(self.name, str(cmd or ""))
+
+
+class _SimBench:
+    """Visa-free DUT: combinational truth_table + CONFIRMED VT/VIH/VIL hysteresis."""
+
+    def __init__(self) -> None:
+        self.psu_v: dict[int, float] = {}
+        self.awg_v: dict[int, float] = {}
+        self.dmm_func = "VOLT:DC"
+        self.model = None
+        self.drives: dict[str, Any] = {}
+        self.vcc = 5.0
+        self.last_bit: dict[str, str] = {}
+        self.edge_rising = True
+        self.psu = _SimVisa(self, "psu")
+        self.dmm = _SimVisa(self, "dmm")
+        self.gen = _SimVisa(self, "awg")
+        self.scope = _SimVisa(self, "mso")
+
+    def bind(self, model, drives=None, vcc: float | None = None) -> None:
+        self.model = model
+        if drives is not None:
+            self.drives = dict(drives)
+        elif model is not None:
+            self.drives = dict(model.pin_drive or {})
+        if vcc is not None:
+            self.vcc = float(vcc)
+
+    def write(self, name: str, cmd: str) -> None:
+        s = str(cmd or "").strip().upper()
+        if name == "dmm":
+            if "CURR" in s:
+                self.dmm_func = "CURR:DC"
+            elif "VOLT" in s:
+                self.dmm_func = "VOLT:DC"
+            return
+        m_volt = re.search(r":SOUR(\d+):VOLT(?:\s+|:)([-+0-9.E]+)", s)
+        if m_volt and name == "psu":
+            self.psu_v[int(m_volt.group(1))] = float(m_volt.group(2))
+            if int(m_volt.group(1)) == 1:
+                self.vcc = float(m_volt.group(2))
+            return
+        m_dc = re.search(r":SOUR(\d+):APPL:DC[^,]*,[^,]*,([-+0-9.E]+)", s)
+        if m_dc and name == "awg":
+            self.awg_v[int(m_dc.group(1))] = float(m_dc.group(2))
+            return
+        m_offs = re.search(r":SOUR(\d+):VOLT:OFFS\s+([-+0-9.E]+)", s)
+        if m_offs and name == "awg":
+            self.awg_v[int(m_offs.group(1))] = float(m_offs.group(2))
+
+    def query(self, name: str, cmd: str) -> str:
+        if name != "dmm":
+            return "0"
+        if "CURR" in self.dmm_func:
+            return "5e-7"
+        return str(self._y_volts())
+
+    def _pin_volts(self, pin: str) -> float:
+        dm = (self.drives or {}).get(str(pin).upper())
+        if dm is None:
+            return 0.0
+        src = getattr(dm, "src", None) or (dm.get("src") if isinstance(dm, dict) else "")
+        ch = int(getattr(dm, "ch", None) or (dm.get("ch") if isinstance(dm, dict) else 1) or 1)
+        if str(src).lower() == "awg":
+            return float(self.awg_v.get(ch, 0.0))
+        return float(self.psu_v.get(ch, 0.0))
+
+    def _trip(self) -> tuple[float, float]:
+        vcc = float(self.vcc or 5.0)
+        lim = lookup_vcc_grid_limits(self.model, vcc) if self.model is not None else None
+        lim = lim or {}
+        plus_lo = plus_hi = minus_lo = minus_hi = None
+        raw_p = lim.get("VT_plus") or lim.get("VT+")
+        raw_m = lim.get("VT_minus") or lim.get("VT-")
+        if isinstance(raw_p, (list, tuple)) and len(raw_p) >= 2:
+            try:
+                plus_lo, plus_hi = float(raw_p[0]), float(raw_p[1])
+            except (TypeError, ValueError):
+                plus_lo = plus_hi = None
+        if isinstance(raw_m, (list, tuple)) and len(raw_m) >= 2:
+            try:
+                minus_lo, minus_hi = float(raw_m[0]), float(raw_m[1])
+            except (TypeError, ValueError):
+                minus_lo = minus_hi = None
+        if plus_lo is not None and plus_hi is not None:
+            plus = (plus_lo + plus_hi) / 2.0
+        elif lim.get("VIH_min_V") is not None:
+            vih = float(lim["VIH_min_V"])
+            plus = min(vcc * 0.92, vih + max(0.15, 0.08 * vcc))
+            if plus <= vih:
+                plus = (vih + vcc) / 2.0
+        else:
+            plus = 0.7 * vcc
+        if minus_lo is not None and minus_hi is not None:
+            minus = (minus_lo + minus_hi) / 2.0
+        elif lim.get("VIL_max_V") is not None:
+            vil = float(lim["VIL_max_V"])
+            minus = max(0.0, min(vil * 0.4, vil - 0.05))
+        else:
+            minus = 0.15 * vcc
+        if minus >= plus:
+            minus = plus * 0.4
+        return plus, minus
+
+    def _digit(self, pin: str, volts: float) -> str:
+        plus, minus = self._trip()
+        # Edge-aware combinational DUT. Rearm during a rising search must un-trip
+        # below VT+/VIH (not Schmitt-hold until VT-), or finer stages stay high.
+        if self.edge_rising:
+            bit = "H" if volts >= plus else "L"
+        else:
+            bit = "L" if volts <= minus else "H"
+        self.last_bit[pin] = bit
+        return bit
+
+    def _y_volts(self) -> float:
+        from ate.tests.logic.product_model import _lookup_y
+
+        model = self.model
+        vcc = float(self.vcc or 5.0)
+        if model is None:
+            return vcc
+        vec: dict[str, str] = {}
+        pins = list(model.logic_inputs)
+        if model.has_oe() and model.oe_pin and model.oe_pin not in pins:
+            pins.append(model.oe_pin)
+        for pin in pins:
+            vec[str(pin).upper()] = self._digit(str(pin).upper(), self._pin_volts(pin))
+        y = _lookup_y(model.truth_table, vec, model.output_pin)
+        if y in ("H", "Z"):
+            # Z: open-drain pull-up to VCC (G07 track isolation). Not IOZ.
+            return vcc
+        return 0.0
+
+
+def _sim_power_on_protected(psu, channel, voltage, current_limit, ovp=None, ocp=None):
+    """SIM: same SCPI as psu_setup.power_on_protected, no 1.5s sleeps."""
+    psu.write(f":OUTP CH{channel},OFF")
+    psu.write(f":SOUR{channel}:VOLT {voltage}")
+    psu.write(f":SOUR{channel}:CURR {current_limit}")
+    if ovp is None:
+        ovp = voltage * 1.1
+    psu.write(f":SOUR{channel}:VOLT:PROT {ovp}")
+    psu.write(f":SOUR{channel}:VOLT:PROT:STAT ON")
+    if ocp is None:
+        ocp = current_limit
+    psu.write(f":SOUR{channel}:CURR:PROT {ocp}")
+    psu.write(f":SOUR{channel}:CURR:PROT:STAT ON")
+    psu.write(f":OUTP CH{channel},ON")
+
+
+def _confirmed_sim_sweep_ok() -> list[str]:
+    """Walk enabled Path B DC TestSpec.run for CONFIRMED parts. Visa-free SIM."""
+    from ate.core.specs import enrich_measurement
+    from ate.tests.logic import logic_dc as ldc
+    from ate.tests.logic.product_model import DriveMap
+    import psu_setup
+
+    errors: list[str] = []
+    load_family("logic")
+
+    for hold in _HOLD_SIM_PARTS:
+        m_hold = load_product_model(hold) if has_product_model(hold) else None
+        if m_hold is None:
+            errors.append(f"{hold} HOLD: UNCONFIRMED sequential stub missing")
+            continue
+        if is_datasheet_signed(m_hold.status) or is_datasheet_signed(m_hold.truth_table_status):
+            errors.append(
+                f"{hold} HOLD: must stay UNCONFIRMED (no CONFIRMED unlock without Datasheet card)"
+            )
+        if not is_sequential(m_hold):
+            errors.append(f"{hold} HOLD: must stay sequential (not combinational 2^n)")
+        if m_hold.schmitt:
+            errors.append(f"{hold} HOLD: must not invent schmitt VT+/-")
+        en = {str(x).strip().lower() for x in (enabled_tests_for_part(hold) or [])}
+        for tid in _PATH_B_IDS:
+            if tid in en:
+                errors.append(f"{hold} HOLD: must not enable Path B {tid}")
+
+    m08 = load_product_model("rs1g08")
+    if m08 is not None:
+        lim165 = lookup_vcc_grid_limits(m08, 1.65) or {}
+        want_vih = 0.65 * 1.65
+        got_vih = lim165.get("VIH_min_V")
+        try:
+            if got_vih is None or abs(float(got_vih) - want_vih) > 1e-9:
+                errors.append(
+                    f"rs1g08 VIH@1.65 must eval card 0.65*VCC={want_vih}, got {got_vih}"
+                )
+        except (TypeError, ValueError):
+            errors.append(f"rs1g08 VIH@1.65 formula eval failed, got {got_vih!r}")
+        want_vil = 0.15 * 1.65
+        got_vil = lim165.get("VIL_max_V")
+        try:
+            if got_vil is None or abs(float(got_vil) - want_vil) > 1e-9:
+                errors.append(
+                    f"rs1g08 VIL@1.65 must eval card 0.15*VCC={want_vil}, got {got_vil}"
+                )
+        except (TypeError, ValueError):
+            errors.append(f"rs1g08 VIL@1.65 formula eval failed, got {got_vil!r}")
+
+    orig_pon = psu_setup.power_on_protected
+    orig_sleep = ldc.time.sleep
+    orig_apply_pin = ldc._apply_pin
+    orig_apply_levels = ldc._apply_levels
+    orig_power_vcc = ldc._power_vcc
+    orig_drive_for_sweep = ldc._drive_for_sweep
+    orig_sweep = ldc._sweep_threshold
+    bench = _SimBench()
+
+    def _apply_pin(instr, drive, volts, ilim):
+        src = getattr(drive, "src", "")
+        ch = int(getattr(drive, "ch", 1) or 1)
+        if src == "awg":
+            bench.awg_v[ch] = float(volts)
+        elif src == "psu":
+            bench.psu_v[ch] = float(volts)
+        return orig_apply_pin(instr, drive, volts, ilim)
+
+    def _apply_levels(instr, model, levels, vcc, ilim, *, drives=None):
+        dmap = drives or model.pin_drive
+        bench.bind(model, dmap, vcc)
+        return orig_apply_levels(instr, model, levels, vcc, ilim, drives=drives)
+
+    def _power_vcc(instr, vcc, ilim):
+        bench.vcc = float(vcc)
+        bench.psu_v[1] = float(vcc)
+        return orig_power_vcc(instr, vcc, ilim)
+
+    def _drive_for_sweep(model, sweep_pin):
+        drives = orig_drive_for_sweep(model, sweep_pin)
+        bench.bind(model, drives, bench.vcc)
+        return drives
+
+    def _sweep_threshold(instr, *, model, vcc, ilim, pattern, rising):
+        bench.edge_rising = bool(rising)
+        return orig_sweep(instr, model=model, vcc=vcc, ilim=ilim, pattern=pattern, rising=rising)
+
+    psu_setup.power_on_protected = _sim_power_on_protected
+    ldc.time.sleep = lambda *_a, **_k: None
+    ldc._apply_pin = _apply_pin
+    ldc._apply_levels = _apply_levels
+    ldc._power_vcc = _power_vcc
+    ldc._drive_for_sweep = _drive_for_sweep
+    ldc._sweep_threshold = _sweep_threshold
+    overlay = {"recipe": {"settle_s": 0.0, "stable_n": 1, "settle_timeout_s": 1.0}}
+    try:
+        for part in _CONFIRMED_SIM_PARTS:
+            m = load_product_model(part)
+            if part == "rs164":
+                ids = _sim_path_b_ids(part)
+                if ids:
+                    errors.append(f"rs164 Path B ids must stay OFF, got {ids}")
+                if m is None or not is_sequential(m):
+                    errors.append("rs164 SIM: sequential_shift_register required")
+                continue
+            if m is None:
+                errors.append(f"{part} SIM: product_model missing")
+                continue
+            ids = _sim_path_b_ids(part)
+            if part == "rs1g07" and "voh" in ids:
+                errors.append("rs1g07 SIM: voh must stay SKIP/N_A")
+            if part == "rs1g97" and "ioz" in ids:
+                errors.append("rs1g97 SIM: ioz must stay OFF")
+            drive_names = list(m.logic_inputs)
+            if m.has_oe() and m.oe_pin and m.oe_pin not in drive_names:
+                drive_names.append(m.oe_pin)
+            for name in drive_names:
+                dm = (m.pin_drive or {}).get(name)
+                if dm is None:
+                    errors.append(f"{part}: missing pin_drive for {name} (enabled-unrunnable)")
+                    continue
+                if not isinstance(dm, DriveMap):
+                    continue
+                if dm.src == "psu" and int(dm.ch) in (1, 2):
+                    errors.append(
+                        f"{part} pin_drive {name} must not steal PSU CH{dm.ch} (VCC / Y-load)"
+                    )
+                if dm.src == "psu" and int(dm.ch) > 3:
+                    errors.append(
+                        f"{part} pin_drive {name} PSU CH{dm.ch} unrunnable (DP832 CH1-3)"
+                    )
+            for tid in ids:
+                spec = get(tid)
+                if spec is None or not callable(spec.run):
+                    errors.append(f"{part} {tid}: missing TestSpec.run")
+                    continue
+                bench.bind(m, m.pin_drive, 5.0)
+                bench.last_bit = {}
+                bench.edge_rising = True
+                params = _params(
+                    part=part,
+                    vcc=5.0,
+                    current_limit_a=0.05,
+                    pause_hook=None,
+                    test_params=overlay,
+                )
+                try:
+                    payload = spec.run(bench, params)
+                except Exception as exc:
+                    errors.append(
+                        f"{part} {tid} SIM run raised {type(exc).__name__}: {exc}"
+                    )
+                    continue
+                if not isinstance(payload, dict):
+                    errors.append(f"{part} {tid} SIM payload must be dict")
+                    continue
+                data = payload.get("data") if isinstance(payload.get("data"), dict) else {}
+                rows = data.get("rows") if isinstance(data.get("rows"), list) else []
+                greenable = bool(data.get("greenable"))
+                if tid in ("input_threshold", "vth"):
+                    if m.schmitt:
+                        if any(
+                            isinstance(r, dict) and "VIH" in r and r.get("VT+") is None
+                            for r in rows
+                        ):
+                            errors.append(
+                                f"{part} {tid} Schmitt SIM must record VT+/- not plain VIH"
+                            )
+                        if not any(isinstance(r, dict) and r.get("VT+") is not None for r in rows):
+                            if not any(
+                                isinstance(r, dict)
+                                and str(r.get("status") or "").upper() == "UNSURE"
+                                for r in rows
+                            ):
+                                errors.append(f"{part} {tid} Schmitt SIM missing VT+ rows")
+                    else:
+                        if not any(isinstance(r, dict) and r.get("VIH") is not None for r in rows):
+                            if not any(
+                                isinstance(r, dict)
+                                and str(r.get("status") or "").upper() == "UNSURE"
+                                for r in rows
+                            ):
+                                errors.append(f"{part} {tid} SIM missing VIH rows")
+                    for pin in m.logic_inputs:
+                        pats = isolation_for_run(m, pin)
+                        if not pats and not is_sequential(m):
+                            errors.append(
+                                f"{part} {tid}: no isolation_for_run {pin} (wrong isolation)"
+                            )
+                if tid == "icc":
+                    plan = sim_icc_plan(m)
+                    n_pin = len(plan.get("pins") or [])
+                    n_corner = int(plan.get("n") or 0)
+                    if n_pin and n_corner != (1 << n_pin):
+                        errors.append(
+                            f"{part} icc SIM corners must be 2^{n_pin}={1 << n_pin}, got {n_corner}"
+                        )
+                    n_vcc = len(m.vcc_list or [])
+                    if n_vcc and n_corner and len(rows) != n_vcc * n_corner:
+                        errors.append(
+                            f"{part} icc SIM rows {len(rows)} != {n_vcc}*{n_corner}"
+                        )
+                if tid == "ioz":
+                    for rec in rows:
+                        if not isinstance(rec, dict):
+                            continue
+                        oe = str(rec.get("OE") or "")
+                        if part == "rs1g126" and oe == "H":
+                            errors.append("rs1g126 ioz SIM must force OE inactive L, not active H")
+                        if part == "rs1g125" and oe == "L":
+                            errors.append(
+                                "rs1g125 ioz SIM must force OE inactive H, not active L"
+                            )
+                if tid == "voh" and greenable:
+                    if any(
+                        isinstance(r, dict) and str(r.get("Result") or "").upper() == "FAIL"
+                        for r in rows
+                    ):
+                        errors.append(f"{part} voh SIM signed VOH row FAIL")
+                if tid == "vol" and greenable:
+                    if any(
+                        isinstance(r, dict) and str(r.get("Result") or "").upper() == "FAIL"
+                        for r in rows
+                    ):
+                        errors.append(f"{part} vol SIM signed VOL row FAIL")
+                for meas in payload.get("measurements") or []:
+                    if not isinstance(meas, dict):
+                        continue
+                    enr = enrich_measurement(dict(meas), test_id=tid, part_key=part)
+                    if meas.get("min") is None and meas.get("max") is None:
+                        if not greenable and enr.get("result") == "pass":
+                            errors.append(
+                                f"{part} {tid} unsigned {meas.get('id')} must not green PASS"
+                            )
+                        continue
+                    judged = judge_value(
+                        meas.get("value"),
+                        meas.get("min"),
+                        meas.get("max"),
+                        pass_mode=meas.get("pass_mode"),
+                    )
+                    if greenable and judged == "fail":
+                        errors.append(
+                            f"{part} {tid} SIM signed {meas.get('id')}="
+                            f"{meas.get('value')} min={meas.get('min')} max={meas.get('max')} FAIL"
+                        )
+                    if not greenable and enr.get("result") == "pass":
+                        errors.append(
+                            f"{part} {tid} unsigned {meas.get('id')} must not green PASS"
+                        )
+                if tid in ("input_threshold", "vth", "voh", "vol") and not greenable:
+                    for rec in rows:
+                        if isinstance(rec, dict) and str(rec.get("Result") or "").upper() == "PASS":
+                            errors.append(
+                                f"{part} {tid} unsigned row Result=PASS (must fail-closed)"
+                            )
+    finally:
+        psu_setup.power_on_protected = orig_pon
+        ldc.time.sleep = orig_sleep
+        ldc._apply_pin = orig_apply_pin
+        ldc._apply_levels = orig_apply_levels
+        ldc._power_vcc = orig_power_vcc
+        ldc._drive_for_sweep = orig_drive_for_sweep
+        ldc._sweep_threshold = orig_sweep
     return errors
 
 
@@ -3268,6 +3753,7 @@ def check_logic_dc() -> list[str]:
     from ate.core.check_logic_dc_sim import check_logic_dc_sim
 
     errors += check_logic_dc_sim()
+    errors += _confirmed_sim_sweep_ok()
     load_family("opamp")
     return errors
 
