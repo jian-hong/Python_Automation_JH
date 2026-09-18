@@ -1376,7 +1376,7 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must point at docs/LOGIC_DC_DUAL_CHANNEL.md")
     if "1.7089" not in text or "LIVE" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must record GT34 VOH LIVE measured 1.7089")
-    if "do not invent VOL" not in text.lower():
+    if "do not invent vol" not in text.lower():
         errors.append("LOGIC_DC_OPERATOR.md must say do not invent VOL")
     if "no per-board" not in text.lower() and "per-board voh" not in text.lower():
         errors.append("LOGIC_DC_OPERATOR.md must say no per-board VOH script")
