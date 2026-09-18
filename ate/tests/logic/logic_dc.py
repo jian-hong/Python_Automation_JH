@@ -49,6 +49,7 @@ from ate.tests.logic.product_model import (
     is_open_drain,
     is_sequential,
     is_unconfirmed_status,
+    voh_series_allowed,
     load_part_yaml,
     load_product_model,
     logic_volts,
@@ -146,9 +147,25 @@ def _uses_truth_table(test_id: str) -> bool:
 
 
 def _provisional_dc(model: ProductModel, test_id: str) -> bool:
-    block = model.dc_limits.get(test_id) if isinstance(model.dc_limits, dict) else None
-    if isinstance(block, dict) and is_unconfirmed_status(block.get("status")):
-        return True
+    dc = model.dc_limits if isinstance(model.dc_limits, dict) else {}
+    tid = str(test_id or "").strip()
+    low = tid.lower()
+    if low == "voh":
+        keys: tuple[str, ...] = ("VOH", "voh")
+    elif low == "vol":
+        keys = ("VOL", "vol")
+    else:
+        keys = (tid, low, tid.upper())
+    for key in keys:
+        block = dc.get(key)
+        if not isinstance(block, dict):
+            continue
+        st = str(block.get("status") or "").strip().upper().replace("-", "_")
+        if st in ("N_A", "NA", "ABSENT"):
+            return False
+        if is_unconfirmed_status(block.get("status")):
+            return True
+        return False
     return False
 
 
@@ -954,13 +971,96 @@ def _run_ii(instr, params: Any) -> dict[str, Any]:
         )
 
 
+def _eval_vcc_minus_tenth(expr: Any, vcc: float) -> Optional[float]:
+    """Card formula VCC-0.1 only. Do not invent other expressions."""
+    s = str(expr or "").strip().upper().replace(" ", "")
+    if s == "VCC-0.1":
+        return float(vcc) - 0.1
+    return None
+
+
+def _dc_limit_loads(model: ProductModel, which: str) -> dict[str, Any]:
+    dc = model.dc_limits if isinstance(model.dc_limits, dict) else {}
+    names = ("VOH", "voh") if which == "voh" else ("VOL", "vol")
+    for key in names:
+        block = dc.get(key)
+        if isinstance(block, dict) and isinstance(block.get("loads"), list) and block["loads"]:
+            return block
+    return {}
+
+
+def _expand_voh_vol_loads(model: ProductModel, which: str) -> list[dict[str, Any]]:
+    """CONFIRMED dc_limits.VOH/VOL.loads -> Path B rows. Band vcc expands onto merged vcc_list."""
+    block = _dc_limit_loads(model, which)
+    if not block:
+        return []
+    st = str(block.get("status") or "").strip().upper().replace("-", "_")
+    if st in ("N_A", "NA", "ABSENT"):
+        return []
+    if not is_datasheet_signed(block.get("status")):
+        return []
+    loads = block.get("loads") or []
+    merged = [float(v) for v in (model.vcc_list or [])]
+    i_key = "IOH_mA" if which == "voh" else "IOL_mA"
+    spec_v_key = "VOH_min_V" if which == "voh" else "VOL_max_V"
+    spec_expr_key = "VOH_min" if which == "voh" else "VOL_max"
+    rows: list[dict[str, Any]] = []
+    for load in loads:
+        if not isinstance(load, dict) or load.get(i_key) is None:
+            continue
+        try:
+            i_a = float(load[i_key]) * 1e-3
+        except (TypeError, ValueError):
+            continue
+        vcc_raw = load.get("vcc")
+        vccs: list[float] = []
+        if isinstance(vcc_raw, (list, tuple)) and len(vcc_raw) >= 2:
+            try:
+                lo, hi = float(vcc_raw[0]), float(vcc_raw[1])
+            except (TypeError, ValueError):
+                continue
+            vccs = [v for v in merged if lo - 1e-9 <= v <= hi + 1e-9]
+        else:
+            try:
+                if vcc_raw is not None:
+                    vccs = [float(vcc_raw)]
+            except (TypeError, ValueError):
+                continue
+        if not vccs:
+            continue
+        for vcc in vccs:
+            spec: Optional[float] = None
+            if load.get(spec_v_key) is not None:
+                try:
+                    spec = float(load[spec_v_key])
+                except (TypeError, ValueError):
+                    spec = None
+            if spec is None:
+                spec = _eval_vcc_minus_tenth(load.get(spec_expr_key), vcc)
+            if spec is None:
+                continue
+            rec: dict[str, Any] = {"vcc": vcc}
+            if which == "voh":
+                rec["ioh_a"] = i_a
+                rec["spec_min"] = spec
+            else:
+                rec["iol_a"] = i_a
+                rec["spec_max"] = spec
+            rows.append(rec)
+    return rows
+
+
 def _voh_vol_table(part_key: str, which: str) -> list[dict[str, Any]]:
+    model = load_product_model(part_key)
+    if model is not None:
+        expanded = _expand_voh_vol_loads(model, which)
+        if expanded:
+            return expanded
     cfg = load_part_yaml(part_key)
     key = "voh_table" if which == "voh" else "vol_table"
     raw = cfg.get(key)
     if isinstance(raw, list) and raw:
         return [r for r in raw if isinstance(r, dict)]
-    model = load_product_model(part_key)
     if model is None:
         return []
     block = model.dc_limits.get(key) or model.dc_limits.get(which)
@@ -997,6 +1097,11 @@ def _run_voh_path_b(instr, params: Any) -> dict[str, Any]:
     if is_open_drain(model):
         raise RuntimeError(
             "voh: open-drain -- skip VOH series. Y=Z is output OFF, not VOH. "
+            "Remove voh from enabled_tests."
+        )
+    if not voh_series_allowed(model):
+        raise RuntimeError(
+            "voh: output_type must be push_pull or three_state (CONFIRMED tables). "
             "Remove voh from enabled_tests."
         )
     _require_for(instr, model, "voh")

@@ -24,6 +24,8 @@ enabled_tests:
 - ii
 - delta_icc
 - ioz
+- voh
+- vol
 fixture_modes:
   LOGIC:
     label: Logic board (RS1G125)
@@ -40,6 +42,8 @@ fixture_modes:
     - ii
     - delta_icc
     - ioz
+    - voh
+    - vol
 product_model:
   part: RS1G125
   status: CONFIRMED
@@ -132,7 +136,7 @@ product_model:
     ioz: max_only
   dc_limits:
     VOH:
-      status: UNCONFIRMED
+      status: CONFIRMED
       loads:
       - IOH_mA: -0.1
         vcc:
@@ -155,7 +159,7 @@ product_model:
         vcc: 4.5
         VOH_min_V: 3.8
     VOL:
-      status: UNCONFIRMED
+      status: CONFIRMED
       loads:
       - IOL_mA: 0.1
         vcc:
@@ -241,11 +245,13 @@ product_model:
   - ii
   - delta_icc
   - ioz
+  - voh
+  - vol
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
   - vcc_grid/vcc_plan CONFIRMED from SoT VIH/VIL (VIL 0.3xVCC not G08 0.15); do not invent extra rows
   - OE active LOW -- IOZ when OE inactive (H) only
-  - voh/vol not enabled (no table rows)
+  - voh/vol enabled: three_state + CONFIRMED SoT dc_limits.VOH/VOL
   - IOZ @3.6V only on card -- status UNSURE
-  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from SoT). Fail-closed remain
-    stable_eps_A null; IOZ @3.6V UNSURE; glyph-missing uA/mA omitted; do not invent.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid + VOH/VOL CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; IOZ @3.6V UNSURE; do not invent ICCT/IOZ this turn.

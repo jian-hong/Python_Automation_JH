@@ -235,9 +235,13 @@ product_model:
     vol: max_only
   dc_limits:
     VOH:
-      status: UNCONFIRMED
-      note: extract 9.2; light-load IOH current and IOH -24mA VCC glyph-missing -- omitted
+      status: CONFIRMED
       loads:
+      - IOH_mA: -0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOH_min: VCC-0.1
       - IOH_mA: -4
         vcc: 1.65
         VOH_min_V: 1.2
@@ -247,13 +251,20 @@ product_model:
       - IOH_mA: -16
         vcc: 3.0
         VOH_min_V: 2.4
+      - IOH_mA: -24
+        vcc: 3.0
+        VOH_min_V: 2.3
       - IOH_mA: -32
         vcc: 4.5
         VOH_min_V: 3.8
     VOL:
-      status: UNCONFIRMED
-      note: extract 9.2; light-load 100uA and IOL 24mA VCC glyph-missing -- omitted
+      status: CONFIRMED
       loads:
+      - IOL_mA: 0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOL_max_V: 0.1
       - IOL_mA: 4
         vcc: 1.65
         VOL_max_V: 0.45
@@ -263,6 +274,9 @@ product_model:
       - IOL_mA: 16
         vcc: 3.0
         VOL_max_V: 0.4
+      - IOL_mA: 24
+        vcc: 3.0
+        VOL_max_V: 0.55
       - IOL_mA: 32
         vcc: 4.5
         VOL_max_V: 0.55
@@ -330,11 +344,10 @@ product_model:
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
   - vcc_grid/vcc_plan CONFIRMED from signed card/SoT VIH/VIL bands; do not invent extra rows
+  - dc_limits.VOH/VOL CONFIRMED 6-load SoT copy (0.1mA band + named high-load incl 24mA); do not invent extras
   - IOZ OFF (no OE)
   - stable_eps_A null
   - excel_plots omitted -- keep sheet_map paste.values
-  - VOH first-row IOH current glyph-missing in extract -- not copied as 100uA
-  - IOH -24mA VCC glyph-missing in extract -- row omitted
   - Ariff voh_table/vol_table campaign kept; do not copy extract 9.2 over Ariff
-  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from signed card/SoT). Fail-closed remain
-    stable_eps_A null; glyph-missing uA/mA omitted; G07 VOH N_A; RS164 Ioff+ICCT ABSENT; retention MAX if missing.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid + VOH/VOL CONFIRMED from signed card/SoT). Fail-closed remain
+    stable_eps_A null; G07 VOH N_A; RS164 Ioff+ICCT ABSENT; retention MAX if missing.

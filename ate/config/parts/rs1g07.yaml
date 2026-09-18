@@ -151,8 +151,12 @@ product_model:
       note: open-drain -- skip VOH series
     VOL:
       status: CONFIRMED
-      note: extract 9.2 explicit IOL rows only (CONFIRMED); light-load 100uA and IOL 24mA VCC glyph-missing -- omitted
       loads:
+      - IOL_mA: 0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOL_max_V: 0.1
       - IOL_mA: 4
         vcc: 1.65
         VOL_max_V: 0.45
@@ -162,6 +166,9 @@ product_model:
       - IOL_mA: 16
         vcc: 3.0
         VOL_max_V: 0.4
+      - IOL_mA: 24
+        vcc: 3.0
+        VOL_max_V: 0.55
       - IOL_mA: 32
         vcc: 4.5
         VOL_max_V: 0.55
@@ -227,9 +234,8 @@ product_model:
   - VOH N/A open-drain -- do not enable voh
   - Y=Z when A=H is open-drain OFF -- not OE-gated IOZ
   - stable_eps_A null
-  - VOL light-load current (Full 0.1 V row) glyph-missing in extract -- not copied as 100uA
-  - IOL 24mA VCC glyph-missing in extract -- row omitted
+  - campaign vol_table stays 4 extract-explicit IOL rows (Path A); do not invent extra campaign rows
+  - dc_limits.VOL CONFIRMED SoT 6-load copy (0.1mA band + 4/8/16/24/32mA); do not invent extras
   - excel_lock OFF (sheet_map paste.values) until excel_plots signed -- do not bind excel_plots
-  - VOL 4 extract-explicit IOL rows CONFIRMED; do not invent extra loads
-  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from SoT). Fail-closed remain
-    stable_eps_A null; VOH N_A; glyph-missing 100uA/24mA on vol_table; do not invent.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid + VOL CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; VOH N_A; campaign vol_table 4 extract rows; do not invent.

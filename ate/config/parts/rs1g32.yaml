@@ -206,7 +206,7 @@ product_model:
     ii: max_only
   dc_limits:
     VOH:
-      status: UNCONFIRMED
+      status: CONFIRMED
       loads:
       - IOH_mA: -0.1
         vcc:
@@ -229,7 +229,7 @@ product_model:
         vcc: 4.5
         VOH_min_V: 3.8
     VOL:
-      status: UNCONFIRMED
+      status: CONFIRMED
       loads:
       - IOL_mA: 0.1
         vcc:
@@ -309,7 +309,8 @@ product_model:
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
   - vcc_grid/vcc_plan CONFIRMED from SoT VIH/VIL bands; do not invent extra rows
+  - dc_limits.VOH/VOL CONFIRMED 6-load SoT copy (0.1mA band + named high-load incl 24mA)
   - IOZ OFF
   - OR isolation other=L
-  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from SoT). Fail-closed remain
-    stable_eps_A null; glyph-missing uA/mA omitted; do not invent.
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid + VOH/VOL CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; do not invent.

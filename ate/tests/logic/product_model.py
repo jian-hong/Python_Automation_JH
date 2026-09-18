@@ -326,12 +326,35 @@ def _raw_blob(model: Any) -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-def is_open_drain(model: Any) -> bool:
-    """Open-drain: VOH skip. Y=Z is output OFF, not OE-gated IOZ. No part-name ifs."""
+def _output_kind(model: Any) -> str:
     raw = _raw_blob(model)
     ot = str(raw.get("output_type") or raw.get("output_kind") or "").strip().lower()
-    ot = ot.replace("-", "_").replace(" ", "_")
-    return ot in ("open_drain", "opendrain", "od")
+    return ot.replace("-", "_").replace(" ", "_")
+
+
+def is_open_drain(model: Any) -> bool:
+    """Open-drain: VOH skip. Y=Z is output OFF, not OE-gated IOZ. No part-name ifs."""
+    return _output_kind(model) in ("open_drain", "opendrain", "od")
+
+
+def is_push_pull(model: Any) -> bool:
+    """Push-pull CMOS/TTL: VOH series is in-family. No part-name ifs."""
+    return _output_kind(model) in ("push_pull", "pushpull")
+
+
+def is_three_state(model: Any) -> bool:
+    """Three-state / OE bus: VOH when OE active. No part-name ifs."""
+    return _output_kind(model) in ("three_state", "tristate", "tri_state", "3_state")
+
+
+def voh_series_allowed(model: Any) -> bool:
+    """Enable VOH only for push_pull / three_state. Unspecified output_type stays allowed (97/126)."""
+    if is_open_drain(model):
+        return False
+    kind = _output_kind(model)
+    if not kind:
+        return True
+    return is_push_pull(model) or is_three_state(model)
 
 
 def is_sequential(model: Any) -> bool:

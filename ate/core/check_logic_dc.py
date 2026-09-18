@@ -33,7 +33,9 @@ from ate.tests.logic.product_model import (
     isolation_for_run,
     is_datasheet_signed,
     is_open_drain,
+    is_push_pull,
     is_sequential,
+    is_three_state,
     is_unconfirmed_status,
     iter_logic_corners,
     ioz_force_vector,
@@ -54,6 +56,7 @@ from ate.tests.logic.product_model import (
     vcc_grid_stimulus,
     vcc_grid_unconfirmed,
     vectors_for_output,
+    voh_series_allowed,
     wire_map_for_test,
 )
 
@@ -1241,7 +1244,7 @@ def _threshold_search_ok() -> list[str]:
 
 
 def _enabled_voh_vol_tables_ok() -> list[str]:
-    """Enabled voh/vol without table rows is enabled-but-unrunnable. FAIL-closed."""
+    """Enabled voh/vol without CONFIRMED dc_limits loads or campaign table rows is unrunnable."""
     from ate.tests.logic import logic_dc as ldc
 
     errors: list[str] = []
@@ -1251,9 +1254,9 @@ def _enabled_voh_vol_tables_ok() -> list[str]:
             continue
         en = {str(x).strip() for x in (enabled_tests_for_part(key) or []) if str(x).strip()}
         if "voh" in en and not ldc._voh_vol_table(key, "voh"):
-            errors.append(f"{key}: voh enabled but no voh_table rows")
+            errors.append(f"{key}: voh enabled but no CONFIRMED VOH loads / voh_table rows")
         if "vol" in en and not ldc._voh_vol_table(key, "vol"):
-            errors.append(f"{key}: vol enabled but no vol_table rows")
+            errors.append(f"{key}: vol enabled but no CONFIRMED VOL loads / vol_table rows")
     return errors
 
 
@@ -2222,6 +2225,97 @@ _DRAFT_GATE_SKUS = (
 )
 _DRAFT_SCAFFOLD_SKUS = _DRAFT_GATE_SKUS + ("rs164",)
 
+# RS1G08_card_CONFIRMED / CMOS SoT VOH/VOL (G08/G14/G32/G125; G07 VOL only). Copy, do not invent.
+_CMOS_VOH_LOADS = (
+    (-0.1, (1.65, 5.5), None, "VCC-0.1"),
+    (-4.0, 1.65, 1.2, ""),
+    (-8.0, 2.3, 1.9, ""),
+    (-16.0, 3.0, 2.4, ""),
+    (-24.0, 3.0, 2.3, ""),
+    (-32.0, 4.5, 3.8, ""),
+)
+_CMOS_VOL_LOADS = (
+    (0.1, (1.65, 5.5), 0.1, ""),
+    (4.0, 1.65, 0.45, ""),
+    (8.0, 2.3, 0.3, ""),
+    (16.0, 3.0, 0.4, ""),
+    (24.0, 3.0, 0.55, ""),
+    (32.0, 4.5, 0.55, ""),
+)
+# TTL SoT VOH/VOL (GT08/GT32/GT34). Copy, do not invent.
+_TTL_VOH_LOADS = (
+    (-0.1, (2.0, 5.5), None, "VCC-0.1"),
+    (-8.0, 2.0, 1.6, ""),
+    (-24.0, 3.3, 2.5, ""),
+    (-32.0, 4.5, 3.8, ""),
+    (-32.0, 5.0, 4.2, ""),
+    (-32.0, 5.5, 4.8, ""),
+)
+_TTL_VOL_LOADS = (
+    (0.1, (2.0, 5.5), 0.1, ""),
+    (8.0, 2.0, 0.45, ""),
+    (24.0, 3.3, 0.55, ""),
+    (32.0, 4.5, 0.55, ""),
+    (32.0, 5.0, 0.5, ""),
+    (32.0, 5.5, 0.45, ""),
+)
+
+
+def _dc_block(m, *names: str) -> dict[str, Any]:
+    dc = m.dc_limits if isinstance(m.dc_limits, dict) else {}
+    for key in names:
+        block = dc.get(key)
+        if isinstance(block, dict):
+            return block
+    return {}
+
+
+def _load_tuple(load: dict[str, Any], i_key: str, spec_v_key: str, spec_e_key: str) -> tuple[Any, ...]:
+    i = round(float(load[i_key]), 6)
+    vcc = load.get("vcc")
+    if isinstance(vcc, (list, tuple)) and len(vcc) >= 2:
+        vtok: Any = (round(float(vcc[0]), 6), round(float(vcc[1]), 6))
+    else:
+        vtok = round(float(vcc), 6)
+    if load.get(spec_v_key) is not None:
+        return (i, vtok, round(float(load[spec_v_key]), 6), "")
+    expr = str(load.get(spec_e_key) or "").replace(" ", "").upper()
+    return (i, vtok, None, expr)
+
+
+def _loads_match(got_block: dict[str, Any], want: tuple, *, part: str, which: str) -> list[str]:
+    errors: list[str] = []
+    if not is_datasheet_signed((got_block or {}).get("status")):
+        errors.append(f"{part} dc_limits.{which}.status must be CONFIRMED (SoT copy), got {(got_block or {}).get('status')!r}")
+        return errors
+    loads = [x for x in (got_block.get("loads") or []) if isinstance(x, dict)]
+    i_key = "IOH_mA" if which == "VOH" else "IOL_mA"
+    spec_v = "VOH_min_V" if which == "VOH" else "VOL_max_V"
+    spec_e = "VOH_min" if which == "VOH" else "VOL_max"
+    got: set[tuple[Any, ...]] = set()
+    for load in loads:
+        if load.get(i_key) is None:
+            continue
+        try:
+            tup = _load_tuple(load, i_key, spec_v, spec_e)
+        except (TypeError, ValueError):
+            errors.append(f"{part} {which} load not parseable: {load!r}")
+            continue
+        expr = str(tup[3] or "")
+        if tup[2] is None and expr and expr != "VCC-0.1":
+            errors.append(f"{part} must not invent {which} formula {expr} (VCC-0.1 only)")
+            continue
+        got.add(tup)
+    want_set = set(want)
+    extra = got - want_set
+    missing = want_set - got
+    if extra:
+        errors.append(f"{part} {which} invent extra SoT loads: {sorted(extra, key=str)}")
+    if missing:
+        errors.append(f"{part} {which} missing SoT loads: {sorted(missing, key=str)}")
+    return errors
+
+
 # RS1G08_card_CONFIRMED VIH/VIL table (spot-check vs signed card; do not invent).
 _G08_BANDS = (
     {
@@ -2465,26 +2559,29 @@ def _draft_scaffold_ok() -> list[str]:
     voh07_st = str((voh07 or {}).get("status") or "").strip().upper().replace("/", "_").replace("-", "_")
     if voh07_st not in ("N_A", "NA"):
         errors.append(f"rs1g07 VOH.status must be N_A (open-drain), got {(voh07 or {}).get('status')!r}")
+    if (voh07 or {}).get("loads"):
+        errors.append("rs1g07 VOH must not invent loads (N_A / SKIP)")
     if "ioz" in en07:
         errors.append("rs1g07 must not enable ioz (Y=Z is not IOZ)")
     if "vol" not in en07:
         errors.append("rs1g07 enabled_tests missing vol (extract-explicit IOL rows)")
     yaml07 = load_part_yaml("rs1g07")
     vol07 = yaml07.get("vol_table") if isinstance(yaml07.get("vol_table"), list) else []
-    vol_blk = m07.dc_limits.get("VOL") if isinstance(m07.dc_limits, dict) else {}
+    vol_blk = _dc_block(m07, "VOL", "vol")
     if not is_datasheet_signed((vol_blk or {}).get("status")):
-        errors.append("rs1g07 VOL extract-explicit IOL rows must be CONFIRMED")
+        errors.append("rs1g07 VOL SoT IOL rows must be CONFIRMED")
+    errors += _loads_match(vol_blk, _CMOS_VOL_LOADS, part="rs1g07", which="VOL")
     if len(vol07) != 4:
-        errors.append(f"rs1g07 vol_table must be 4 extract-explicit IOL rows, got {len(vol07)}")
+        errors.append(f"rs1g07 campaign vol_table must stay 4 extract-explicit IOL rows, got {len(vol07)}")
     for row in vol07:
         if not isinstance(row, dict):
             continue
         iol = abs(float(row.get("iol_a") or 0))
         if iol <= 0.0002:
-            errors.append("rs1g07 must not invent 100uA VOL (light-load current glyph-missing)")
+            errors.append("rs1g07 must not invent 100uA on campaign vol_table (Path A extract; SoT 0.1mA lives in dc_limits.VOL)")
         sid = str(row.get("id") or "")
         if "24mA" in sid or "24ma" in sid.lower():
-            errors.append("rs1g07 must not invent IOL 24mA VCC (glyph-missing)")
+            errors.append("rs1g07 must not invent IOL 24mA on campaign vol_table (SoT 24mA lives in dc_limits.VOL)")
     yz = [r for r in m07.truth_table if r.get("A") == "H" and r.get("Y") == "Z"]
     if not yz:
         errors.append("rs1g07 truth_table must have A=H -> Y=Z (open-drain OFF)")
@@ -2548,8 +2645,12 @@ def _draft_scaffold_ok() -> list[str]:
     if not any(p.y_expect == "invert" for p in a14):
         errors.append("rs1g14 isolation A must invert (Y=NOT A)")
     en14 = set(enabled_tests_for_part("rs1g14") or [])
-    if "voh" in en14 or "vol" in en14:
-        errors.append("rs1g14 must not enable voh/vol without table rows")
+    if "voh" not in en14 or "vol" not in en14:
+        errors.append("rs1g14 must enable voh/vol (push_pull + CONFIRMED SoT tables)")
+    if not is_push_pull(m14):
+        errors.append("rs1g14 output_type must be push_pull")
+    errors += _loads_match(_dc_block(m14, "VOH", "voh"), _CMOS_VOH_LOADS, part="rs1g14", which="VOH")
+    errors += _loads_match(_dc_block(m14, "VOL", "vol"), _CMOS_VOL_LOADS, part="rs1g14", which="VOL")
 
     # G32 OR-2 other=L
     a32 = isolation_for(m32, "A")
@@ -2592,8 +2693,12 @@ def _draft_scaffold_ok() -> list[str]:
     en125 = set(enabled_tests_for_part("rs1g125") or [])
     if "ioz" not in en125:
         errors.append("rs1g125 enabled_tests must include ioz (OE active-L)")
-    if "voh" in en125 or "vol" in en125:
-        errors.append("rs1g125 must not enable voh/vol without table rows")
+    if "voh" not in en125 or "vol" not in en125:
+        errors.append("rs1g125 must enable voh/vol (three_state + CONFIRMED SoT tables)")
+    if not is_three_state(m125):
+        errors.append("rs1g125 output_type must be three_state")
+    errors += _loads_match(_dc_block(m125, "VOH", "voh"), _CMOS_VOH_LOADS, part="rs1g125", which="VOH")
+    errors += _loads_match(_dc_block(m125, "VOL", "vol"), _CMOS_VOL_LOADS, part="rs1g125", which="VOL")
     a125 = isolation_for(m125, "A")
     if not any(p.fix.get("OE") == "L" and p.y_expect == "track" for p in a125):
         errors.append("rs1g125 isolation A must hold OE=L (active-L)")
@@ -2671,12 +2776,61 @@ def _draft_scaffold_ok() -> list[str]:
     if "sequential" not in runner.lower():
         errors.append(f"rs164 recipe.runner must be sequential_shift_register, got {runner!r}")
 
+    # SoT dc_limits.VOH/VOL copy (CONFIRMED). Campaign Ariff tables stay on 08/32/GT08/GT32.
+    for part, m in (("rs1g08", m08), ("rs1g32", m32)):
+        if not is_push_pull(m):
+            errors.append(f"{part} output_type must be push_pull")
+        en = set(enabled_tests_for_part(part) or [])
+        if "voh" not in en or "vol" not in en:
+            errors.append(f"{part} must enable voh/vol (push_pull + CONFIRMED SoT tables)")
+        errors += _loads_match(_dc_block(m, "VOH", "voh"), _CMOS_VOH_LOADS, part=part, which="VOH")
+        errors += _loads_match(_dc_block(m, "VOL", "vol"), _CMOS_VOL_LOADS, part=part, which="VOL")
+        yaml_p = load_part_yaml(part)
+        camp = yaml_p.get("voh_table") if isinstance(yaml_p.get("voh_table"), list) else []
+        if len(camp) < 5:
+            errors.append(f"{part} campaign Ariff voh_table must stay (Path A); got {len(camp)} rows")
+    for part, m in (("rs1gt08", mgt08), ("rs1gt32", mgt32)):
+        if not is_push_pull(m):
+            errors.append(f"{part} output_type must be push_pull")
+        en = set(enabled_tests_for_part(part) or [])
+        if "voh" not in en or "vol" not in en:
+            errors.append(f"{part} must enable voh/vol (push_pull + CONFIRMED SoT tables)")
+        errors += _loads_match(_dc_block(m, "VOH", "voh"), _TTL_VOH_LOADS, part=part, which="VOH")
+        errors += _loads_match(_dc_block(m, "VOL", "vol"), _TTL_VOL_LOADS, part=part, which="VOL")
+    m34 = load_product_model("rs1gt34")
+    if m34 is not None:
+        errors += _loads_match(_dc_block(m34, "VOH", "voh"), _TTL_VOH_LOADS, part="rs1gt34", which="VOH")
+        errors += _loads_match(_dc_block(m34, "VOL", "vol"), _TTL_VOL_LOADS, part="rs1gt34", which="VOL")
+
+    if ldc._expand_voh_vol_loads(m07, "voh"):
+        errors.append("rs1g07 VOH N_A must not expand (never invent VOH)")
+    if not ldc._expand_voh_vol_loads(m07, "vol"):
+        errors.append("rs1g07 CONFIRMED VOL SoT loads must expand to Path B rows")
+    if not ldc._voh_vol_table("rs1g14", "voh") or not ldc._voh_vol_table("rs1g14", "vol"):
+        errors.append("rs1g14 CONFIRMED VOH/VOL loads must expand to Path B rows")
+    if not ldc._voh_vol_table("rs1g125", "voh") or not ldc._voh_vol_table("rs1g125", "vol"):
+        errors.append("rs1g125 CONFIRMED VOH/VOL loads must expand to Path B rows")
+    if ldc._expand_voh_vol_loads(m164, "voh") or ldc._expand_voh_vol_loads(m164, "vol"):
+        errors.append("rs164 UNCONFIRMED VOH/VOL must not expand (fail-closed; do not invent)")
+
     src_ldc = _LOGIC_DC.read_text(encoding="utf-8")
     src_model = _MODEL.read_text(encoding="utf-8")
     if "is_open_drain" not in src_ldc or "is_sequential" not in src_ldc:
         errors.append("logic_dc.py must fail-close open-drain VOH / sequential ICC via generic flags")
+    if "voh_series_allowed" not in src_ldc:
+        errors.append("logic_dc.py must gate voh on voh_series_allowed (push_pull/three_state)")
+    exp_src = _fn_src(src_ldc, "_expand_voh_vol_loads")
+    tab_src = _fn_src(src_ldc, "_voh_vol_table")
+    if not exp_src or "is_datasheet_signed" not in exp_src:
+        errors.append("VOH/VOL expand must require Datasheet-signed CONFIRMED (UNCONFIRMED fail-closed)")
+    if "VCC-0.1" not in src_ldc or "_eval_vcc_minus_tenth" not in src_ldc:
+        errors.append("VOH/VOL expand must use VCC-0.1 only (do not invent formulas)")
+    if not tab_src or "_expand_voh_vol_loads" not in tab_src:
+        errors.append("_voh_vol_table must prefer CONFIRMED dc_limits expansion before campaign tables")
     if "is_open_drain" not in src_model or "is_sequential" not in src_model:
         errors.append("product_model.py must expose is_open_drain / is_sequential (no part-name ifs)")
+    if "is_push_pull" not in src_model or "is_three_state" not in src_model or "voh_series_allowed" not in src_model:
+        errors.append("product_model.py must expose is_push_pull / is_three_state / voh_series_allowed")
     return errors
 
 
@@ -2703,6 +2857,10 @@ def _physics_fail_bars_ok() -> list[str]:
         en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
         if is_open_drain(m) and "voh" in en:
             errors.append(f"{part}: open_drain + voh enabled -> FAIL")
+        if "voh" in en and not voh_series_allowed(m):
+            errors.append(f"{part}: voh enabled but output_type is not push_pull/three_state -> FAIL")
+        if is_sequential(m) and "voh" in en:
+            errors.append(f"{part}: sequential + voh enabled -> FAIL")
         if is_sequential(m):
             if "icc" in en or "delta_icc" in en:
                 errors.append(f"{part}: sequential + icc enabled -> FAIL")

@@ -23,6 +23,8 @@ enabled_tests:
 - icc
 - ii
 - delta_icc
+- voh
+- vol
 fixture_modes:
   LOGIC:
     label: Logic board (RS1G14 / Eugene)
@@ -39,6 +41,8 @@ fixture_modes:
     - icc
     - ii
     - delta_icc
+    - voh
+    - vol
 product_model:
   part: RS1G14
   status: CONFIRMED
@@ -150,7 +154,7 @@ product_model:
     ii: max_only
   dc_limits:
     VOH:
-      status: UNCONFIRMED
+      status: CONFIRMED
       loads:
       - IOH_mA: -0.1
         vcc:
@@ -173,7 +177,7 @@ product_model:
         vcc: 4.5
         VOH_min_V: 3.8
     VOL:
-      status: UNCONFIRMED
+      status: CONFIRMED
       loads:
       - IOL_mA: 0.1
         vcc:
@@ -248,13 +252,15 @@ product_model:
   - icc
   - ii
   - delta_icc
+  - voh
+  - vol
   gaps:
   - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
   - vcc_grid/vcc_plan CONFIRMED Schmitt VT+/- / dVT from signed card/SoT; do not invent extra rows
   - Schmitt VT+/- range -- not plain VIH/VIL
   - IOZ OFF
-  - voh/vol not enabled (no table rows)
+  - voh/vol enabled: push_pull + CONFIRMED SoT dc_limits.VOH/VOL
   - VT+/- / dVT CONFIRMED from RS1G14_card_CONFIRMED (spot-check vs card)
   - Data retention MAX UNSURE (PDF MIN 1.5 only -- do not invent MAX)
-  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from signed card/SoT). Fail-closed remain
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid + VOH/VOL CONFIRMED from signed card/SoT). Fail-closed remain
     stable_eps_A null; data retention MAX UNSURE; do not invent.

@@ -10,7 +10,7 @@ Settle loop (this PR): recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005
 - Null `stable_eps_A`: tight-settle **claims** stay FAIL-closed. Honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle).
 - Ground `stable_eps_A` (amps) on the Logic DC panel overlay before claiming current settle-to-stable.
 
-`check_logic_dc` also FAIL-closes **enabled-but-unrunnable** ids: every part `enabled_tests` id must have a registered `TestSpec` with callable `run` (no stub). Enabled `voh`/`vol` without `voh_table`/`vol_table` rows FAIL the same gate. Enabled 97/126 tests with empty `wire_map` or missing `data_paths` FAIL too. Never invent nets.
+`check_logic_dc` also FAIL-closes **enabled-but-unrunnable** ids: every part `enabled_tests` id must have a registered `TestSpec` with callable `run` (no stub). Enabled `voh`/`vol` without CONFIRMED `dc_limits.VOH/VOL.loads` expansion or campaign `voh_table`/`vol_table` rows FAIL the same gate. Enable `voh` only for `push_pull` / `three_state` + CONFIRMED tables (open-drain G07 VOH stays N_A/SKIP). Enabled 97/126 tests with empty `wire_map` or missing `data_paths` FAIL too. Never invent nets.
 
 ## Copy-ready Version folder
 
@@ -91,8 +91,8 @@ After each PSU VCC switch and pin force: **PSU -> settle -> measure**. Voltage m
 | ΔICC | DMM-on-VCC; one input at VCC-offset or ICCT voltage, others at rail | 97/126: `recipe.delta_offset_v` 0.6. 34: ICCT 500uA @5.5V one_in@3.4 (`dc_limits.ICCT_uA`) -- do not invent 0.6 |
 | II | DMM in series with the swept input; force VI | Per input, VI=0 and VI=max |
 | VTH / VIH / VIL | Force unused ties from truth_table; DMM sense V(Y) | 97 Schmitt = VT+/VT- (range). 126 = VIH min_only / VIL max_only. 34 CONFIRMED: per-VCC limits from `vcc_grid`; `recipe.search` / `threshold_search` (limit-scaled first step, on-hit skip, no reverse) |
-| VOH | Force Y=H from truth_table; DMM sense V(Y); IOH via PSU CH2 | Loaded rows from `voh_table` (97/126/34 CONFIRMED). Judge **VOH >= min** (`min_only`) |
-| VOL | Force Y=L from truth_table; DMM sense V(Y); IOL via PSU CH2 | Loaded rows from `vol_table` (97/126/34 CONFIRMED). Judge **VOL <= max** (`max_only`) |
+| VOH | Force Y=H from truth_table; DMM sense V(Y); IOH via PSU CH2 | Loaded rows from CONFIRMED `dc_limits.VOH.loads` expansion (band onto merged `vcc_list`; named high-load at card VCC) or campaign `voh_table` (97/126/34). Judge **VOH >= min** (`min_only`). Open-drain SKIP. |
+| VOL | Force Y=L from truth_table; DMM sense V(Y); IOL via PSU CH2 | Loaded rows from CONFIRMED `dc_limits.VOL.loads` expansion or campaign `vol_table`. Judge **VOL <= max** (`max_only`) |
 | IOZ | Only if OE exists. OE inactive; DMM in series with Y; PSU CH2 force Vout | 126: yes. 97 `oe: none`: do **not** tick ioz |
 
 PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC -- fixture, not a datasheet Vref) when a `voh_table`/`vol_table` exists (97/126/34 CONFIRMED -- pin Y, not a new net). RS1G97 pin C is PSU CH3 (checklist: AWG CH1=A CH2=B). RS1G126: AWG CH1=A CH2=OE; no C. RS1GT34 CONFIRMED PSU_MSO: PSU CH1=VCC, PSU CH2=Y-load for `voh`/`vol`, PSU CH3=A; DMM/SCOPE on Y; NC not wired; **do not invent AWG Freq/Amp**.
@@ -112,7 +112,7 @@ Runner merges `fixed_points` + `ranges` -> `vcc_list`. Per-VCC VIH/VIL from the 
 
 YAML `vcc_grid.status` CONFIRMED is Datasheet-signed (97/126/34 and the 8 SoT SKUs: 08/07/14/32/GT08/GT32/G125/RS164). Overlay edits cannot promote unsigned SKUs. New SKUs stay UNCONFIRMED -- fail-closed for numbers green.
 
-Do not invent extra IOH/IOL rows. Tables live in part yaml + `ate/config/limits/`.
+Do not invent extra IOH/IOL rows. Path B prefers CONFIRMED `dc_limits.VOH/VOL.loads` (formula **VCC-0.1** only). Campaign Ariff `voh_table`/`vol_table` stay on 08/32/GT08/GT32 (Path A). G07 campaign `vol_table` stays 4 extract rows; SoT 0.1mA/24mA live in `dc_limits.VOL` only.
 
 ## Dual-channel Continue (future 2Gxx)
 
@@ -252,12 +252,12 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 
 **JH room CONFIRM (grounded fields only -- 2026-09-17; not a bench green)**
 
-Eight overnight models are **CONFIRMED** for grounded extract/card fields (truth_table / pins / isolation / oe / open_drain / sequential) and for `vcc_grid` / `vcc_plan` VIH/VIL (G14 VT+/-) copied from signed card / box SoT (Jian Hong 2026-09-18). Do not invent extra rows. Fail-closed remain: `stable_eps_A` null, retention MAX if missing, RS164 Ioff+ICCT ABSENT (delta_icc off), G07 VOH N_A, glyph-missing uA/mA rows. GT34 already CONFIRMED (2026-09-18). STS latest `report.pdf` copies measured rows with Pass criteria / How met (never invent pass numbers). Dual Excel: golden_auto overwrite + pretty never auto; `sessions/csv/` + `sessions/path_b_write.json`.
+Eight overnight models are **CONFIRMED** for grounded extract/card fields (truth_table / pins / isolation / oe / open_drain / sequential), for `vcc_grid` / `vcc_plan` VIH/VIL (G14 VT+/-), and for push-pull/three-state `dc_limits.VOH/VOL` copied from signed card / box SoT (Jian Hong 2026-09-18). Do not invent extra rows. Fail-closed remain: `stable_eps_A` null, retention MAX if missing, RS164 Ioff+ICCT ABSENT (delta_icc off), G07 VOH N_A, G125 IOZ @3.6V UNSURE this turn, unsigned ICCT. GT34 already CONFIRMED (2026-09-18); `dc_limits.VOH/VOL.loads` now match the attached SoT. STS latest `report.pdf` copies measured rows with Pass criteria / How met (never invent pass numbers). Dual Excel: golden_auto overwrite + pretty never auto; `sessions/csv/` + `sessions/path_b_write.json`.
 
-1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock. VIH/VIL four CMOS bands CONFIRMED from signed card (1.65-1.95 0.65x/0.15x; 2.3-2.7 1.7/0.3; 3-3.6 2.2/0.4; 4.5-5.5 0.7x/0.15x). Do not copy extract 9.2 over Ariff voh_table. Light-load 100uA and IOH -24mA VCC glyph-missing on campaign tables -- omitted.
-2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ. VOL = extract-explicit IOL only (4/8/16/32mA, CONFIRMED). Do not invent 100uA or 24mA VCC. VIH/VIL same CMOS bands CONFIRMED from SoT.
-3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL). VT+/- / dVT CONFIRMED from signed card. Data retention MAX stays UNSURE (PDF MIN 1.5 only).
-4. RS1G32 OR-2 other=L. RS1GT08/RS1GT32 TTL VCC 2.0-5.5; ICCT one_in@3.4 (not 0.6).
-5. RS1G125 OE active-L -> tick ioz when OE inactive only (`recipe.ioz_when: oe_inactive`; force OE=H, never active L). RS164 sequential_shift_register -- do not tick Path B gate 2^n.
+1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock. VIH/VIL four CMOS bands CONFIRMED. `dc_limits.VOH/VOL` CONFIRMED 6-load SoT (0.1mA band + named high-load incl 24mA). Do not copy extract 9.2 over Ariff campaign `voh_table`.
+2. RS1G07 open-drain: do not tick voh (VOH N_A). Y=Z is not IOZ. Campaign `vol_table` stays 4 extract IOL rows. `dc_limits.VOL` CONFIRMED SoT 6-load copy including 0.1mA and 24mA -- copy, not invent. VIH/VIL same CMOS bands CONFIRMED from SoT.
+3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL). VT+/- / dVT CONFIRMED. Enable voh/vol (push_pull + CONFIRMED SoT tables). Data retention MAX stays UNSURE (PDF MIN 1.5 only).
+4. RS1G32 OR-2 other=L. RS1GT08/RS1GT32 TTL VCC 2.0-5.5; ICCT one_in@3.4 (not 0.6). VOH/VOL CONFIRMED SoT 6-load (TTL 0.1mA band + named 8/24/32mA).
+5. RS1G125 OE active-L -> tick ioz when OE inactive only (`recipe.ioz_when: oe_inactive`; force OE=H, never active L). Enable voh/vol (three_state + CONFIRMED SoT). RS164 sequential_shift_register -- do not tick Path B gate 2^n; VOH/VOL stay UNCONFIRMED (do not expand).
 
 No Verify PASS.

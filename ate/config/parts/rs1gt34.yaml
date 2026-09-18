@@ -175,6 +175,24 @@ product_model:
       pass_mode: max_only
     ii: {spec_id: II_uA, limit_mode: max_only, status: CONFIRMED, plus25C_max: 1.0, Full: 5.0}
     Ioff_uA: {plus25C_max: 1.0, Full: 10.0, note: "VCC=0; not IOZ"}
+    VOH:
+      status: CONFIRMED
+      loads:
+      - {IOH_mA: -0.1, vcc: [2.0, 5.5], VOH_min: "VCC-0.1"}
+      - {IOH_mA: -8, vcc: 2.0, VOH_min_V: 1.6}
+      - {IOH_mA: -24, vcc: 3.3, VOH_min_V: 2.5}
+      - {IOH_mA: -32, vcc: 4.5, VOH_min_V: 3.8}
+      - {IOH_mA: -32, vcc: 5.0, VOH_min_V: 4.2}
+      - {IOH_mA: -32, vcc: 5.5, VOH_min_V: 4.8}
+    VOL:
+      status: CONFIRMED
+      loads:
+      - {IOL_mA: 0.1, vcc: [2.0, 5.5], VOL_max_V: 0.1}
+      - {IOL_mA: 8, vcc: 2.0, VOL_max_V: 0.45}
+      - {IOL_mA: 24, vcc: 3.3, VOL_max_V: 0.55}
+      - {IOL_mA: 32, vcc: 4.5, VOL_max_V: 0.55}
+      - {IOL_mA: 32, vcc: 5.0, VOL_max_V: 0.5}
+      - {IOL_mA: 32, vcc: 5.5, VOL_max_V: 0.45}
     voh: {status: CONFIRMED, note: "CONFIRMED IOH grid; PSU CH2 Y-load"}
     vol: {status: CONFIRMED, note: "CONFIRMED IOL grid; PSU CH2 Y-load"}
     input_threshold: {status: CONFIRMED, note: "VIH/VIL from vcc_grid CONFIRMED"}
