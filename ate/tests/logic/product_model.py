@@ -769,7 +769,13 @@ def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, 
         # vcc_plan is the user-facing alias of vcc_grid (Version overlay + panel).
         grid_over = overlay.get("vcc_plan")
     if isinstance(grid_over, dict):
-        out["vcc_grid"] = grid_over
+        base = out.get("vcc_grid") if isinstance(out.get("vcc_grid"), dict) else {}
+        merged = dict(grid_over)
+        if is_datasheet_signed((base or {}).get("status")) and not is_datasheet_signed(
+            merged.get("status")
+        ):
+            merged["status"] = base.get("status")
+        out["vcc_grid"] = merged
     elif overlay_set_vcc_list:
         # Overlay vcc_list must win over YAML vcc_grid (scale SIM vcc_list: [3.3]).
         out.pop("vcc_grid", None)

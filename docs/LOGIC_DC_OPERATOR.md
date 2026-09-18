@@ -208,7 +208,7 @@ Zip operators: `START.bat` (from `ATE_Console_Try_*.zip` or the copy-ready Versi
 
 - UI: `http://127.0.0.1:5174`
 - Worker JSON-RPC: `http://127.0.0.1:8766` (not 8765)
-- After `git pull` / zip refresh: **Ctrl+F5** (`app.js?v=20260918logicdc14`)
+- After `git pull` / zip refresh: **Ctrl+F5** (`app.js?v=20260918logicdc16`)
 - After `ate/tests/**` / worker changes: idle-restart worker (`restart_ate_worker.bat`), not mid-run, then Ctrl+F5
 
 Pick a **person** (not All) -> Apply campaign -> Discover -> Open Session -> tick tests -> START.

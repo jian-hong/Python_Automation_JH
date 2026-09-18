@@ -1260,6 +1260,7 @@ function collectVccGridFromUi() {
   const stimEl = document.querySelector('input[name="logic-dc-stimulus"]:checked');
   const stimulus = stimToken(stimEl && stimEl.value) || "AWG";
   const dc = paramCatalog.logic_dc || {};
+  const prev = (dc.vcc_grid || dc.vcc_plan) || {};
   const schmitt = isSchmittGrid(dc);
   const fixed = [];
   document.querySelectorAll("#logic-dc-fixed-points .vcc-chip").forEach((chip) => {
@@ -1323,7 +1324,7 @@ function collectVccGridFromUi() {
       : (schmitt ? { "VT+": "range", "VT-": "range" } : { VIH: "min_only", VIL: "max_only" }),
     fixed_points: fixed,
     ranges,
-    status: "UNCONFIRMED",
+    status: prev.status || "UNCONFIRMED",
   };
   if (schmitt) out.kind = "schmitt_VT";
   const kindEl = $("logic-dc-grid-kind");
@@ -1458,7 +1459,7 @@ function renderCustomiseParameters(dc) {
   const corners = dc && dc.is_sequential ? 0 : (dc.icc_corners || (nIn ? (1 << nIn) : 0));
   return (
     "<h3 class=\"subhead\">Customise Parameters</h3>" +
-    "<p class=\"hint\">vcc_plan editor: FIXED POINTS chips + RANGE SWEEPS + per-band limits + pass_mode (range / min-only / max-only). Same limits for every stepped VCC in a band. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> (test_params + vcc_plan). Numbers UNSURE until extract-signed -- not greenable. No xyflow. No invent.</p>" +
+    "<p class=\"hint\">vcc_plan editor: FIXED POINTS chips + RANGE SWEEPS + per-band limits + pass_mode (range / min-only / max-only). Same limits for every stepped VCC in a band. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> (test_params + vcc_plan). Card-CONFIRMED vcc_grid unlocks threshold numbers; overlay must not stamp UNCONFIRMED over CONFIRMED. Glyph gaps stay fail-closed. No xyflow. No invent.</p>" +
     `<p class="hint">logic_inputs ${(dc.logic_inputs || []).join(",") || "--"} · OE ${oeTxt} · ICC corners ${corners}${dc && dc.is_sequential ? " (sequential -- 2^n disabled)" : " (2^n)"}</p>` +
     pinWiringHtml(dc || {}) +
     `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. Do not invent a 2G YAML.</label>` +

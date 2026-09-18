@@ -1495,6 +1495,9 @@ def _panel_ok() -> list[str]:
         errors.append("app.js must save vcc_grid to Version overlay")
     if "vcc_plan" not in js:
         errors.append("app.js must save vcc_plan (vcc_grid alias) to Version overlay")
+    collect = js[js.find("function collectVccGridFromUi") : js.find("function refreshVccPreview")]
+    if "prev.status" not in collect:
+        errors.append("collectVccGridFromUi must keep CONFIRMED vcc_grid.status (not stamp UNCONFIRMED)")
     if "dual-channel Continue" not in js and "dual_channel_continue" not in js:
         errors.append("Customise Parameters must show 2Gxx dual-channel Continue switch")
     if "Pin / wiring" not in js and "pin_wiring" not in js:
@@ -1588,6 +1591,8 @@ def _scale_and_overlay_ok() -> list[str]:
     got_plan = [round(float(x), 6) for x in ((over_plan.vcc_list if over_plan else []) or [])]
     if 3.3 not in got_plan or len(got_plan) != 1:
         errors.append(f"vcc_plan overlay alias must populate vcc_grid, got {got_plan}")
+    if over_plan is not None and vcc_grid_unconfirmed(over_plan):
+        errors.append("vcc_plan overlay UNSURE must not demote CONFIRMED vcc_grid")
     pins = ["A", "B", "C"]
     rows = []
     for vec in iter_logic_corners(pins):
@@ -2386,6 +2391,25 @@ def _draft_scaffold_ok() -> list[str]:
         ("rs164", m164),
     ):
         errors += _unsigned_draft_ok(part, m)
+
+    unsure = SimpleNamespace(vcc_grid={"status": "UNSURE", "ranges": [{"start": 1.65}]})
+    if not vcc_grid_unconfirmed(unsure):
+        errors.append("UNSURE vcc_grid must keep threshold numbers fail-closed")
+    fin = ldc._finish(m08, "input_threshold", {"data": {}, "summary": "sim"})
+    if (fin.get("data") or {}).get("greenable") is not True:
+        errors.append("CONFIRMED vcc_grid must unlock threshold numbers gate")
+    demote = load_product_model(
+        "rs1g08",
+        overlay={
+            "vcc_grid": {
+                "status": "UNCONFIRMED",
+                "ranges": [],
+                "fixed_points": [{"vcc": 3.3}],
+            }
+        },
+    )
+    if demote is None or vcc_grid_unconfirmed(demote):
+        errors.append("overlay must not stamp UNCONFIRMED over CONFIRMED vcc_grid")
 
     # G08 signed-card VIH/VIL bands (spot-check vs RS1G08_card_CONFIRMED).
     grid08 = m08.vcc_grid or {}
