@@ -1,6 +1,8 @@
 """STS8200-shaped session export: markdown, HTML (print-to-PDF), simple PDF.
 
-Mirrors the production datalog sheet (Parameter / Unit / Min / Max / Typ / Value / Result).
+Mirrors the production datalog sheet
+(Parameter / Unit / Min / Max / Typ / Value / Result / Pass criteria / How met).
+Never invent pass numbers -- copy measured rows + limits only.
 """
 from __future__ import annotations
 
@@ -20,6 +22,86 @@ def _fmt(v: Any) -> str:
     return str(v)
 
 
+def _coerce_mode(raw: Any) -> str:
+    s = str(raw or "").strip().lower().replace("-", "_")
+    if s in ("min_only", "max_only", "range", "fail_open", "unspec"):
+        return s
+    return ""
+
+
+def _infer_pass_mode(row: dict[str, Any]) -> str:
+    mode = _coerce_mode(row.get("pass_mode"))
+    if mode:
+        return mode
+    has_min = row.get("min") not in (None, "")
+    has_max = row.get("max") not in (None, "")
+    if has_min and has_max:
+        return "range"
+    if has_min:
+        return "min_only"
+    if has_max:
+        return "max_only"
+    return "unspec"
+
+
+def pass_criteria_text(row: dict[str, Any]) -> str:
+    """How the row is judged. Uses existing min/max/pass_mode only. No invented limits."""
+    mode = _infer_pass_mode(row)
+    mn, mx = row.get("min"), row.get("max")
+    if mode == "min_only":
+        return f">= min {_fmt(mn)}" if mn not in (None, "") else "min_only (min unspec)"
+    if mode == "max_only":
+        return f"<= max {_fmt(mx)}" if mx not in (None, "") else "max_only (max unspec)"
+    if mode == "range":
+        if mn not in (None, "") and mx not in (None, ""):
+            return f"range {_fmt(mn)} .. {_fmt(mx)}"
+        return "range (min/max unspec)"
+    if mode == "fail_open":
+        return "fail-open (missing limit fails)"
+    return "unspec"
+
+
+def how_met_text(row: dict[str, Any]) -> str:
+    """How the measured value compared to criteria. Copies value/min/max; never invents."""
+    val = row.get("value")
+    res = str(row.get("result") or "")
+    mode = _infer_pass_mode(row)
+    mn, mx = row.get("min"), row.get("max")
+    if val in (None, "") and not res:
+        return ""
+    if mode == "min_only" and mn not in (None, ""):
+        try:
+            ok = float(val) >= float(mn)
+            verb = ">=" if ok else "not >="
+        except (TypeError, ValueError):
+            verb = "vs"
+        return f"value {_fmt(val)} {verb} min {_fmt(mn)} ({res})"
+    if mode == "max_only" and mx not in (None, ""):
+        try:
+            ok = float(val) <= float(mx)
+            verb = "<=" if ok else "not <="
+        except (TypeError, ValueError):
+            verb = "vs"
+        return f"value {_fmt(val)} {verb} max {_fmt(mx)} ({res})"
+    if mode == "range" and mn not in (None, "") and mx not in (None, ""):
+        try:
+            ok = float(mn) <= float(val) <= float(mx)
+            verb = "in" if ok else "not in"
+        except (TypeError, ValueError):
+            verb = "vs"
+        return f"value {_fmt(val)} {verb} {_fmt(mn)} .. {_fmt(mx)} ({res})"
+    if res:
+        return f"value {_fmt(val)} ({res})"
+    return f"value {_fmt(val)}"
+
+
+def _annotate(row: dict[str, Any]) -> dict[str, Any]:
+    out = dict(row)
+    out["pass_criteria"] = pass_criteria_text(out)
+    out["how_met"] = how_met_text(out)
+    return out
+
+
 def _iter_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for step in doc.get("steps") or []:
@@ -28,17 +110,20 @@ def _iter_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
         meas = step.get("measurements") if isinstance(step.get("measurements"), list) else []
         if not meas:
             rows.append(
-                {
-                    "id": str(step.get("test_id") or ""),
-                    "unit": "",
-                    "min": "",
-                    "max": "",
-                    "typ": "",
-                    "value": "",
-                    "result": "PASS" if step.get("success") else ("FAIL" if step.get("success") is False else ""),
-                    "dut": step.get("dut"),
-                    "test_id": step.get("test_id"),
-                }
+                _annotate(
+                    {
+                        "id": str(step.get("test_id") or ""),
+                        "unit": "",
+                        "min": "",
+                        "max": "",
+                        "typ": "",
+                        "value": "",
+                        "result": "PASS" if step.get("success") else ("FAIL" if step.get("success") is False else ""),
+                        "dut": step.get("dut"),
+                        "test_id": step.get("test_id"),
+                        "pass_mode": step.get("pass_mode") or "",
+                    }
+                )
             )
             continue
         for m in meas:
@@ -52,18 +137,21 @@ def _iter_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
             elif res == "unspec":
                 res = "UNSPEC"
             rows.append(
-                {
-                    "id": str(m.get("id") or step.get("test_id") or ""),
-                    "unit": str(m.get("unit") or ""),
-                    "min": m.get("min"),
-                    "max": m.get("max"),
-                    "typ": m.get("typ"),
-                    "value": m.get("value"),
-                    "result": res,
-                    "dut": step.get("dut"),
-                    "test_id": step.get("test_id"),
-                    "source": m.get("source") or "",
-                }
+                _annotate(
+                    {
+                        "id": str(m.get("id") or step.get("test_id") or ""),
+                        "unit": str(m.get("unit") or ""),
+                        "min": m.get("min"),
+                        "max": m.get("max"),
+                        "typ": m.get("typ"),
+                        "value": m.get("value"),
+                        "result": res,
+                        "dut": step.get("dut"),
+                        "test_id": step.get("test_id"),
+                        "source": m.get("source") or "",
+                        "pass_mode": m.get("pass_mode") or step.get("pass_mode") or "",
+                    }
+                )
             )
     return rows
 
@@ -87,8 +175,8 @@ def render_markdown(doc: dict[str, Any]) -> str:
         f"- Ending: {hdr.get('ending_time') or ''}",
         f"- Total: {len(rows)}  Pass: {pass_n}  Fail: {fail_n}",
         "",
-        "| Parameter | Unit | Min | Max | Typ | Value | Result | DUT | Test |",
-        "|---|---|---|---|---|---|---|---|---|",
+        "| Parameter | Unit | Min | Max | Typ | Value | Result | Pass criteria | How met | DUT | Test |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         lines.append(
@@ -102,6 +190,8 @@ def render_markdown(doc: dict[str, Any]) -> str:
                     _fmt(r.get("typ")),
                     _fmt(r.get("value")),
                     str(r.get("result") or ""),
+                    str(r.get("pass_criteria") or ""),
+                    str(r.get("how_met") or ""),
                     str(r.get("dut") or ""),
                     str(r.get("test_id") or ""),
                 ]
@@ -131,6 +221,7 @@ def render_html(doc: dict[str, Any]) -> str:
         body_rows.append(
             "<tr class='{cls}'><td>{id}</td><td>{unit}</td><td>{mn}</td>"
             "<td>{mx}</td><td>{typ}</td><td>{val}</td><td>{res}</td>"
+            "<td>{crit}</td><td>{how}</td>"
             "<td>{dut}</td><td>{tid}</td></tr>".format(
                 cls=cls,
                 id=str(r.get("id") or ""),
@@ -140,6 +231,8 @@ def render_html(doc: dict[str, Any]) -> str:
                 typ=_fmt(r.get("typ")),
                 val=_fmt(r.get("value")),
                 res=str(r.get("result") or ""),
+                crit=str(r.get("pass_criteria") or ""),
+                how=str(r.get("how_met") or ""),
                 dut=str(r.get("dut") or ""),
                 tid=str(r.get("test_id") or ""),
             )
@@ -171,7 +264,7 @@ Total {len(rows)} &nbsp; Pass {sum(1 for r in rows if r.get('result')=='PASS')} 
 Fail {sum(1 for r in rows if r.get('result')=='FAIL')}
 </p>
 <table>
-<thead><tr><th>Parameter</th><th>Unit</th><th>Min</th><th>Max</th><th>Typ</th><th>Value</th><th>Result</th><th>DUT</th><th>Test</th></tr></thead>
+<thead><tr><th>Parameter</th><th>Unit</th><th>Min</th><th>Max</th><th>Typ</th><th>Value</th><th>Result</th><th>Pass criteria</th><th>How met</th><th>DUT</th><th>Test</th></tr></thead>
 <tbody>
 {''.join(body_rows)}
 </tbody></table>
@@ -197,26 +290,40 @@ def write_table_pdf(
     meta: list[str] | None = None,
     title: str = "STS Datalog",
 ) -> None:
-    """Landscape table PDF: Parameter Unit Min Max Typ Value Result DUT Test."""
+    """Landscape table PDF: Parameter Unit Min Max Typ Value Result Pass criteria How met DUT Test."""
     page_w, page_h = 792, 612
-    margin, leading = 28, 11
-    headers = ["Parameter", "Unit", "Min", "Max", "Typ", "Value", "Result", "DUT", "Test"]
-    col_w = [110, 44, 52, 52, 52, 60, 52, 32, 80]
+    margin, leading = 18, 10
+    headers = [
+        "Parameter",
+        "Unit",
+        "Min",
+        "Max",
+        "Typ",
+        "Value",
+        "Result",
+        "Pass criteria",
+        "How met",
+        "DUT",
+        "Test",
+    ]
+    col_w = [72, 32, 40, 40, 36, 48, 40, 90, 130, 24, 56]
     table: list[list[str]] = []
     if rows is not None:
         table.append(headers)
         for r in rows:
             table.append(
                 [
-                    str(r.get("id") or "")[:22],
-                    str(r.get("unit") or "")[:8],
-                    _fmt(r.get("min"))[:10],
-                    _fmt(r.get("max"))[:10],
-                    _fmt(r.get("typ"))[:10],
-                    _fmt(r.get("value"))[:12],
-                    str(r.get("result") or "")[:8],
+                    str(r.get("id") or "")[:16],
+                    str(r.get("unit") or "")[:6],
+                    _fmt(r.get("min"))[:8],
+                    _fmt(r.get("max"))[:8],
+                    _fmt(r.get("typ"))[:8],
+                    _fmt(r.get("value"))[:10],
+                    str(r.get("result") or "")[:6],
+                    str(r.get("pass_criteria") or "")[:18],
+                    str(r.get("how_met") or "")[:26],
                     str(r.get("dut") or "")[:4],
-                    str(r.get("test_id") or "")[:14],
+                    str(r.get("test_id") or "")[:12],
                 ]
             )
     else:
@@ -249,7 +356,7 @@ def write_table_pdf(
                 cmds.append("/F1 8 Tf")
                 for ci, val in enumerate(cols):
                     w = col_w[ci] if ci < len(col_w) else 48
-                    cmds.append(f"1 0 0 1 {x} {y} Tm ({_pdf_escape(str(val)[:18])}) Tj")
+                    cmds.append(f"1 0 0 1 {x} {y} Tm ({_pdf_escape(str(val)[:26])}) Tj")
                     x += w
             else:
                 cmds.append(f"1 0 0 1 {margin} {y} Tm ({_pdf_escape(str(cols[0])[:120])}) Tj")

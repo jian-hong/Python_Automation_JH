@@ -74,7 +74,7 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 1. Product-model schema load (`ate/config/parts/<key>.yaml` `product_model` / `logic_dc:`). Isolation derives from `truth_table` (Y tracks the swept pin; invert only if no track combo).
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
 3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **CONFIRMED** (Jian Hong 2026-09-18) for the status gate only -- that is not a bench green.
-4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, stimulus PSU_MSO vs AWG, n) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` only (`vcc_grid`, merged `vcc_list`, `pass_mode` VIH=min_only / VIL=max_only, `sample_size`, `stable_eps_A`). Not xyflow. Visual tables still write pass_mode on the limits table.
+4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (pin/wiring map labels, 2Gxx dual-channel Continue switch, FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, per-band limits + `pass_mode` range/min-only/max-only, stimulus PSU_MSO vs AWG, n) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (`vcc_plan` alias of `vcc_grid`, merged `vcc_list`, `pass_mode`, `sample_size`, `stable_eps_A`). PSU_MSO hides Freq/Amp. Not xyflow. Visual tables still write pass_mode on the limits table.
 5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free SIM: rs1g08 ICC corners=4, rs1g97=8, rs1g126 A+OE=4, rs1g07 open-drain n=1=2. Timeout SIM raises. **Not a reproduce claim.**
 
 DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure. START.bat is still how the zip console comes up.
@@ -191,7 +191,7 @@ Path B does **not** mint those G16 / D10 cells. The CONFIRMED 97/126 VOH/VOL Ful
 | What | Where |
 |------|--------|
 | Living latest merge | `{Version_N}/sessions/report.json` |
-| Latest STS PDF | `{Version_N}/report.pdf` (overwrite after Version run; pass/fail vs limits from session rows -- never invent pass numbers) |
+| Latest STS PDF | `{Version_N}/report.pdf` (overwrite after Version run; Pass criteria / How met from session min/max/value -- never invent pass numbers) |
 | Full START snapshot | `sessions/session_*.json` |
 | STS datalog | Results **Export STS datalog** -> `sessions/datalog.md` + `.html` + `.pdf` (also `sessions/report.pdf`) |
 | Golden CSV sidecar | `workbook/*_datapoints.csv` (full datapoints beside golden_auto overwrite; pretty never auto) |
@@ -250,13 +250,13 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 - Excel: auto overwrite Version; pretty never auto.
 - ICC corners = 2 (A). START.bat first. No Verify PASS.
 
-**Overnight Path B scaffold (UNCONFIRMED -- no number unlock)**
+**JH room CONFIRM (grounded fields only -- 2026-09-17; not a bench green)**
 
-Eight SKUs carry DRAFT `product_model` from attached cards. Status stays UNCONFIRMED. Do not treat numbers as Datasheet-signed. Gate SKUs use `recipe.search` (PROPOSED_FROM_LIVE). `check_logic_dc` FAIL-closes open-drain VOH and sequential-as-gate 2^n.
+Eight overnight DRAFT models are **CONFIRMED** for grounded extract/card fields (truth_table / pins / isolation / oe / open_drain / sequential). `vcc_grid` / `vcc_plan` 9.1 VIH/VIL stay **UNSURE** (PDF table image -- do not invent). Glyph-missing uA/mA rows stay omitted. GT34 already CONFIRMED (2026-09-18). STS latest `report.pdf` copies measured rows with Pass criteria / How met (never invent pass numbers). Dual Excel: golden_auto overwrite + pretty never auto; `sessions/csv/` + `sessions/path_b_write.json`.
 
-1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock. VIH/VIL 9.1 PDF image -- leave unset. Do not copy extract 9.2 over Ariff voh_table. Light-load 100uA and IOH -24mA VCC glyph-missing -- omitted.
-2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ. VOL = extract-explicit IOL only (4/8/16/32mA). Do not invent 100uA or 24mA VCC.
-3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL).
+1. RS1G08 AND-2 other=H; no IOZ; keep AWG pin_drive + SOT23 campaign; no Path B excel_lock. VIH/VIL 9.1 PDF image -- UNSURE. Do not copy extract 9.2 over Ariff voh_table. Light-load 100uA and IOH -24mA VCC glyph-missing -- omitted.
+2. RS1G07 open-drain: do not tick voh; Y=Z is not IOZ. VOL = extract-explicit IOL only (4/8/16/32mA, CONFIRMED). Do not invent 100uA or 24mA VCC.
+3. RS1G14 Schmitt VT+/- range; tick `vth` (not plain VIH/VIL). VT grid stays in yaml; vcc_grid.status UNSURE until extract-signed.
 4. RS1G32 OR-2 other=L. RS1GT08/RS1GT32 TTL VCC 2.0-5.5; ICCT one_in@3.4 (not 0.6).
 5. RS1G125 OE active-L -> tick ioz when OE inactive only (`recipe.ioz_when: oe_inactive`; force OE=H, never active L). RS164 sequential_shift_register -- do not tick Path B gate 2^n.
 

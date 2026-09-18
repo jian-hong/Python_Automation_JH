@@ -1,7 +1,3 @@
-# RS1G07 Logic (Eugene) — reuse Ariff DC slots via enabled_tests
-# Tree: #Test_Database/Logic/RS1G07/SOT23/Version_1
-# Parked: cpd, cin (no platform bodies this wave)
-
 part: RS1G07
 model: RS1G07
 component: Logic
@@ -9,95 +5,139 @@ device: RS1G07
 package: SOT23
 version: Version_1
 sample_size: 4
-year: "2026"
+year: '2026'
 owner: eugene
 part_key: rs1g07
-
 vcc: 5.0
-current_limit: 0.10
+current_limit: 0.1
 htol_ns: 230
 timing:
   timeout_s: 4.0
   settle_s: 0.3
-
-# Extract 9.2 VOL rows with explicit VCC + IOL only. Do not invent 100uA /
-# 24mA VCC (glyph-missing in extract).
 vol_table:
-  - {id: VOL_1p65V_4mA, vcc: 1.65, iol_a: 0.004, spec_max: 0.45}
-  - {id: VOL_2p3V_8mA, vcc: 2.3, iol_a: 0.008, spec_max: 0.3}
-  - {id: VOL_3p0V_16mA, vcc: 3.0, iol_a: 0.016, spec_max: 0.4}
-  - {id: VOL_4p5V_32mA, vcc: 4.5, iol_a: 0.032, spec_max: 0.55}
-
+- id: VOL_1p65V_4mA
+  vcc: 1.65
+  iol_a: 0.004
+  spec_max: 0.45
+- id: VOL_2p3V_8mA
+  vcc: 2.3
+  iol_a: 0.008
+  spec_max: 0.3
+- id: VOL_3p0V_16mA
+  vcc: 3.0
+  iol_a: 0.016
+  spec_max: 0.4
+- id: VOL_4p5V_32mA
+  vcc: 4.5
+  iol_a: 0.032
+  spec_max: 0.55
 enabled_tests:
-  - supply_current
-  - delta_supply_current
-  - ioff_leakage
-  - input_leakage_sweep
-  - input_threshold
-  - icc
-  - ii
-  - delta_icc
-  - vol
-
+- supply_current
+- delta_supply_current
+- ioff_leakage
+- input_leakage_sweep
+- input_threshold
+- icc
+- ii
+- delta_icc
+- vol
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1G07 / Eugene)"
+    label: Logic board (RS1G07 / Eugene)
     board_class: general
     checklist:
-      - "Logic fixture for RS1G07"
-      - "DMM required for DC / leakage rows"
+    - Logic fixture for RS1G07
+    - DMM required for DC / leakage rows
     tests:
-      - supply_current
-      - delta_supply_current
-      - ioff_leakage
-      - input_leakage_sweep
-      - input_threshold
-      - icc
-      - ii
-      - delta_icc
-      - vol
-
-# Path B DRAFT -- UNCONFIRMED. Open-drain: VOH skip; Y=Z is not IOZ.
+    - supply_current
+    - delta_supply_current
+    - ioff_leakage
+    - input_leakage_sweep
+    - input_threshold
+    - icc
+    - ii
+    - delta_icc
+    - vol
 product_model:
   part: RS1G07
-  status: UNCONFIRMED
+  status: CONFIRMED
   source_card: RS1G07_card_DRAFT.md
   package: SC70-5
-  packages_note: "SOT23-5 / SC70-5 (=SOT353) -- campaign package stays SOT23"
+  packages_note: SOT23-5 / SC70-5 (=SOT353) -- campaign package stays SOT23
   schmitt: false
   oe: none
   output_pin: Y
   output_type: open_drain
   vcc_op_min: 1.65
   vcc_op_max: 5.5
-  logic_inputs: [A]
+  logic_inputs:
+  - A
   pins:
-    - {name: NC, role: nc, number: 1}
-    - {name: A, role: input, number: 2}
-    - {name: GND, role: gnd, number: 3}
-    - {name: Y, role: output, number: 4, note: "open-drain"}
-    - {name: VCC, role: vcc, number: 5}
+  - name: NC
+    role: nc
+    number: 1
+  - name: A
+    role: input
+    number: 2
+  - name: GND
+    role: gnd
+    number: 3
+  - name: Y
+    role: output
+    number: 4
+    note: open-drain
+  - name: VCC
+    role: vcc
+    number: 5
   truth_table:
-    status: UNCONFIRMED
-    source: "RS1G07 RevA.5.1 §4"
+    status: CONFIRMED
+    source: RS1G07 RevA.5.1 §4
     rows:
-      - {A: L, Y: L}
-      - {A: H, Y: Z}
+    - A: L
+      Y: L
+    - A: H
+      Y: Z
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     tests:
       A:
-        - {sweep_pin: A, fix: {}, y_expect: track, note: "VOL when Y=L; Z when A=H -- not VOH"}
+      - sweep_pin: A
+        fix: {}
+        y_expect: track
+        note: VOL when Y=L; Z when A=H -- not VOH
   vcc_grid:
-    status: UNCONFIRMED
+    status: UNSURE
     stimulus: PSU_MSO
-    pass_mode: {VIH: min_only, VIL: max_only}
+    pass_mode:
+      VIH: min_only
+      VIL: max_only
     ranges:
-      - {start: 1.65, stop: 1.95, step: 0.1, VIH_min: "0.65*VCC", VIL_max: "0.15*VCC", label: "1.65-1.95"}
-      - {start: 2.3, stop: 2.7, step: 0.1, VIH_min_V: 1.7, VIL_max_V: 0.3, label: "2.3-2.7"}
-      - {start: 3.0, stop: 3.6, step: 0.1, VIH_min_V: 2.2, VIL_max_V: 0.4, label: "3-3.6"}
-      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min: "0.7*VCC", VIL_max: "0.15*VCC", label: "4.5-5.5"}
+    - start: 1.65
+      stop: 1.95
+      step: 0.1
+      VIH_min: 0.65*VCC
+      VIL_max: 0.15*VCC
+      label: 1.65-1.95
+    - start: 2.3
+      stop: 2.7
+      step: 0.1
+      VIH_min_V: 1.7
+      VIL_max_V: 0.3
+      label: 2.3-2.7
+    - start: 3.0
+      stop: 3.6
+      step: 0.1
+      VIH_min_V: 2.2
+      VIL_max_V: 0.4
+      label: 3-3.6
+    - start: 4.5
+      stop: 5.5
+      step: 0.1
+      VIH_min: 0.7*VCC
+      VIL_max: 0.15*VCC
+      label: 4.5-5.5
     fixed_points: []
+    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
   pass_mode:
     VIH: min_only
     VIL: max_only
@@ -108,17 +148,29 @@ product_model:
   dc_limits:
     VOH:
       status: N_A
-      note: "open-drain -- skip VOH series"
+      note: open-drain -- skip VOH series
     VOL:
-      status: UNCONFIRMED
-      note: "extract 9.2 explicit IOL rows only; light-load 100uA and IOL 24mA VCC glyph-missing -- omitted"
+      status: CONFIRMED
+      note: extract 9.2 explicit IOL rows only (CONFIRMED); light-load 100uA and IOL 24mA VCC glyph-missing -- omitted
       loads:
-        - {IOL_mA: 4, vcc: 1.65, VOL_max_V: 0.45}
-        - {IOL_mA: 8, vcc: 2.3, VOL_max_V: 0.3}
-        - {IOL_mA: 16, vcc: 3.0, VOL_max_V: 0.4}
-        - {IOL_mA: 32, vcc: 4.5, VOL_max_V: 0.55}
-    II_uA: {plus25C_max: 1.0, Full: 5.0}
-    ICC_uA: {plus25C_max: 1.0, Full: 10.0}
+      - IOL_mA: 4
+        vcc: 1.65
+        VOL_max_V: 0.45
+      - IOL_mA: 8
+        vcc: 2.3
+        VOL_max_V: 0.3
+      - IOL_mA: 16
+        vcc: 3.0
+        VOL_max_V: 0.4
+      - IOL_mA: 32
+        vcc: 4.5
+        VOL_max_V: 0.55
+    II_uA:
+      plus25C_max: 1.0
+      Full: 5.0
+    ICC_uA:
+      plus25C_max: 1.0
+      Full: 10.0
     ICCT_uA:
       status: UNCONFIRMED
       Full: 500.0
@@ -134,21 +186,50 @@ product_model:
     icc_corners: 2
     search:
       status: PROPOSED_FROM_LIVE
-      vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
-      vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
-      step_ladder_V: [0.5, 0.2, 0.1, 0.05, 0.01]
-      step_select: "largest step compatible with card |limit|"
-      on_hit: {skip_rest_of_walk: true, rearm: true, restart_fraction_back: 0.3, next_smaller_step: true}
-      after_precision: {interpolate: true, skip_to: next_test_or_vcc}
-      coverage_order: [input_threshold, icc, ii, vol, delta_icc]
-  enabled_tests_model: [input_threshold, icc, ii, vol, delta_icc]
+      vih:
+        arm: 0.0
+        direction: up
+        no_reverse_in_stage: true
+      vil:
+        arm: VCC
+        direction: down
+        no_reverse_in_stage: true
+      step_ladder_V:
+      - 0.5
+      - 0.2
+      - 0.1
+      - 0.05
+      - 0.01
+      step_select: largest step compatible with card |limit|
+      on_hit:
+        skip_rest_of_walk: true
+        rearm: true
+        restart_fraction_back: 0.3
+        next_smaller_step: true
+      after_precision:
+        interpolate: true
+        skip_to: next_test_or_vcc
+      coverage_order:
+      - input_threshold
+      - icc
+      - ii
+      - vol
+      - delta_icc
+  enabled_tests_model:
+  - input_threshold
+  - icc
+  - ii
+  - vol
+  - delta_icc
   gaps:
-    - "UNCONFIRMED until JH CONFIRM"
-    - "VOH N/A open-drain -- do not enable voh"
-    - "Y=Z when A=H is open-drain OFF -- not OE-gated IOZ"
-    - "stable_eps_A null"
-    - "VIH/VIL 9.1 Recommended Operating Conditions is a PDF table image (not in extract) -- leave unset"
-    - "VOL light-load current (Full 0.1 V row) glyph-missing in extract -- not copied as 100uA"
-    - "IOL 24mA VCC glyph-missing in extract -- row omitted"
-    - "excel_lock OFF (sheet_map paste.values) until Datasheet-signed -- do not bind excel_plots"
-
+  - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
+  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - VOH N/A open-drain -- do not enable voh
+  - Y=Z when A=H is open-drain OFF -- not OE-gated IOZ
+  - stable_eps_A null
+  - VOL light-load current (Full 0.1 V row) glyph-missing in extract -- not copied as 100uA
+  - IOL 24mA VCC glyph-missing in extract -- row omitted
+  - excel_lock OFF (sheet_map paste.values) until excel_plots signed -- do not bind excel_plots
+  - VOL 4 extract-explicit IOL rows CONFIRMED; do not invent extra loads
+  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
+    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.

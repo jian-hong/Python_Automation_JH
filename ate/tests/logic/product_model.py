@@ -764,8 +764,12 @@ def apply_test_params_overlay(blob: dict[str, Any], overlay: Optional[dict[str, 
         out["limit_mode"] = lm
     if overlay.get("gaps") is not None:
         out["gaps"] = overlay["gaps"]
-    if isinstance(overlay.get("vcc_grid"), dict):
-        out["vcc_grid"] = overlay["vcc_grid"]
+    grid_over = overlay.get("vcc_grid") if isinstance(overlay.get("vcc_grid"), dict) else None
+    if grid_over is None and isinstance(overlay.get("vcc_plan"), dict):
+        # vcc_plan is the user-facing alias of vcc_grid (Version overlay + panel).
+        grid_over = overlay.get("vcc_plan")
+    if isinstance(grid_over, dict):
+        out["vcc_grid"] = grid_over
     elif overlay_set_vcc_list:
         # Overlay vcc_list must win over YAML vcc_grid (scale SIM vcc_list: [3.3]).
         out.pop("vcc_grid", None)
@@ -998,7 +1002,8 @@ def vcc_grid_unconfirmed(model: Any) -> bool:
         return False
     if grid.get("fixed_points") in (None, []) and grid.get("ranges") in (None, []) and not grid.get("status"):
         return False
-    st = grid.get("status") or getattr(model, "status", "") or "UNCONFIRMED"
+    # Do not inherit product_model.status CONFIRMED -- 9.1 VIH/VIL can stay UNSURE.
+    st = grid.get("status") or "UNCONFIRMED"
     if is_datasheet_signed(st):
         return False
     return True
@@ -1175,6 +1180,7 @@ def panel_payload(part_key: str) -> dict[str, Any]:
         "vcc_op_max": model.vcc_op_max,
         "vcc_op_status": model.vcc_op_status,
         "vcc_grid": dict(model.vcc_grid or {}),
+        "vcc_plan": dict(model.vcc_grid or {}),
         "vcc_grid_preview": list(model.vcc_list),
         "stimulus": vcc_grid_stimulus(model),
         "sample_size": model.sample_size,
@@ -1194,6 +1200,11 @@ def panel_payload(part_key: str) -> dict[str, Any]:
             name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
         },
         "dc_limits": dict(model.dc_limits),
+        "is_open_drain": is_open_drain(model),
+        "is_sequential": is_sequential(model),
+        "dual_channel_continue": dual_channel_continue(model),
+        "recipe_channels": recipe_channels(model),
+        "pin_wiring_labels": format_pin_wiring_labels(model),
         "wire_map": dict(model.wire_map),
         "settle_prompt": dict(model.settle_prompt),
         "data_paths": dict(model.data_paths),
@@ -1279,6 +1290,7 @@ def _lookup_card_value(blob: dict[str, Any], model: ProductModel, key: str) -> A
         "vcc_op_max": model.vcc_op_max,
         "vcc_op_status": model.vcc_op_status,
         "vcc_grid": dict(model.vcc_grid or {}),
+        "vcc_plan": dict(model.vcc_grid or {}),
         "sample_size": model.sample_size,
         "recipe": dict(model.recipe),
         "gaps": list(model.gaps),
@@ -1424,6 +1436,11 @@ def save_product_model_fields(part_key: str, patch: dict[str, Any]) -> dict[str,
             if "stable_eps_A" not in rec:
                 rec["stable_eps_A"] = None
             pm["recipe"] = rec
+            continue
+        if field == "vcc_plan":
+            # Alias: store as vcc_grid. vcc_grid in the same patch wins after.
+            if isinstance(val, dict):
+                pm["vcc_grid"] = val
             continue
         _set_pm_key(pm, field, val)
     for banned in _BANNED_PANEL_KEYS:
@@ -1753,6 +1770,7 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
         "vcc_list": list(model.vcc_list),
         "vcc_sweep_list": list(model.vcc_list),
         "vcc_grid": dict(model.vcc_grid or {}),
+        "vcc_plan": dict(model.vcc_grid or {}),
         "vcc_grid_preview": list(model.vcc_list),
         "stimulus": vcc_grid_stimulus(model),
         "sample_size": model.sample_size,
@@ -1783,6 +1801,11 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
             name: {"src": dm.src, "ch": dm.ch} for name, dm in model.pin_drive.items()
         },
         "dc_limits": dict(model.dc_limits),
+        "is_open_drain": is_open_drain(model),
+        "is_sequential": is_sequential(model),
+        "dual_channel_continue": dual_channel_continue(model),
+        "recipe_channels": recipe_channels(model),
+        "pin_wiring_labels": format_pin_wiring_labels(model),
         "wire_map": dict(model.wire_map),
         "settle_prompt": dict(model.settle_prompt),
         "data_paths": dict(model.data_paths),
@@ -1964,6 +1987,35 @@ def _ch_lookup(block: dict[str, Any], ch: Any) -> Any:
         if str(k).strip().upper() == up:
             return val
     return None
+
+
+def format_pin_wiring_labels(model: ProductModel) -> list[str]:
+    """Panel pin/wiring labels from CONFIRMED pins + pin_drive. Never invent nets."""
+    lines: list[str] = []
+    for p in model.pins:
+        bit = f"{p.name} pin {p.number} {p.role}"
+        dm = (model.pin_drive or {}).get(p.name)
+        if dm is not None:
+            src = str(getattr(dm, "src", "") or "").strip().upper()
+            ch = getattr(dm, "ch", None)
+            if src and ch is not None:
+                bit += f" <- {src} CH{ch}"
+        lines.append(bit)
+    if model.has_oe():
+        lines.append(
+            f"OE {model.oe_pin} active-{model.oe_mode} "
+            f"(IOZ when inactive {model.oe_inactive_level()})"
+        )
+    if is_open_drain(model):
+        lines.append("open-drain: VOH N/A skip")
+    if is_sequential(model):
+        lines.append("sequential: gate 2^n / ICC / dICC stay disabled")
+    wm = model.wire_map if isinstance(model.wire_map, dict) else {}
+    if wm:
+        lines.append("wire_map present (CONFIRMED pins + pin_drive only)")
+    else:
+        lines.append("wire_map empty -- labels from pins + pin_drive; do not invent nets")
+    return lines
 
 
 def format_wire_lines(model: ProductModel, test_id: str) -> list[str]:

@@ -96,7 +96,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 - **Settle** -- recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) uses `stable_eps_V`. Current (ICC/ΔICC/II/IOZ) uses `stable_eps_A` only. Never reuse `stable_eps_V` as amps (0.005 V is not a 5 mA window). Do not invent a uA default. If `stable_eps_A` is set (panel / overlay), eps/N + hard timeout FAIL (never last-reading). If null: tight-settle claims stay FAIL-closed; honest path waits `settle_s` once then measures and tags `settle=NON_TIGHT` (not greenable as tight-settle). Not a DC limit.
 - **AE/FAE Continue** -- every enabled Path B id surfaces `wire_map` (CONFIRMED pins + `pin_drive` only; never invent nets), stimulus, `settle_prompt` (show wait), measure + `pass_mode`, FAIL attach, then `data_paths` save folders. `check_logic_dc` FAIL-closes empty `wire_map` / missing `data_paths` on 97/126/34.
 - **Excel lock** -- `workbook_policy.auto` / `golden_auto: one_per_version_overwrite` on the chosen Version `{Version_N}/workbook/`. Continue / Open Session / START overwrite-in-place that book. CSV sidecar `sessions/csv/{sheet}.csv` + fill log `sessions/path_b_write.json` overwrite with the same auto dest. Full datapoints CSV (`*_datapoints.csv`) is also written beside the golden_auto xlsx. `workbook_policy.pretty` / `ultimate_manual: never_auto_write` -- pretty never auto (xlsx or CSV). The jot/pretty book is never the auto target. Never an orphan second Version book / `_filled.xlsx`. Adaptive Setup + per-test tabs from runner headers (not G16). Auto plots from `excel_plots` when series data exists. `check_logic_dc` FAIL-closes auto dest == pretty/ultimate, a second golden xlsx, invented columns, or enabled series data with no plot binding. RS1GT34 `excel_plots.status` is CONFIRMED. RS1G08 / RS1G07 Path B stubs stay sheet_map (`excel_lock` OFF) until a signed card.
-- **STS latest PDF** -- after a Version run, `export_latest_report` overwrites `{Version_N}/report.pdf` from session measurements (pass/fail vs limits). Existing `sessions/datalog.md|.html|.pdf` stay. Never invent pass numbers.
+- **STS latest PDF** -- after a Version run, `export_latest_report` overwrites `{Version_N}/report.pdf` from session measurements (Parameter / Unit / Min / Max / Typ / Value / Result / Pass criteria / How met). Existing `sessions/datalog.md|.html|.pdf` stay. Never invent pass numbers.
 - **Dual-channel Continue** -- future 2Gxx: `recipe.dual_channel_continue` + `recipe.channels` (CHA then CHB operator Continue). OpAmp dual pattern reused as DATA. See `docs/LOGIC_DC_DUAL_CHANNEL.md`. No fake 2G YAML without a Datasheet card. Schmitt must not collapse to a single VIH.
 
 ### TestSpec <-> OOP (Part / Pin / TruthTable / Isolation / Limit / Recipe)
@@ -115,7 +115,7 @@ See Lim (`seelim_dc.py` locator) and Ariff (`ariff_dc.py` RS1G08-class `voh_load
 
 OCR: PaddleOCR maps each token onto one card field (assign/edit/delete on the Logic DC panel). Do not install Baidu unless asked.
 
-RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18; `RS1GT34_card_CONFIRMED.md`). RS1G08 / RS1G07 Path B stubs are **UNCONFIRMED** (in-repo extract only: `ate/config/datasheets/text/rs1g08.txt` / `rs1g07.txt`). VIH/VIL 9.1 is a PDF table image -- leave unset. RS1G07 is open-drain (no VOH; A=H Y=Z is not OE). New SKUs stay UNCONFIRMED until a signed card. Do not invent IOH/IOL. No bench green claim.
+RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; `RS1G97_card_CONFIRMED.md`). Isolation C-track `A:H B:L` is unlocked and used at run; invert `A:L B:H` stays. RS1G126 truth_table / isolation are the same CONFIRMED gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18; `RS1GT34_card_CONFIRMED.md`). RS1G08 / RS1G07 / RS1G14 / RS1G32 / RS1GT08 / RS1GT32 / RS1G125 / RS164 grounded fields (truth/pins/isolation/oe/open_drain/sequential) are **CONFIRMED** (Jian Hong 2026-09-17 room). `vcc_grid` / `vcc_plan` 9.1 VIH/VIL stay **UNSURE** (PDF table image -- leave unset; do not invent). Glyph-missing uA/mA rows stay omitted. G07: VOH N/A skip (open-drain); G07 VOL 4 extract IOL rows CONFIRMED. G125: IOZ only when OE inactive. RS164: sequential -- gate 2^n/ICC/dICC stay disabled. Never invent 0.6 on GT34; never invent VOH/IOZ on G07. Status gate is not a bench green.
 
 ### Version overlay
 
@@ -123,6 +123,8 @@ RS1G97 Datasheet §4 table in part yaml is **CONFIRMED** (Jian Hong 2026-09-17; 
 
 ```yaml
 vcc_list: [3.3]
+vcc_plan: {}    # alias of vcc_grid (Customise Parameters)
+vcc_grid: {}
 levels: {}      # optional recipe
 rails: {}       # optional recipe
 stable_eps_A: null  # current settle; set a grounded amp number here, never invent uA in docs
@@ -164,7 +166,7 @@ python -m ate.core.check_specs_datalog
 python -m ate.core.check_ui_contract
 ```
 
-A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18) and passes the same status gate. Enabled `voh`/`vol` without table rows FAIL the same gate. SIM FAIL bars: reverse search, first step > |limit|, auto dest == pretty, invent 0.6, ioz on oe=none, unsigned greenable=False greens PASS. A Path B run that writes the **pretty** / **ultimate_manual** jot book, creates a second orphan Version xlsx, invents columns, or has enabled series data with no `excel_plots` binding, FAIL the same gate.
+A green check that never could fail is not a check. Do not claim bench PASS from SIM. `check_logic_dc` fail-closes while a Path B truth_table is UNCONFIRMED; RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) and pass that status gate. RS1GT34 is CONFIRMED (Jian Hong 2026-09-18) and passes the same status gate. G08/G07/G14/G32/GT08/GT32/G125/RS164 grounded truth/pins/isolation are CONFIRMED (Jian Hong 2026-09-17); 9.1 vcc_grid stays UNSURE. Enabled `voh`/`vol` without table rows FAIL the same gate. SIM FAIL bars: reverse search, first step > |limit|, auto dest == pretty, invent 0.6, ioz on oe=none, unsigned greenable=False greens PASS. A Path B run that writes the **pretty** / **ultimate_manual** jot book, creates a second orphan Version xlsx, invents columns, or has enabled series data with no `excel_plots` binding, FAIL the same gate.
 
 ## Do not
 

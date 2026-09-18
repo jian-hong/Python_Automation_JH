@@ -1,5 +1,3 @@
-# RS1G125 Logic 3-state buffer — RUN-IC small logic.
-
 part: RS1G125
 model: RS1G125
 component: Logic
@@ -7,125 +5,247 @@ device: RS1G125
 package: SOT23
 version: Version_1
 sample_size: 4
-year: "2026"
+year: '2026'
 owner: lim
 part_key: rs1g125
 product_class: logic
-
 vcc: 5.0
-current_limit: 0.10
+current_limit: 0.1
 timing:
   timeout_s: 4.0
   settle_s: 0.3
-
 enabled_tests:
-  - tp
-  - ten
-  - tdis
-  - supply_current
-  - input_threshold
-  - icc
-  - ii
-  - delta_icc
-  - ioz
-
+- tp
+- ten
+- tdis
+- supply_current
+- input_threshold
+- icc
+- ii
+- delta_icc
+- ioz
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1G125)"
+    label: Logic board (RS1G125)
     board_class: general
     checklist:
-      - "RS1G125 is a 3-state bus buffer (small logic)."
+    - RS1G125 is a 3-state bus buffer (small logic).
     tests:
-      - tp
-      - ten
-      - tdis
-      - supply_current
-      - input_threshold
-      - icc
-      - ii
-      - delta_icc
-      - ioz
-
-# Path B DRAFT -- UNCONFIRMED. 3-state buffer OE active LOW -> IOZ ON.
+    - tp
+    - ten
+    - tdis
+    - supply_current
+    - input_threshold
+    - icc
+    - ii
+    - delta_icc
+    - ioz
 product_model:
   part: RS1G125
-  status: UNCONFIRMED
+  status: CONFIRMED
   source_card: RS1G125_card_DRAFT.md
   package: SC70-5
   schmitt: false
-  oe: {pin: OE, active: low}
+  oe:
+    pin: OE
+    active: low
   output_type: three_state
   output_pin: Y
   vcc_op_min: 1.65
   vcc_op_max: 5.5
-  logic_inputs: [A]
+  logic_inputs:
+  - A
   pins:
-    - {name: OE, role: oe, number: 1, note: "OE active L"}
-    - {name: A, role: input, number: 2}
-    - {name: GND, role: gnd, number: 3}
-    - {name: Y, role: output, number: 4}
-    - {name: VCC, role: vcc, number: 5}
+  - name: OE
+    role: oe
+    number: 1
+    note: OE active L
+  - name: A
+    role: input
+    number: 2
+  - name: GND
+    role: gnd
+    number: 3
+  - name: Y
+    role: output
+    number: 4
+  - name: VCC
+    role: vcc
+    number: 5
   truth_table:
-    status: UNCONFIRMED
+    status: CONFIRMED
     rows:
-      - {OE: L, A: H, Y: H}
-      - {OE: L, A: L, Y: L}
-      - {OE: H, A: X, Y: Z}
+    - OE: L
+      A: H
+      Y: H
+    - OE: L
+      A: L
+      Y: L
+    - OE: H
+      A: X
+      Y: Z
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     tests:
       A:
-        - {sweep_pin: A, fix: {OE: L}, y_expect: track}
+      - sweep_pin: A
+        fix:
+          OE: L
+        y_expect: track
   vcc_grid:
-    status: UNCONFIRMED
+    status: UNSURE
     stimulus: PSU_MSO
-    pass_mode: {VIH: min_only, VIL: max_only}
+    pass_mode:
+      VIH: min_only
+      VIL: max_only
     ranges:
-      - {start: 1.65, stop: 1.95, step: 0.1, VIH_min: "0.65*VCC", VIL_max: "0.3*VCC"}
-      - {start: 2.3, stop: 2.7, step: 0.1, VIH_min_V: 1.7, VIL_max_V: 0.7}
-      - {start: 3.0, stop: 3.6, step: 0.1, VIH_min_V: 2.2, VIL_max_V: 0.8}
-      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min: "0.7*VCC", VIL_max: "0.3*VCC"}
+    - start: 1.65
+      stop: 1.95
+      step: 0.1
+      VIH_min: 0.65*VCC
+      VIL_max: 0.3*VCC
+    - start: 2.3
+      stop: 2.7
+      step: 0.1
+      VIH_min_V: 1.7
+      VIL_max_V: 0.7
+    - start: 3.0
+      stop: 3.6
+      step: 0.1
+      VIH_min_V: 2.2
+      VIL_max_V: 0.8
+    - start: 4.5
+      stop: 5.5
+      step: 0.1
+      VIH_min: 0.7*VCC
+      VIL_max: 0.3*VCC
     fixed_points: []
-  pass_mode: {VIH: min_only, VIL: max_only, voh: min_only, vol: max_only, icc: max_only, delta_icc: max_only, ii: max_only, ioz: max_only}
+    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    voh: min_only
+    vol: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    ioz: max_only
   dc_limits:
     VOH:
       status: UNCONFIRMED
       loads:
-        - {IOH_mA: -0.1, vcc: [1.65, 5.5], VOH_min: "VCC-0.1"}
-        - {IOH_mA: -4, vcc: 1.65, VOH_min_V: 1.2}
-        - {IOH_mA: -8, vcc: 2.3, VOH_min_V: 1.9}
-        - {IOH_mA: -16, vcc: 3.0, VOH_min_V: 2.4}
-        - {IOH_mA: -24, vcc: 3.0, VOH_min_V: 2.3}
-        - {IOH_mA: -32, vcc: 4.5, VOH_min_V: 3.8}
+      - IOH_mA: -0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOH_min: VCC-0.1
+      - IOH_mA: -4
+        vcc: 1.65
+        VOH_min_V: 1.2
+      - IOH_mA: -8
+        vcc: 2.3
+        VOH_min_V: 1.9
+      - IOH_mA: -16
+        vcc: 3.0
+        VOH_min_V: 2.4
+      - IOH_mA: -24
+        vcc: 3.0
+        VOH_min_V: 2.3
+      - IOH_mA: -32
+        vcc: 4.5
+        VOH_min_V: 3.8
     VOL:
       status: UNCONFIRMED
       loads:
-        - {IOL_mA: 0.1, vcc: [1.65, 5.5], VOL_max_V: 0.1}
-        - {IOL_mA: 4, vcc: 1.65, VOL_max_V: 0.45}
-        - {IOL_mA: 8, vcc: 2.3, VOL_max_V: 0.3}
-        - {IOL_mA: 16, vcc: 3.0, VOL_max_V: 0.4}
-        - {IOL_mA: 24, vcc: 3.0, VOL_max_V: 0.55}
-        - {IOL_mA: 32, vcc: 4.5, VOL_max_V: 0.55}
-    II_uA: {Full: 5.0}
-    ICC_uA: {Full: 10.0}
-    IOZ_uA: {status: UNCONFIRMED, Full: 10.0, at_vcc: 3.6, VO: [0, 5.5], condition: "OE inactive (H)"}
-    ICCT_uA: {status: UNCONFIRMED, Full: 500.0, vcc_min: 3.0, offset_v: 0.6, map_to: delta_icc}
+      - IOL_mA: 0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOL_max_V: 0.1
+      - IOL_mA: 4
+        vcc: 1.65
+        VOL_max_V: 0.45
+      - IOL_mA: 8
+        vcc: 2.3
+        VOL_max_V: 0.3
+      - IOL_mA: 16
+        vcc: 3.0
+        VOL_max_V: 0.4
+      - IOL_mA: 24
+        vcc: 3.0
+        VOL_max_V: 0.55
+      - IOL_mA: 32
+        vcc: 4.5
+        VOL_max_V: 0.55
+    II_uA:
+      Full: 5.0
+    ICC_uA:
+      Full: 10.0
+    IOZ_uA:
+      status: UNCONFIRMED
+      Full: 10.0
+      at_vcc: 3.6
+      VO:
+      - 0
+      - 5.5
+      condition: OE inactive (H)
+    ICCT_uA:
+      status: UNCONFIRMED
+      Full: 500.0
+      vcc_min: 3.0
+      offset_v: 0.6
+      map_to: delta_icc
   recipe:
     settle_s: 0.05
     stable_n: 3
     stable_eps_V: 0.005
     stable_eps_A: null
     settle_timeout_s: 2.0
-    icc_corners: "data x OE"
+    icc_corners: data x OE
     ioz_when: oe_inactive
     search:
       status: PROPOSED_FROM_LIVE
-      vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
-      vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
-      step_ladder_V: [0.5, 0.2, 0.1, 0.05, 0.01]
-      on_hit: {skip_rest_of_walk: true, rearm: true, restart_fraction_back: 0.3, next_smaller_step: true}
-      after_precision: {interpolate: true, skip_to: next_test_or_vcc}
-      coverage_order: [input_threshold, icc, ii, voh, vol, delta_icc, ioz]
-  enabled_tests_model: [input_threshold, icc, ii, delta_icc, ioz]
-  gaps: ["UNCONFIRMED", "OE active LOW -- opposite of RS1G126 active HIGH", "IOZ @3.6V only on card", "voh/vol not enabled (no table rows)"]
-
+      vih:
+        arm: 0.0
+        direction: up
+        no_reverse_in_stage: true
+      vil:
+        arm: VCC
+        direction: down
+        no_reverse_in_stage: true
+      step_ladder_V:
+      - 0.5
+      - 0.2
+      - 0.1
+      - 0.05
+      - 0.01
+      on_hit:
+        skip_rest_of_walk: true
+        rearm: true
+        restart_fraction_back: 0.3
+        next_smaller_step: true
+      after_precision:
+        interpolate: true
+        skip_to: next_test_or_vcc
+      coverage_order:
+      - input_threshold
+      - icc
+      - ii
+      - voh
+      - vol
+      - delta_icc
+      - ioz
+  enabled_tests_model:
+  - input_threshold
+  - icc
+  - ii
+  - delta_icc
+  - ioz
+  gaps:
+  - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
+  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - OE active LOW -- IOZ when OE inactive (H) only
+  - voh/vol not enabled (no table rows)
+  - IOZ @3.6V only on card -- status UNSURE
+  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
+    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.

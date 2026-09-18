@@ -315,6 +315,7 @@ class DbContext:
             "vcc_list",
             "vcc_sweep_list",
             "vcc_grid",
+            "vcc_plan",
             "sample_size",
             "levels",
             "rails",
@@ -333,6 +334,12 @@ class DbContext:
         for key in allowed:
             if key in incoming:
                 existing[key] = incoming[key]
+        if "vcc_plan" in existing and "vcc_grid" not in incoming:
+            plan = existing.get("vcc_plan")
+            if isinstance(plan, dict):
+                existing["vcc_grid"] = plan
+        elif "vcc_grid" in existing:
+            existing["vcc_plan"] = existing.get("vcc_grid")
         if existing.get("sample_size") is not None:
             try:
                 self.sample_size = max(1, int(existing["sample_size"]))
@@ -342,7 +349,7 @@ class DbContext:
         path = self.test_params_path()
         text = (
             "# Version overlay (PRD-004 / EPIC-A28). Does not change part yaml or limits yaml.\n"
-            "# Keys: vcc_list, vcc_grid, sample_size, levels, rails, pass_mode, logic_inputs, isolation, stable_eps_A.\n"
+            "# Keys: vcc_list, vcc_grid, vcc_plan, sample_size, levels, rails, pass_mode, logic_inputs, isolation, stable_eps_A.\n"
             + yaml.safe_dump(existing, sort_keys=False, allow_unicode=True)
         )
         path.write_text(text, encoding="utf-8")

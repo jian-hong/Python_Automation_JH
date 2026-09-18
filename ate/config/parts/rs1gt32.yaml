@@ -1,12 +1,10 @@
-# RS1GT32 Logic OR -- not RS1GT32D. Copy/wrap extra tests as needed.
-
 part: RS1GT32
 model: RS1GT32XC5
 component: Logic
 package: SC70-5
 version: Version_1
 sample_size: 4
-year: "2026"
+year: '2026'
 part_key: rs1gt32
 product_class: logic
 vcc: 1.65
@@ -14,56 +12,83 @@ current_limit: 0.05
 timing:
   timeout_s: 4.0
   settle_s: 0.3
-# Same RS1G08-class DC corners already used by ariff_dc defaults.
 voh_table:
-  - {vcc: 2.0, vref: 0.080, spec_min: 1.6, ioh_a: 0.008}
-  - {vcc: 3.3, vref: 0.240, spec_min: 2.5, ioh_a: 0.024}
-  - {vcc: 4.5, vref: 0.320, spec_min: 3.8, ioh_a: 0.032}
-  - {vcc: 5.0, vref: 0.320, spec_min: 4.2, ioh_a: 0.032}
-  - {vcc: 5.5, vref: 0.320, spec_min: 4.8, ioh_a: 0.032}
+- vcc: 2.0
+  vref: 0.08
+  spec_min: 1.6
+  ioh_a: 0.008
+- vcc: 3.3
+  vref: 0.24
+  spec_min: 2.5
+  ioh_a: 0.024
+- vcc: 4.5
+  vref: 0.32
+  spec_min: 3.8
+  ioh_a: 0.032
+- vcc: 5.0
+  vref: 0.32
+  spec_min: 4.2
+  ioh_a: 0.032
+- vcc: 5.5
+  vref: 0.32
+  spec_min: 4.8
+  ioh_a: 0.032
 vol_table:
-  - {vcc: 2.0, vref: 4.92, spec_max: 0.45, iol_a: 0.008}
-  - {vcc: 3.3, vref: 4.76, spec_max: 0.55, iol_a: 0.024}
-  - {vcc: 4.5, vref: 4.68, spec_max: 0.55, iol_a: 0.032}
-  - {vcc: 5.0, vref: 4.68, spec_max: 0.50, iol_a: 0.032}
-  - {vcc: 5.5, vref: 4.68, spec_max: 0.45, iol_a: 0.032}
+- vcc: 2.0
+  vref: 4.92
+  spec_max: 0.45
+  iol_a: 0.008
+- vcc: 3.3
+  vref: 4.76
+  spec_max: 0.55
+  iol_a: 0.024
+- vcc: 4.5
+  vref: 4.68
+  spec_max: 0.55
+  iol_a: 0.032
+- vcc: 5.0
+  vref: 4.68
+  spec_max: 0.5
+  iol_a: 0.032
+- vcc: 5.5
+  vref: 4.68
+  spec_max: 0.45
+  iol_a: 0.032
 enabled_tests:
-  - delta_supply_current
-  - off_current
-  - vih_vil
-  - voh_load
-  - vol_load
-  - supply_current_sweep
-  - input_threshold
-  - icc
-  - delta_icc
-  - ii
-  - voh
-  - vol
+- delta_supply_current
+- off_current
+- vih_vil
+- voh_load
+- vol_load
+- supply_current_sweep
+- input_threshold
+- icc
+- delta_icc
+- ii
+- voh
+- vol
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1GT32)"
+    label: Logic board (RS1GT32)
     board_class: general
     checklist:
-      - "RS1GT32 is small logic OR. Not the RS1GT32D SOT23 campaign."
+    - RS1GT32 is small logic OR. Not the RS1GT32D SOT23 campaign.
     tests:
-      - delta_supply_current
-      - off_current
-      - vih_vil
-      - voh_load
-      - vol_load
-      - supply_current_sweep
-      - input_threshold
-      - icc
-      - delta_icc
-      - ii
-      - voh
-      - vol
-
-# Path B DRAFT -- UNCONFIRMED. TTL OR-2 VCC 2.0-5.5. ICCT one_in@3.4 (not 0.6).
+    - delta_supply_current
+    - off_current
+    - vih_vil
+    - voh_load
+    - vol_load
+    - supply_current_sweep
+    - input_threshold
+    - icc
+    - delta_icc
+    - ii
+    - voh
+    - vol
 product_model:
   part: RS1GT32
-  status: UNCONFIRMED
+  status: CONFIRMED
   source_card: RS1GT32_card_DRAFT.md
   package: SC70-5
   schmitt: false
@@ -72,59 +97,138 @@ product_model:
   output_pin: Y
   vcc_op_min: 2.0
   vcc_op_max: 5.5
-  logic_inputs: [A, B]
+  logic_inputs:
+  - A
+  - B
   pins:
-    - {name: A, role: input, number: 1}
-    - {name: B, role: input, number: 2}
-    - {name: GND, role: gnd, number: 3}
-    - {name: Y, role: output, number: 4}
-    - {name: VCC, role: vcc, number: 5}
+  - name: A
+    role: input
+    number: 1
+  - name: B
+    role: input
+    number: 2
+  - name: GND
+    role: gnd
+    number: 3
+  - name: Y
+    role: output
+    number: 4
+  - name: VCC
+    role: vcc
+    number: 5
   truth_table:
-    status: UNCONFIRMED
+    status: CONFIRMED
     rows:
-      - {A: H, B: H, Y: H}
-      - {A: L, B: H, Y: H}
-      - {A: H, B: L, Y: H}
-      - {A: L, B: L, Y: L}
+    - A: H
+      B: H
+      Y: H
+    - A: L
+      B: H
+      Y: H
+    - A: H
+      B: L
+      Y: H
+    - A: L
+      B: L
+      Y: L
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     tests:
       A:
-        - {sweep_pin: A, fix: {B: L}, y_expect: track}
+      - sweep_pin: A
+        fix:
+          B: L
+        y_expect: track
       B:
-        - {sweep_pin: B, fix: {A: L}, y_expect: track}
+      - sweep_pin: B
+        fix:
+          A: L
+        y_expect: track
   vcc_grid:
-    status: UNCONFIRMED
+    status: UNSURE
     stimulus: PSU_MSO
-    pass_mode: {VIH: min_only, VIL: max_only}
+    pass_mode:
+      VIH: min_only
+      VIL: max_only
     fixed_points:
-      - {vcc: 2.0, VIH_min_V: 1.0, VIL_max_V: 0.3}
-      - {vcc: 3.3, VIH_min_V: 1.5, VIL_max_V: 0.55}
+    - vcc: 2.0
+      VIH_min_V: 1.0
+      VIL_max_V: 0.3
+    - vcc: 3.3
+      VIH_min_V: 1.5
+      VIL_max_V: 0.55
     ranges:
-      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min_V: 2.0, VIL_max_V: 0.8}
-  pass_mode: {VIH: min_only, VIL: max_only, voh: min_only, vol: max_only, icc: max_only, delta_icc: max_only, ii: max_only}
+    - start: 4.5
+      stop: 5.5
+      step: 0.1
+      VIH_min_V: 2.0
+      VIL_max_V: 0.8
+    note: 9.1 VIH/VIL PDF-image (or VT until extract-signed) -- UNSURE; do not invent
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    voh: min_only
+    vol: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
   dc_limits:
     VOH:
       status: UNCONFIRMED
       loads:
-        - {IOH_mA: -0.1, vcc: [2.0, 5.5], VOH_min: "VCC-0.1"}
-        - {IOH_mA: -8, vcc: 2.0, VOH_min_V: 1.6}
-        - {IOH_mA: -24, vcc: 3.3, VOH_min_V: 2.5}
-        - {IOH_mA: -32, vcc: 4.5, VOH_min_V: 3.8}
-        - {IOH_mA: -32, vcc: 5.0, VOH_min_V: 4.2}
-        - {IOH_mA: -32, vcc: 5.5, VOH_min_V: 4.8}
+      - IOH_mA: -0.1
+        vcc:
+        - 2.0
+        - 5.5
+        VOH_min: VCC-0.1
+      - IOH_mA: -8
+        vcc: 2.0
+        VOH_min_V: 1.6
+      - IOH_mA: -24
+        vcc: 3.3
+        VOH_min_V: 2.5
+      - IOH_mA: -32
+        vcc: 4.5
+        VOH_min_V: 3.8
+      - IOH_mA: -32
+        vcc: 5.0
+        VOH_min_V: 4.2
+      - IOH_mA: -32
+        vcc: 5.5
+        VOH_min_V: 4.8
     VOL:
       status: UNCONFIRMED
       loads:
-        - {IOL_mA: 0.1, vcc: [2.0, 5.5], VOL_max_V: 0.1}
-        - {IOL_mA: 8, vcc: 2.0, VOL_max_V: 0.45}
-        - {IOL_mA: 24, vcc: 3.3, VOL_max_V: 0.55}
-        - {IOL_mA: 32, vcc: 4.5, VOL_max_V: 0.55}
-        - {IOL_mA: 32, vcc: 5.0, VOL_max_V: 0.5}
-        - {IOL_mA: 32, vcc: 5.5, VOL_max_V: 0.45}
-    II_uA: {Full: 5.0}
-    ICC_uA: {Full: 10.0}
-    ICCT_uA: {status: UNCONFIRMED, Full: 500.0, vcc: 5.5, one_input_V: 3.4, map_to: delta_icc}
+      - IOL_mA: 0.1
+        vcc:
+        - 2.0
+        - 5.5
+        VOL_max_V: 0.1
+      - IOL_mA: 8
+        vcc: 2.0
+        VOL_max_V: 0.45
+      - IOL_mA: 24
+        vcc: 3.3
+        VOL_max_V: 0.55
+      - IOL_mA: 32
+        vcc: 4.5
+        VOL_max_V: 0.55
+      - IOL_mA: 32
+        vcc: 5.0
+        VOL_max_V: 0.5
+      - IOL_mA: 32
+        vcc: 5.5
+        VOL_max_V: 0.45
+    II_uA:
+      Full: 5.0
+    ICC_uA:
+      Full: 10.0
+    ICCT_uA:
+      status: UNCONFIRMED
+      Full: 500.0
+      vcc: 5.5
+      one_input_V: 3.4
+      map_to: delta_icc
   recipe:
     settle_s: 0.05
     stable_n: 3
@@ -134,12 +238,47 @@ product_model:
     icc_corners: 4
     search:
       status: PROPOSED_FROM_LIVE
-      vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
-      vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
-      step_ladder_V: [0.5, 0.2, 0.1, 0.05, 0.01]
-      on_hit: {skip_rest_of_walk: true, rearm: true, restart_fraction_back: 0.3, next_smaller_step: true}
-      after_precision: {interpolate: true, skip_to: next_test_or_vcc}
-      coverage_order: [input_threshold, icc, ii, voh, vol, delta_icc]
-  enabled_tests_model: [input_threshold, icc, ii, voh, vol, delta_icc]
-  gaps: ["UNCONFIRMED", "IOZ OFF"]
-
+      vih:
+        arm: 0.0
+        direction: up
+        no_reverse_in_stage: true
+      vil:
+        arm: VCC
+        direction: down
+        no_reverse_in_stage: true
+      step_ladder_V:
+      - 0.5
+      - 0.2
+      - 0.1
+      - 0.05
+      - 0.01
+      on_hit:
+        skip_rest_of_walk: true
+        rearm: true
+        restart_fraction_back: 0.3
+        next_smaller_step: true
+      after_precision:
+        interpolate: true
+        skip_to: next_test_or_vcc
+      coverage_order:
+      - input_threshold
+      - icc
+      - ii
+      - voh
+      - vol
+      - delta_icc
+  enabled_tests_model:
+  - input_threshold
+  - icc
+  - ii
+  - voh
+  - vol
+  - delta_icc
+  gaps:
+  - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
+  - vcc_grid/vcc_plan 9.1 VIH/VIL PDF table image -- UNSURE; do not invent numbers
+  - IOZ OFF
+  - TTL VCC 2.0-5.5
+  - ICCT one_in 3.4 -- do not invent 0.6
+  confirmed_by: Jian Hong 2026-09-17 (room CONFIRM; grounded truth/pins/isolation/oe/open_drain/sequential). 9.1 VIH/VIL PDF-image
+    stay UNSURE. Glyph-missing uA/mA omitted -- do not invent.

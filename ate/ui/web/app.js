@@ -1174,24 +1174,40 @@ function numOrNull(raw) {
 }
 
 function seedVccGrid(dc) {
-  const g = (dc && dc.vcc_grid) || {};
+  const g = (dc && (dc.vcc_plan || dc.vcc_grid)) || {};
+  const schmitt = !!(dc && dc.schmitt) || String(g.kind || "") === "schmitt_VT";
   const fixed = Array.isArray(g.fixed_points) ? g.fixed_points.map((p) => ({ ...p })) : [];
   const ranges = Array.isArray(g.ranges) ? g.ranges.map((r) => ({ ...r })) : [];
   if (!fixed.length && !ranges.length) {
     (dc.vcc_list || dc.vcc_sweep_list || []).forEach((v) => {
-      fixed.push({ vcc: v, VIH_min_V: "", VIL_max_V: "" });
+      fixed.push(schmitt
+        ? { vcc: v, VT_plus: ["", ""], VT_minus: ["", ""] }
+        : { vcc: v, VIH_min_V: "", VIL_max_V: "" });
     });
   }
   const pinDrive = (dc && dc.pin_drive) || {};
   const hasAwg = Object.values(pinDrive).some((d) => d && String(d.src || "").toLowerCase() === "awg");
   const stim = g.stimulus || dc.stimulus || (hasAwg ? "AWG" : "PSU_MSO");
+  const pm = schmitt
+    ? { "VT+": "range", "VT-": "range", HYST: "range", ...((g.pass_mode) || {}) }
+    : { VIH: "min_only", VIL: "max_only", ...((g.pass_mode) || {}) };
   return {
     stimulus: stimToken(stim) || (hasAwg ? "AWG" : "PSU_MSO"),
-    pass_mode: { VIH: "min_only", VIL: "max_only", ...((g.pass_mode) || {}) },
+    pass_mode: pm,
+    kind: g.kind || (schmitt ? "schmitt_VT" : ""),
     fixed_points: fixed,
     ranges,
     status: g.status || "UNCONFIRMED",
   };
+}
+
+function isSchmittGrid(dc) {
+  const g = (dc && (dc.vcc_plan || dc.vcc_grid)) || {};
+  return !!(dc && dc.schmitt) || String(g.kind || "") === "schmitt_VT";
+}
+
+function bandPassModeSelect(cur, cls) {
+  return passModeSelect("vcc-band", cur, cls || "vcc-band-mode").replace('data-id="vcc-band"', "");
 }
 
 function stimToken(raw) {
@@ -1243,15 +1259,27 @@ function applyStimulusHide() {
 function collectVccGridFromUi() {
   const stimEl = document.querySelector('input[name="logic-dc-stimulus"]:checked');
   const stimulus = stimToken(stimEl && stimEl.value) || "AWG";
+  const dc = paramCatalog.logic_dc || {};
+  const schmitt = isSchmittGrid(dc);
   const fixed = [];
   document.querySelectorAll("#logic-dc-fixed-points .vcc-chip").forEach((chip) => {
     const vcc = numOrNull(chip.querySelector(".vcc-fixed-vcc") && chip.querySelector(".vcc-fixed-vcc").value);
     if (vcc == null) return;
-    fixed.push({
-      vcc,
-      VIH_min_V: numOrNull(chip.querySelector(".vcc-fixed-vih") && chip.querySelector(".vcc-fixed-vih").value),
-      VIL_max_V: numOrNull(chip.querySelector(".vcc-fixed-vil") && chip.querySelector(".vcc-fixed-vil").value),
-    });
+    const item = { vcc };
+    const modeEl = chip.querySelector(".vcc-band-mode");
+    if (modeEl && modeEl.value) item.pass_mode = String(modeEl.value).replace(/-/g, "_");
+    if (schmitt) {
+      const plusLo = numOrNull(chip.querySelector(".vcc-fixed-vtplus-lo") && chip.querySelector(".vcc-fixed-vtplus-lo").value);
+      const plusHi = numOrNull(chip.querySelector(".vcc-fixed-vtplus-hi") && chip.querySelector(".vcc-fixed-vtplus-hi").value);
+      const minusLo = numOrNull(chip.querySelector(".vcc-fixed-vtminus-lo") && chip.querySelector(".vcc-fixed-vtminus-lo").value);
+      const minusHi = numOrNull(chip.querySelector(".vcc-fixed-vtminus-hi") && chip.querySelector(".vcc-fixed-vtminus-hi").value);
+      if (plusLo != null || plusHi != null) item.VT_plus = [plusLo, plusHi];
+      if (minusLo != null || minusHi != null) item.VT_minus = [minusLo, minusHi];
+    } else {
+      item.VIH_min_V = numOrNull(chip.querySelector(".vcc-fixed-vih") && chip.querySelector(".vcc-fixed-vih").value);
+      item.VIL_max_V = numOrNull(chip.querySelector(".vcc-fixed-vil") && chip.querySelector(".vcc-fixed-vil").value);
+    }
+    fixed.push(item);
   });
   const ranges = [];
   document.querySelectorAll("#logic-dc-ranges .vcc-range-row").forEach((row) => {
@@ -1263,20 +1291,44 @@ function collectVccGridFromUi() {
       start,
       stop,
       step: stepRaw == null ? 0.1 : stepRaw,
-      VIH_min_V: numOrNull(row.querySelector(".vcc-range-vih") && row.querySelector(".vcc-range-vih").value),
-      VIL_max_V: numOrNull(row.querySelector(".vcc-range-vil") && row.querySelector(".vcc-range-vil").value),
     };
+    const modeEl = row.querySelector(".vcc-band-mode");
+    if (modeEl && modeEl.value) item.pass_mode = String(modeEl.value).replace(/-/g, "_");
+    if (schmitt) {
+      item.VT_plus = [
+        numOrNull(row.querySelector(".vcc-range-vtplus-lo") && row.querySelector(".vcc-range-vtplus-lo").value),
+        numOrNull(row.querySelector(".vcc-range-vtplus-hi") && row.querySelector(".vcc-range-vtplus-hi").value),
+      ];
+      item.VT_minus = [
+        numOrNull(row.querySelector(".vcc-range-vtminus-lo") && row.querySelector(".vcc-range-vtminus-lo").value),
+        numOrNull(row.querySelector(".vcc-range-vtminus-hi") && row.querySelector(".vcc-range-vtminus-hi").value),
+      ];
+    } else {
+      item.VIH_min_V = numOrNull(row.querySelector(".vcc-range-vih") && row.querySelector(".vcc-range-vih").value);
+      item.VIL_max_V = numOrNull(row.querySelector(".vcc-range-vil") && row.querySelector(".vcc-range-vil").value);
+    }
     const label = String((row.querySelector(".vcc-range-label") && row.querySelector(".vcc-range-label").value) || "").trim();
     if (label) item.label = label;
     ranges.push(item);
   });
-  return {
+  const pm = {};
+  document.querySelectorAll("#logic-dc-grid-pass-mode .logic-dc-mode").forEach((sel) => {
+    const id = sel.getAttribute("data-id");
+    if (id && sel.value) pm[id] = String(sel.value).replace(/-/g, "_");
+  });
+  const out = {
     stimulus,
-    pass_mode: { VIH: "min_only", VIL: "max_only" },
+    pass_mode: Object.keys(pm).length
+      ? pm
+      : (schmitt ? { "VT+": "range", "VT-": "range" } : { VIH: "min_only", VIL: "max_only" }),
     fixed_points: fixed,
     ranges,
     status: "UNCONFIRMED",
   };
+  if (schmitt) out.kind = "schmitt_VT";
+  const kindEl = $("logic-dc-grid-kind");
+  if (kindEl && kindEl.value) out.kind = kindEl.value;
+  return out;
 }
 
 function refreshVccPreview() {
@@ -1288,22 +1340,61 @@ function refreshVccPreview() {
   if (vccInput) vccInput.value = merged.join(", ");
 }
 
-function fixedChipHtml(pt) {
+function pairVal(arr, idx) {
+  if (!Array.isArray(arr) || arr[idx] == null || arr[idx] === "") return "";
+  return arr[idx];
+}
+
+function fixedChipHtml(pt, schmitt) {
   const v = pt && pt.vcc != null ? pt.vcc : "";
+  const mode = (pt && pt.pass_mode) || (schmitt ? "range" : "min-only");
+  const modeHtml = `<label>pass_mode ${bandPassModeSelect(mode, "vcc-band-mode")}</label>`;
+  if (schmitt) {
+    const plus = (pt && (pt.VT_plus || pt["VT+"])) || [];
+    const minus = (pt && (pt.VT_minus || pt["VT-"])) || [];
+    return `<div class="vcc-chip">
+    <label>VCC <input class="vcc-fixed-vcc" type="number" step="0.01" value="${v}" /></label>
+    <label>VT+ min <input class="vcc-fixed-vtplus-lo" type="number" step="0.01" value="${pairVal(plus, 0)}" /></label>
+    <label>VT+ max <input class="vcc-fixed-vtplus-hi" type="number" step="0.01" value="${pairVal(plus, 1)}" /></label>
+    <label>VT- min <input class="vcc-fixed-vtminus-lo" type="number" step="0.01" value="${pairVal(minus, 0)}" /></label>
+    <label>VT- max <input class="vcc-fixed-vtminus-hi" type="number" step="0.01" value="${pairVal(minus, 1)}" /></label>
+    ${modeHtml}
+    <button type="button" class="btn ghost vcc-remove-fixed">remove</button>
+  </div>`;
+  }
   const vih = pt && pt.VIH_min_V != null && pt.VIH_min_V !== "" ? pt.VIH_min_V : "";
   const vil = pt && pt.VIL_max_V != null && pt.VIL_max_V !== "" ? pt.VIL_max_V : "";
   return `<div class="vcc-chip">
     <label>VCC <input class="vcc-fixed-vcc" type="number" step="0.01" value="${v}" /></label>
     <label>VIH min <input class="vcc-fixed-vih" type="number" step="0.01" value="${vih}" /></label>
     <label>VIL max <input class="vcc-fixed-vil" type="number" step="0.01" value="${vil}" /></label>
+    ${modeHtml}
     <button type="button" class="btn ghost vcc-remove-fixed">remove</button>
   </div>`;
 }
 
-function rangeRowHtml(band) {
+function rangeRowHtml(band, schmitt) {
   const b = band || {};
   const step = b.step != null && b.step !== "" ? b.step : 0.1;
   const lab = b.label || "";
+  const mode = b.pass_mode || (schmitt ? "range" : "min-only");
+  const modeHtml = `<label>pass_mode ${bandPassModeSelect(mode, "vcc-band-mode")}</label>`;
+  if (schmitt) {
+    const plus = b.VT_plus || b["VT+"] || [];
+    const minus = b.VT_minus || b["VT-"] || [];
+    return `<div class="vcc-range-row">
+    <label>start <input class="vcc-range-start" type="number" step="0.01" value="${b.start != null ? b.start : ""}" /></label>
+    <label>stop <input class="vcc-range-stop" type="number" step="0.01" value="${b.stop != null ? b.stop : ""}" /></label>
+    <label>step <input class="vcc-range-step" type="number" step="0.01" value="${step}" /></label>
+    <label>VT+ min <input class="vcc-range-vtplus-lo" type="number" step="0.01" value="${pairVal(plus, 0)}" /></label>
+    <label>VT+ max <input class="vcc-range-vtplus-hi" type="number" step="0.01" value="${pairVal(plus, 1)}" /></label>
+    <label>VT- min <input class="vcc-range-vtminus-lo" type="number" step="0.01" value="${pairVal(minus, 0)}" /></label>
+    <label>VT- max <input class="vcc-range-vtminus-hi" type="number" step="0.01" value="${pairVal(minus, 1)}" /></label>
+    ${modeHtml}
+    <label>label <input class="vcc-range-label" type="text" value="${lab}" /></label>
+    <button type="button" class="btn ghost vcc-remove-range">remove</button>
+  </div>`;
+  }
   const vih = b.VIH_min_V != null && b.VIH_min_V !== "" ? b.VIH_min_V : "";
   const vil = b.VIL_max_V != null && b.VIL_max_V !== "" ? b.VIL_max_V : "";
   return `<div class="vcc-range-row">
@@ -1312,29 +1403,73 @@ function rangeRowHtml(band) {
     <label>step <input class="vcc-range-step" type="number" step="0.01" value="${step}" /></label>
     <label>VIH min <input class="vcc-range-vih" type="number" step="0.01" value="${vih}" /></label>
     <label>VIL max <input class="vcc-range-vil" type="number" step="0.01" value="${vil}" /></label>
+    ${modeHtml}
     <label>label <input class="vcc-range-label" type="text" value="${lab}" /></label>
     <button type="button" class="btn ghost vcc-remove-range">remove</button>
   </div>`;
 }
 
+function pinWiringHtml(dc) {
+  const labels = dc.pin_wiring_labels || [];
+  const pins = dc.pins || [];
+  const drive = dc.pin_drive || {};
+  let items = labels.slice();
+  if (!items.length) {
+    items = pins.map((p) => {
+      const d = drive[p.name];
+      const extra = d && d.src ? ` <- ${String(d.src).toUpperCase()} CH${d.ch}` : "";
+      return `${p.name} pin ${p.number != null ? p.number : "?"} ${p.role || ""}${extra}`;
+    });
+    if (dc.oe && dc.oe.pin) items.push(`OE ${dc.oe.pin} active-${dc.oe.active}`);
+    if (dc.is_open_drain) items.push("open-drain: VOH N/A skip");
+    if (dc.is_sequential) items.push("sequential: gate 2^n / ICC / dICC stay disabled");
+    items.push(dc.wire_map && Object.keys(dc.wire_map).length
+      ? "wire_map present (CONFIRMED pins + pin_drive only)"
+      : "wire_map empty -- labels from pins + pin_drive; do not invent nets");
+  }
+  return (
+    "<h3 class=\"subhead\">Pin / wiring map</h3>" +
+    "<p class=\"hint\">From product_model pins + pin_drive. Human Continue after verify. Never invent nets.</p>" +
+    `<ul class="hint" id="logic-dc-wire-labels">${items.map((x) => `<li>${x}</li>`).join("")}</ul>`
+  );
+}
+
 function renderCustomiseParameters(dc) {
   const grid = seedVccGrid(dc);
+  const schmitt = isSchmittGrid(dc);
   const n = (dc && dc.sample_size) || paramCatalog.sample_size || 1;
   const stimPsu = grid.stimulus === "PSU_MSO" ? "checked" : "";
   const stimAwg = grid.stimulus !== "PSU_MSO" ? "checked" : "";
-  const chips = (grid.fixed_points || []).map(fixedChipHtml).join("") || "<p class=\"hint\">No fixed points. Add VCC.</p>";
-  const ranges = (grid.ranges || []).map(rangeRowHtml).join("") || "<p class=\"hint\">No range sweeps. Add range.</p>";
+  const chips = (grid.fixed_points || []).map((pt) => fixedChipHtml(pt, schmitt)).join("") || "<p class=\"hint\">No fixed points. Add VCC.</p>";
+  const ranges = (grid.ranges || []).map((r) => rangeRowHtml(r, schmitt)).join("") || "<p class=\"hint\">No range sweeps. Add range.</p>";
   const preview = mergeVccGridJs(grid);
+  const dualOn = !!(dc && dc.dual_channel_continue);
+  const dualChk = dualOn ? "checked" : "";
+  const pm = grid.pass_mode || {};
+  const gridModes = schmitt
+    ? ("VT+ " + passModeSelect("VT+", pm["VT+"] || pm.VTPLUS || "range") +
+      " VT- " + passModeSelect("VT-", pm["VT-"] || pm.VTMINUS || "range") +
+      " HYST " + passModeSelect("HYST", pm.HYST || "range"))
+    : ("VIH " + passModeSelect("VIH", pm.VIH || "min_only") +
+      " VIL " + passModeSelect("VIL", pm.VIL || "max_only"));
+  const oe = dc && dc.oe;
+  const oeTxt = oe ? `${oe.pin} active ${oe.active}` : "none";
+  const nIn = ((dc && dc.logic_inputs) || []).length;
+  const corners = dc && dc.is_sequential ? 0 : (dc.icc_corners || (nIn ? (1 << nIn) : 0));
   return (
     "<h3 class=\"subhead\">Customise Parameters</h3>" +
-    "<p class=\"hint\">FIXED POINTS chips + RANGE SWEEPS. Same VIH min / VIL max for every stepped VCC in a band. Range steps are not a fixed-point row. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> only. Numbers UNCONFIRMED until JH CONFIRM -- not greenable. No xyflow.</p>" +
+    "<p class=\"hint\">vcc_plan editor: FIXED POINTS chips + RANGE SWEEPS + per-band limits + pass_mode (range / min-only / max-only). Same limits for every stepped VCC in a band. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> (test_params + vcc_plan). Numbers UNSURE until extract-signed -- not greenable. No xyflow. No invent.</p>" +
+    `<p class="hint">logic_inputs ${(dc.logic_inputs || []).join(",") || "--"} · OE ${oeTxt} · ICC corners ${corners}${dc && dc.is_sequential ? " (sequential -- 2^n disabled)" : " (2^n)"}</p>` +
+    pinWiringHtml(dc || {}) +
+    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. Do not invent a 2G YAML.</label>` +
     `<div class="logic-dc-stim">
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="PSU_MSO" ${stimPsu} /> PSU_MSO</label>
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="AWG" ${stimAwg} /> AWG</label>
     </div>` +
     "<p class=\"hint\" id=\"logic-dc-awg-note\">AWG: Freq/Amp stay on Advanced bench. PSU_MSO hides Freq/Amp (omit -- do not invent Hz/V).</p>" +
     `<label>n (sample_size)<input id="logic-dc-n" type="number" min="1" step="1" value="${n}" /></label>` +
-    "<p class=\"hint\">pass_mode: VIH=min_only / VIL=max_only</p>" +
+    `<div id="logic-dc-grid-pass-mode"><p class="hint">vcc_plan pass_mode ${schmitt ? "(Schmitt VT range)" : "(VIH min_only / VIL max_only)"}: ${gridModes}</p></div>` +
+    (grid.kind ? `<input type="hidden" id="logic-dc-grid-kind" value="${grid.kind}" />` : "") +
     "<h3 class=\"subhead\">FIXED POINTS</h3>" +
     `<div id="logic-dc-fixed-points">${chips}</div>` +
     "<button type=\"button\" class=\"btn ghost\" id=\"logic-dc-add-fixed\">Add VCC</button>" +
@@ -1348,15 +1483,16 @@ function renderCustomiseParameters(dc) {
 function wireCustomiseParams() {
   const boxF = $("logic-dc-fixed-points");
   const boxR = $("logic-dc-ranges");
+  const schmitt = isSchmittGrid(paramCatalog.logic_dc || {});
   if ($("logic-dc-add-fixed") && boxF) {
     $("logic-dc-add-fixed").onclick = () => {
-      boxF.insertAdjacentHTML("beforeend", fixedChipHtml({ vcc: "", VIH_min_V: "", VIL_max_V: "" }));
+      boxF.insertAdjacentHTML("beforeend", fixedChipHtml({ vcc: "", VIH_min_V: "", VIL_max_V: "" }, schmitt));
       refreshVccPreview();
     };
   }
   if ($("logic-dc-add-range") && boxR) {
     $("logic-dc-add-range").onclick = () => {
-      boxR.insertAdjacentHTML("beforeend", rangeRowHtml({ start: "", stop: "", step: 0.1 }));
+      boxR.insertAdjacentHTML("beforeend", rangeRowHtml({ start: "", stop: "", step: 0.1 }, schmitt));
       refreshVccPreview();
     };
   }
@@ -1405,10 +1541,14 @@ function renderLogicDc() {
   const inputs = dc.logic_inputs || [];
   const oe = dc.oe;
   const oeTxt = oe ? `${oe.pin} active ${oe.active}` : "none";
+  const seq = !!dc.is_sequential;
+  const od = !!dc.is_open_drain;
   if (meta) {
     meta.textContent =
       `${dc.part || ""} · inputs ${inputs.join(",")} · OE ${oeTxt}` +
-      ` · schmitt ${dc.schmitt ? "yes" : "no"} · ICC ${dc.icc_corners || 0} corners (2^n)` +
+      ` · schmitt ${dc.schmitt ? "yes" : "no"}` +
+      (od ? " · open-drain (VOH N/A skip)" : "") +
+      (seq ? " · sequential (gate 2^n disabled)" : ` · ICC ${dc.icc_corners || 0} corners (2^n)`) +
       (dc.isolation_status ? ` · isolation ${dc.isolation_status}` : "");
   }
   const enabled = dc.enabled_tests || [];
@@ -1467,8 +1607,12 @@ function renderLogicDc() {
   isoHtml += "</tbody></table>";
   const cornerRows = dc.icc_corner_rows || [];
   const cornerPins = dc.icc_pins || inputs;
-  let cornerHtml = `<h3 class="subhead">ICC corners (${dc.icc_corners || cornerRows.length} = 2^n)</h3>`;
-  if (!cornerRows.length) {
+  let cornerHtml = seq
+    ? "<h3 class=\"subhead\">ICC corners (sequential -- gate 2^n / ICC / ΔICC stay disabled)</h3>"
+    : `<h3 class="subhead">ICC corners (${dc.icc_corners || cornerRows.length} = 2^n)</h3>`;
+  if (seq) {
+    cornerHtml += "<p class=\"hint\">RS164-class sequential: do not tick Path B icc / delta_icc / input_threshold 2^n.</p>";
+  } else if (!cornerRows.length) {
     cornerHtml += "<p class=\"hint\">No derived ICC corners.</p>";
   } else {
     cornerHtml += "<table class=\"logic-dc-table\" id=\"logic-dc-corners\"><thead><tr>" +
@@ -1485,16 +1629,22 @@ function renderLogicDc() {
   specHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Id</th><th>Mode</th><th>Min</th><th>Max</th><th>Test</th></tr></thead><tbody>";
   specs.forEach((s) => {
     const sid = s.id || "";
+    if (od && /^voh/i.test(sid)) {
+      specHtml += `<tr><td>${sid}</td><td>N/A</td><td>unspec</td><td>unspec</td><td>open-drain skip</td></tr>`;
+      return;
+    }
     const unspec = s.min == null && s.max == null ? " unspec" : "";
+    let note = s.test || "";
+    if (dc.has_oe && /^ioz/i.test(sid)) note += " (IOZ when OE inactive only)";
     specHtml += `<tr><td>${sid}</td><td>${passModeSelect(sid, s.pass_mode)}</td>` +
-      `<td>${s.min != null ? s.min : "unspec"}</td><td>${s.max != null ? s.max : "unspec"}</td><td>${s.test || ""}${unspec}</td></tr>`;
+      `<td>${s.min != null ? s.min : "unspec"}</td><td>${s.max != null ? s.max : "unspec"}</td><td>${note}${unspec}</td></tr>`;
   });
   specHtml += "</tbody></table>";
   const gaps = (dc.gaps || []).map((g) => `<li>${g}</li>`).join("");
   const gapHtml = gaps ? `<h3 class="subhead">Gaps</h3><ul class="hint">${gaps}</ul>` : "";
   body.innerHTML = enHtml + customiseHtml + recipeHtml + cardHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
   if (hint && !hint.textContent) {
-    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml only (vcc_grid + merged vcc_list + pass_mode + n + stable_eps_A). Save product_model writes card_fields.schema.yaml keys. Ctrl+F5 after worker restart if RPC is new.";
+    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (vcc_plan + vcc_grid + merged vcc_list + pass_mode + n + stable_eps_A). Save product_model writes card_fields.schema.yaml keys. Ctrl+F5 after worker restart if RPC is new.";
   }
   wirePassModeSync();
   wireCardFieldDeletes();
@@ -3032,14 +3182,24 @@ async function saveTestParamsOverlay() {
   if (logicOpen && $("logic-dc-fixed-points")) {
     const grid = collectVccGridFromUi();
     blob.vcc_grid = grid;
+    blob.vcc_plan = grid;
     blob.vcc_list = mergeVccGridJs(grid);
     blob.pass_mode = blob.pass_mode || {};
-    blob.pass_mode.VIH = "min_only";
-    blob.pass_mode.VIL = "max_only";
+    const dc = paramCatalog.logic_dc || {};
+    if (!dc.schmitt && !isSchmittGrid(dc)) {
+      if (!blob.pass_mode.VIH) blob.pass_mode.VIH = "min_only";
+      if (!blob.pass_mode.VIL) blob.pass_mode.VIL = "max_only";
+    }
     const nEl = $("logic-dc-n");
     if (nEl) {
       const n = Number(nEl.value);
       if (Number.isFinite(n) && n >= 1) blob.sample_size = Math.trunc(n);
+    }
+    const dualEl = $("logic-dc-dual-continue");
+    if (dualEl) {
+      blob.recipe = blob.recipe || {};
+      blob.recipe.dual_channel_continue = !!dualEl.checked;
+      if (dualEl.checked) blob.recipe.channels = ["CHA", "CHB"];
     }
   }
   const res = await rpc("save_test_params", { test_params: blob });

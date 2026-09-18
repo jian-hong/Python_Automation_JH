@@ -276,6 +276,11 @@ def _signed_voh_vol_ok(part: str) -> list[str]:
     return errors
 
 
+def _isolation_na(m) -> bool:
+    token = str(getattr(m, "isolation_status", "") or "").strip().upper().replace("/", "_").replace("-", "_")
+    return is_sequential(m) and token in ("N_A", "NA")
+
+
 def _fail_closed_until_signed(part: str, m) -> list[str]:
     """UNCONFIRMED / signed-looking tokens fail-close until Datasheet-signed CONFIRMED."""
     errors: list[str] = []
@@ -284,7 +289,7 @@ def _fail_closed_until_signed(part: str, m) -> list[str]:
             f"{part} truth_table.status={m.truth_table_status!r} must not claim confirm "
             "without Datasheet-signed"
         )
-    if claimed_signed_without_datasheet(m.isolation_status):
+    if claimed_signed_without_datasheet(m.isolation_status) and not _isolation_na(m):
         errors.append(
             f"{part} isolation.status={m.isolation_status!r} must not claim confirm "
             "without Datasheet-signed"
@@ -296,7 +301,7 @@ def _fail_closed_until_signed(part: str, m) -> list[str]:
         )
     if (
         is_datasheet_signed(m.truth_table_status)
-        and is_datasheet_signed(m.isolation_status)
+        and (is_datasheet_signed(m.isolation_status) or _isolation_na(m))
         and is_datasheet_signed(m.status or m.truth_table_status)
     ):
         return errors
@@ -1488,6 +1493,12 @@ def _panel_ok() -> list[str]:
         errors.append("Customise Parameters must preview merged vcc_list and stimulus PSU_MSO vs AWG")
     if "vcc_grid" not in js:
         errors.append("app.js must save vcc_grid to Version overlay")
+    if "vcc_plan" not in js:
+        errors.append("app.js must save vcc_plan (vcc_grid alias) to Version overlay")
+    if "dual-channel Continue" not in js and "dual_channel_continue" not in js:
+        errors.append("Customise Parameters must show 2Gxx dual-channel Continue switch")
+    if "Pin / wiring" not in js and "pin_wiring" not in js:
+        errors.append("Customise Parameters must show pin/wiring map labels")
     if "xyflow" in js.lower() and "no xyflow" not in js.lower():
         errors.append("Customise Parameters must not introduce xyflow")
     if "freq-label" not in html:
@@ -1496,6 +1507,8 @@ def _panel_ok() -> list[str]:
     db_txt = db.read_text(encoding="utf-8")
     if '"vcc_grid"' not in db_txt or '"sample_size"' not in db_txt:
         errors.append("save_test_params must allow vcc_grid and sample_size")
+    if '"vcc_plan"' not in db_txt:
+        errors.append("save_test_params must allow vcc_plan alias")
     if "data-card-field" not in js or "deleted_fields" not in js:
         errors.append("Logic DC panel must bind per-field assign/edit/delete to card_fields")
     if "card_fields" not in js:
@@ -1523,7 +1536,7 @@ def _panel_ok() -> list[str]:
         if str(schema.get("ocr", {}).get("engine") or "").lower() != "paddleocr":
             errors.append("card_fields.schema.yaml ocr.engine must be paddleocr")
         keys = panel_save_keys()
-        for need in ("pins", "recipe", "recipe.stable_eps_A", "recipe.search", "recipe.dual_channel_continue", "recipe.channels", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid", "excel_plots", "workbook_policy"):
+        for need in ("pins", "recipe", "recipe.stable_eps_A", "recipe.search", "recipe.dual_channel_continue", "recipe.channels", "truth_table", "oe", "schmitt", "wire_map", "settle_prompt", "data_paths", "vcc_grid", "vcc_plan", "excel_plots", "workbook_policy"):
             if need not in keys:
                 errors.append(f"panel_save_keys missing {need}")
     except Exception as exc:
@@ -1568,6 +1581,13 @@ def _scale_and_overlay_ok() -> list[str]:
         errors.append(f"test_params overlay must replace vcc_list, got {None if over is None else over.vcc_list}")
     if m08.vcc_list == [3.3] and len(m08.vcc_list) == 1:
         errors.append("part yaml vcc_list must stay the default without overlay")
+    over_plan = load_product_model(
+        "rs1g08",
+        overlay={"vcc_plan": {"fixed_points": [{"vcc": 3.3}], "ranges": [], "status": "UNSURE"}},
+    )
+    got_plan = [round(float(x), 6) for x in ((over_plan.vcc_list if over_plan else []) or [])]
+    if 3.3 not in got_plan or len(got_plan) != 1:
+        errors.append(f"vcc_plan overlay alias must populate vcc_grid, got {got_plan}")
     pins = ["A", "B", "C"]
     rows = []
     for vec in iter_logic_corners(pins):
@@ -2226,30 +2246,38 @@ def _recipe_search_ok(part: str, m) -> list[str]:
 
 
 def _unsigned_draft_ok(part: str, m) -> list[str]:
-    """DRAFT SKUs stay UNCONFIRMED. Do not call _fail_closed_until_signed (that FAILs the suite)."""
+    """JH room CONFIRM: grounded status/truth/isolation CONFIRMED. 9.1 vcc_grid stays UNSURE."""
     errors: list[str] = []
-    for name, st in (
-        ("status", m.status),
-        ("truth_table", m.truth_table_status),
-        ("isolation", m.isolation_status),
-    ):
-        if is_datasheet_signed(st):
+    if not is_datasheet_signed(m.status):
+        errors.append(
+            f"{part} product_model.status must be CONFIRMED (Jian Hong 2026-09-17 grounded), got {m.status!r}"
+        )
+    if not is_datasheet_signed(m.truth_table_status):
+        errors.append(
+            f"{part} truth_table.status must be CONFIRMED (grounded), got {m.truth_table_status!r}"
+        )
+    if is_sequential(m):
+        if not _isolation_na(m) and not is_datasheet_signed(m.isolation_status):
             errors.append(
-                f"{part} {name}={st!r} must stay UNCONFIRMED (no number unlock overnight)"
+                f"{part} sequential isolation must be N_A or CONFIRMED, got {m.isolation_status!r}"
             )
-        elif name != "isolation" and not is_unconfirmed_status(st):
-            # isolation N_A on sequential is allowed
-            if str(st or "").strip().upper() not in ("N_A", "NA", "N/A"):
-                errors.append(f"{part} {name}={st!r} must be UNCONFIRMED")
-    if vcc_grid_unconfirmed(m) is False and (m.vcc_grid or {}).get("status"):
-        gst = str((m.vcc_grid or {}).get("status") or "")
-        if is_datasheet_signed(gst):
-            errors.append(f"{part} vcc_grid.status must stay UNCONFIRMED, got {gst!r}")
+    elif not is_datasheet_signed(m.isolation_status):
+        errors.append(
+            f"{part} isolation.status must be CONFIRMED (grounded), got {m.isolation_status!r}"
+        )
+    gst = str((m.vcc_grid or {}).get("status") or "")
+    if is_datasheet_signed(gst):
+        errors.append(
+            f"{part} vcc_grid.status must stay UNSURE (9.1 PDF-image / not greenable), got {gst!r}"
+        )
+    elif not is_unconfirmed_status(gst):
+        errors.append(f"{part} vcc_grid.status must be UNSURE/UNCONFIRMED, got {gst!r}")
+    errors += _fail_closed_until_signed(part, m)
     return errors
 
 
 def _draft_scaffold_ok() -> list[str]:
-    """Overnight Path B DRAFT scaffold. Physics FAIL bars. Numbers stay UNCONFIRMED."""
+    """Path B 8-SKU scaffold. JH CONFIRMED grounded fields. 9.1 / glyph gaps stay UNSURE."""
     from ate.tests.logic import logic_dc as ldc
 
     errors: list[str] = []
@@ -2337,6 +2365,9 @@ def _draft_scaffold_ok() -> list[str]:
         errors.append("rs1g07 enabled_tests missing vol (extract-explicit IOL rows)")
     yaml07 = load_part_yaml("rs1g07")
     vol07 = yaml07.get("vol_table") if isinstance(yaml07.get("vol_table"), list) else []
+    vol_blk = m07.dc_limits.get("VOL") if isinstance(m07.dc_limits, dict) else {}
+    if not is_datasheet_signed((vol_blk or {}).get("status")):
+        errors.append("rs1g07 VOL extract-explicit IOL rows must be CONFIRMED")
     if len(vol07) != 4:
         errors.append(f"rs1g07 vol_table must be 4 extract-explicit IOL rows, got {len(vol07)}")
     for row in vol07:
@@ -2609,6 +2640,12 @@ def _sts_latest_ok() -> list[str]:
                 errors.append("latest report.pdf must show FAIL vs limits (not invent PASS)")
             if b"0.4" not in blob:
                 errors.append("latest report.pdf must copy measured value (never invent pass numbers)")
+            if b"Pass criteria" not in blob:
+                errors.append("latest report.pdf must include Pass criteria column (STS sample)")
+            if b"How met" not in blob:
+                errors.append("latest report.pdf must include How met column (STS sample)")
+            if b">= min" not in blob:
+                errors.append("latest report.pdf Pass criteria must derive min_only from limits (never invent)")
         if not (sessions / "datalog.pdf").is_file():
             errors.append("sessions/datalog.pdf must still be written (existing STS path)")
     except Exception as exc:
