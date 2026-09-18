@@ -46,12 +46,26 @@ def _build_run_params(params: dict[str, Any]) -> RunParams:
     run_label = str(p.get("run_label") or "").strip()
     raw_vccb = p.get("vccb")
     vccb = float(raw_vccb) if raw_vccb not in (None, "") else None
+    lab_report = str(p.get("lab_report") or ctx.lab_report_path())
+    try:
+        from ate.tests.logic.excel_lock import (
+            UltimateWorkbook,
+            coerce_golden_auto_lab_report,
+        )
+
+        bound = coerce_golden_auto_lab_report(ctx, lab_report)
+        if bound:
+            lab_report = bound
+    except UltimateWorkbook:
+        raise
+    except Exception:
+        pass
     rp = RunParams(
         vcc=float(p.get("vcc", 5.0)),
         freq_hz=float(p.get("freq_hz", 500.0)),
         amp_vpp=float(p.get("amp_vpp", 0.004)),
         n_repeats=int(p.get("n_repeats", 3)),
-        lab_report=str(p.get("lab_report") or ctx.lab_report_path()),
+        lab_report=lab_report,
         research_excel=str(p.get("research_excel") or ""),
         reset_before_run=bool(p.get("reset_before_run", False)),
         unit_index=int(p.get("unit_index", 1)),
@@ -176,7 +190,7 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
 
     if method == "list_tests":
         from ate.core.timeline import short_test_tag
-        from ate.core.specs import load_part_specs, test_info_map
+        from ate.core.specs import load_part_specs, specs_for_test, test_info_map
 
         specs = list(all_tests())
         from ate.core.database import get_context
@@ -208,7 +222,8 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
                         allow2 = set(enabled2)
                         specs = [t for t in specs if t.id in allow2]
         info_map = test_info_map(pk)
-        part_specs = load_part_specs(pk)
+        overlay = ctx.load_test_params() if pk else {}
+        part_specs = load_part_specs(pk, overlay=overlay)
         return [
             {
                 "id": t.id,
@@ -220,12 +235,7 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
                 "notes": t.notes,
                 "fixed_steps": list(t.fixed_steps) if t.fixed_steps else [],
                 "dual_channel": bool(getattr(t, "dual_channel", True)),
-                "specs": [
-                    s
-                    for s in part_specs
-                    if str(s.get("test") or "").lower() == t.id.lower()
-                    or str(s.get("id") or "").lower() == t.id.lower()
-                ],
+                "specs": specs_for_test(part_specs, t.id),
                 "info": info_map.get(t.id) or {},
             }
             for t in specs
@@ -483,6 +493,30 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
         part = str(params.get("part") or "rs622")
         family = str(params.get("family") or core.family or active_family() or "opamp")
         return catalog_for_ui(part, family=family)
+
+    if method == "get_product_model":
+        from ate.core.database import get_context
+        from ate.tests.logic.product_model import panel_payload
+
+        ctx = get_context()
+        part = str(params.get("part") or ctx.part_key or "").strip().lower()
+        return panel_payload(part)
+
+    if method == "save_product_model":
+        from ate.core.database import get_context
+        from ate.tests.logic.product_model import save_product_model_fields
+
+        ctx = get_context()
+        part = str(params.get("part") or ctx.part_key or "").strip().lower()
+        patch = params.get("patch") if isinstance(params.get("patch"), dict) else {}
+        return save_product_model_fields(part, patch)
+
+    if method == "save_test_params":
+        from ate.core.database import get_context
+
+        ctx = get_context()
+        blob = params.get("test_params") if isinstance(params.get("test_params"), dict) else params
+        return ctx.save_test_params(blob if isinstance(blob, dict) else {})
 
     if method == "run_sequence":
         ids = list(params.get("test_ids") or [])
@@ -756,11 +790,18 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
     if method == "export_datalog":
         from ate.core.datalog import load_report, report_path
         from ate.core.database import get_context
-        from ate.reporting.sts_datalog import export_sts
+        from ate.reporting.sts_datalog import export_latest_report
 
         doc = load_report()
         c = get_context()
-        paths = export_sts(doc, c.sessions_dir())
+        version_dir = None
+        try:
+            version_dir = c.root() if hasattr(c, "root") else None
+        except Exception:
+            version_dir = None
+        paths = export_latest_report(
+            doc, sessions_dir=c.sessions_dir(), version_dir=version_dir
+        )
         return {"ok": True, **paths, "report": str(report_path(c))}
 
     if method == "fetch_datasheet":
@@ -791,11 +832,13 @@ def dispatch(method: str, params: dict[str, Any]) -> Any:
 
         ctx = get_context()
         pk = str(params.get("part_key") or ctx.part_key or "")
+        overlay = ctx.load_test_params()
         return {
             "part_key": pk,
-            "specs": load_part_specs(pk),
+            "specs": load_part_specs(pk, overlay=overlay),
             "test_info": test_info_map(pk),
             "datasheet": load_part_datasheet(pk),
+            "test_params": overlay,
         }
 
     if method == "paste_session_photos":

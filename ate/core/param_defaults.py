@@ -50,12 +50,18 @@ LOGIC_TEST_DEFAULTS: dict[str, dict[str, Any]] = {
     "vih_vil": {"vcc": 1.65},
     "voh_load": {"vcc": 1.65},
     "vol_load": {"vcc": 1.65},
+    # Path B Logic DC (product_model YAML)
+    "input_threshold": {"vcc": 1.65},
+    "vth": {"vcc": 1.65},
+    "delta_icc": {"vcc": 1.65},
+    "ii": {"vcc": 1.65},
+    "ioz": {"vcc": 1.65},
     # RS0204 dual-rail (vcc = VCCA; vccb from part yaml)
     "vih": {"vcc": 1.8, "vccb": 3.3},
     "vil": {"vcc": 1.8, "vccb": 3.3},
-    "voh": {"vcc": 1.8, "vccb": 3.3},
-    "vol": {"vcc": 1.8, "vccb": 3.3},
-    "icc": {"vcc": 1.8, "vccb": 3.3},
+    "voh": {"vcc": 1.8},
+    "vol": {"vcc": 1.8},
+    "icc": {"vcc": 1.8},
     "il": {"vcc": 1.8, "vccb": 3.3},
     "tpd": {"vcc": 1.8, "vccb": 3.3, "freq_hz": 400000.0},
     "tp_rs0204": {"vcc": 1.8, "vccb": 3.3, "freq_hz": 400000.0},
@@ -363,6 +369,10 @@ def _apply_part_to_tests(tests: dict[str, Any], part_key: str) -> tuple[dict[str
             if isinstance(entry, dict):
                 tests[tid] = {**entry, "vccb": vccb_f}
         vccb = vccb_f
+    else:
+        for tid, entry in list(tests.items()):
+            if isinstance(entry, dict) and "vccb" in entry:
+                tests[tid] = {k: v for k, v in entry.items() if k != "vccb"}
     extra = raw.get("test_defaults")
     if isinstance(extra, dict):
         for tid, entry in extra.items():
@@ -481,6 +491,43 @@ def _yaml_family_catalog(part_key: str, defaults: dict[str, Any]) -> dict[str, A
     return cat
 
 
+def _logic_dc_for_catalog(part_key: str) -> dict[str, Any] | None:
+    try:
+        from ate.tests.logic.product_model import has_product_model, load_product_model, model_to_ui
+    except Exception:
+        return None
+    if not has_product_model(part_key):
+        return None
+    overlay: dict[str, Any] = {}
+    try:
+        from ate.core.database import get_context
+
+        overlay = get_context().load_test_params() or {}
+    except Exception:
+        overlay = {}
+    model = load_product_model(part_key, overlay=overlay or None)
+    if model is None:
+        return None
+    ui = model_to_ui(model)
+    from ate.core.specs import load_part_specs
+
+    ui["specs"] = load_part_specs(part_key, overlay=overlay)
+    try:
+        from ate.fixture.modes import enabled_tests_for_part
+
+        ui["enabled_tests"] = list(enabled_tests_for_part(part_key) or [])
+    except Exception:
+        ui["enabled_tests"] = []
+    if overlay.get("sample_size") is not None:
+        try:
+            ui["sample_size"] = max(1, int(overlay["sample_size"]))
+        except (TypeError, ValueError):
+            pass
+    elif model.sample_size:
+        ui["sample_size"] = int(model.sample_size)
+    return ui
+
+
 def catalog_for_ui(part: str = "rs622", family: str | None = None) -> dict[str, Any]:
     fam = (family or "opamp").strip().lower()
     if fam == "lim":
@@ -488,7 +535,16 @@ def catalog_for_ui(part: str = "rs622", family: str | None = None) -> dict[str, 
     if fam == "opamp":
         return _opa_catalog(part)
     if fam == "logic":
-        return _yaml_family_catalog(str(part or "rs29511"), LOGIC_TEST_DEFAULTS)
+        cat = _yaml_family_catalog(str(part or "rs29511"), LOGIC_TEST_DEFAULTS)
+        logic_dc = _logic_dc_for_catalog(str(part or ""))
+        if logic_dc:
+            cat["logic_dc"] = logic_dc
+            if logic_dc.get("sample_size"):
+                try:
+                    cat["sample_size"] = max(1, int(logic_dc["sample_size"]))
+                except (TypeError, ValueError):
+                    pass
+        return cat
     if fam == "switch":
         return _yaml_family_catalog(str(part or "rs2323"), LIM_TEST_DEFAULTS)
     if fam == "power":

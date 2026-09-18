@@ -1,0 +1,113 @@
+# RS1G86 XOR-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
+# Dual isolation track+invert. VIL 0.20*VCC at 1.65-1.95 from card lock only.
+
+part: RS1G86
+model: RS1G86
+component: Logic
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+part_key: rs1g86
+product_class: logic
+vcc: 5.0
+current_limit: 0.05
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+enabled_tests:
+  - tp
+  - supply_current
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1G86 XOR)"
+    board_class: general
+    checklist:
+      - "RS1G86 XOR-2. UNCONFIRMED -- numbers HOLD."
+      - "VIL 0.20*VCC at 1.65-1.95 from card. Do not copy G08 VIL 0.15*VCC."
+    tests: [tp, supply_current]
+
+product_model:
+  part: RS1G86
+  status: UNCONFIRMED
+  package: SC70-5
+  product_class: gate_xor2
+  schmitt: false
+  oe: none
+  output_pin: Y
+  output_type: push_pull
+  logic_inputs:
+  - A
+  - B
+  pins:
+  - {name: A, role: input}
+  - {name: B, role: input}
+  - {name: GND, role: gnd}
+  - {name: Y, role: output}
+  - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+  truth_table:
+    status: UNCONFIRMED
+    kind: combinational
+    note: XOR Y=A xor B. Dual isolation track (other=L) + invert (other=H).
+    rows:
+    - {A: L, B: L, Y: L}
+    - {A: H, B: L, Y: H}
+    - {A: L, B: H, Y: H}
+    - {A: H, B: H, Y: L}
+  isolation:
+    status: UNCONFIRMED
+    note: XOR dual isolation -- track other=L, invert other=H.
+    tests:
+      A:
+      - {sweep_pin: A, fix: {B: L}, y_expect: track}
+      - {sweep_pin: A, fix: {B: H}, y_expect: invert}
+      B:
+      - {sweep_pin: B, fix: {A: L}, y_expect: track}
+      - {sweep_pin: B, fix: {A: H}, y_expect: invert}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: AWG
+    note: Card lock VIL 0.20*VCC @ 1.65-1.95 only. VIH HOLD. Not G08 0.15*VCC.
+    ranges:
+    - start: 1.65
+      stop: 1.95
+      step: 0.1
+      VIL_max: 0.20*VCC
+      label: 1.65-1.95 VIL card lock
+    fixed_points: []
+  pass_mode:
+    icc: max_only
+    voh: min_only
+    vol: max_only
+    VIL: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: do not invent loads
+    ICCT_uA:
+      status: ABSENT
+      note: do not invent ICCT
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD. delta_icc from this block only; ICCT ABSENT is not a map
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: gate_xor2
+    dual_channel_continue: false
+  gaps:
+  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - XOR dual isolation track+invert; oe none; IOZ OFF
+  - VIL 0.20*VCC @1.65-1.95 from card; do not copy G08 0.15*VCC
+  - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
+  - VIH / VOH / VOL HOLD -- do not invent
+  - stable_eps_A null

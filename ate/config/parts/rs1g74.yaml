@@ -1,3 +1,5 @@
+# ARCHIVE / DROPPED from Path B scale (JH 2026-09-18). Optional UNCONFIRMED stub.
+# Do not invent VT+/- or gate 2^n. Not in SIM mandatory set (the 11 CONFIRMED).
 # RS1G74 D flip-flop -- Qualification Main VSSOP8.
 
 part: RS1G74
@@ -8,6 +10,7 @@ version: Version_1
 sample_size: 4
 year: "2026"
 part_key: rs1g74
+status: PARKED
 product_class: logic
 vcc: 5.0
 current_limit: 0.10
@@ -23,4 +26,84 @@ fixture_modes:
     board_class: general
     checklist:
       - "RS1G74 is a DFF. Clock/Q slots via Wrap -- do not copy RS1G08 AND tables."
+      - "PARKED (JH dropped 2026-09-18). UNCONFIRMED archive. Do not tick Path B gate 2^n."
     tests: [tp, supply_current]
+
+# PARKED UNCONFIRMED archive. Sequential DFF -- not combinational 2^n.
+# Pins + VCC 1.65-5.5 + ICC Full 10uA from extract / limits. Function table glyph-garbled.
+# VOH 100uA IOH glyph-stripped -- do not invent loads. Datasheet card needed.
+product_model:
+  part: RS1G74
+  status: UNCONFIRMED
+  parked: true
+  source_extract: ate/config/datasheets/text/rs1g74.txt
+  package: VSSOP8
+  product_class: sequential_dff
+  schmitt: false
+  oe: none
+  output_pin: Q
+  output_type: push_pull
+  vcc_op_min: 1.65
+  vcc_op_max: 5.5
+  vcc_op_status: RANGE_METADATA
+  logic_inputs:
+  - CLK
+  - D
+  - CLR
+  - PRE
+  pins:
+  - {name: CLK, role: clock, number: 1}
+  - {name: D, role: input, number: 2}
+  - {name: QN, role: output, number: 3, note: "inverted output from pin description"}
+  - {name: GND, role: gnd, number: 4}
+  - {name: Q, role: output, number: 5}
+  - {name: CLR, role: reset, number: 6, note: "Clear active-L from pin description"}
+  - {name: PRE, role: input, number: 7, note: "Preset active-L from pin description"}
+  - {name: VCC, role: vcc, number: 8}
+  truth_table:
+    status: UNCONFIRMED
+    kind: sequential_functional
+    note: extract function table glyph-garbled (PRE/CLR bars). Datasheet card needed. Do not invent rows.
+    rows: []
+  isolation:
+    status: N_A
+    note: sequential DFF -- not gate isolation
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: PSU_MSO
+    note: recommended VIH/VIL table missing from extract; do not invent
+    fixed_points: []
+    ranges: []
+  pass_mode:
+    icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: IOH 100uA glyph-stripped; do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: IOL 100uA glyph-stripped; do not invent loads
+    ICC_uA:
+      status: UNCONFIRMED
+      note: Full 10uA already on Path A limits; not gate 2^n
+    ICCT_uA:
+      status: UNCONFIRMED
+      note: extract one-input VCC-0.6 500uA -- do not enable Path B delta_icc without card
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: sequential_dff_clr_pre
+  gaps:
+  - PARKED -- JH dropped 2026-09-18. UNCONFIRMED archive. Do not enable Path B gate 2^n.
+  - UNCONFIRMED stub -- Datasheet card needed; not a bench green
+  - sequential DFF -- Path B gate 2^n / ICC / dICC / VOH / VOL / II SKIP
+  - function table glyph-garbled -- do not invent truth rows
+  - VOH/VOL 100uA IOH/IOL glyph-stripped -- do not invent loads
+  - recommended VIH/VIL table missing from extract -- do not invent
+  - ICCT VCC-0.6 on extract but unsigned -- delta_icc off (do not invent green)
+  - stable_eps_A null

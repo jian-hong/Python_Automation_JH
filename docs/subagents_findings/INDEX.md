@@ -2,6 +2,13 @@
 
 | Date | File | Keywords |
 |------|------|----------|
+| 2026-09-18 | 2026-09-18_scale-wave-park.md | path-b, PARKED, rs1g74, rs1g123, rs1g00, rs1g02, rs1g04, rs1g86, rs2g08, rs2g32, UNCONFIRMED, numbers HOLD, dual_channel_continue |
+| 2026-09-18 | 2026-09-18_drop-g74-g123-scale11.md | path-b, logic-dc, sim, archive, rs1g123, rs1g74, dropped, 11 CONFIRMED, 2Gxx, RS74AUP1G07, dc.py |
+| 2026-09-18 | 2026-09-18_sim-first-confirmed.md | path-b, logic-dc, SIM, TestSpec.run, interpolate, vplus, PSU CH3, 0.65*VCC, Schmitt VT, rs164, archive |
+| 2026-09-18 | 2026-09-18_logic-dc-sim.md | path-b, logic-dc, sim, check_logic_dc_sim, rs1g123, rs1g74, sequential, UNCONFIRMED, visa-free, NON_TIGHT, G07 VOH N_A, VOL NOT_RUN |
+| 2026-09-18 | 2026-09-18_gt34-voh-live.md | path-b, logic-dc, rs1gt34, VOH, VOL, LIVE_PASS, NOT_RUN, golden_auto, sessions, min_only, product_model.live, scale, 2Gxx, dual_channel_continue |
+| 2026-09-18 | 2026-09-18_sot-voh-vol-confirmed.md | path-b, logic-dc, VOH, VOL, dc_limits, SoT, CONFIRMED, expand, push_pull, three_state, rs1g07, rs1g08, rs1g14, rs1g125, rs1gt34 |
+| 2026-09-17 | 2026-09-17_path-b-logic-dc.md | path-b, logic-dc, product_model, isolation, rs1g97, rs1gt34, CONFIRMED, pass_mode, ioz, schmitt, seelim, eugene-console, wire_map, data_paths, NON_TIGHT, vcc_grid, PSU_MSO, customise-parameters, excel-lock, one_per_version_overwrite, golden_auto, ultimate_manual, never_auto_write, pretty, csv, path_b_write, recipe.search, threshold_search, icct, open-drain, sequential, rs1g07, rs1g08, rs1g14, rs1g32, rs1gt08, rs1gt32, rs1g125, rs164, report.pdf, dual_channel_continue, datapoints.csv |
 | 2026-09-11 | 2026-09-11_operator-zip-daily-pull.md | installer, zip, eugene-console, rift, auto-pull, ff-only, sharepoint |
 | 2026-09-11 | 2026-09-11_sharepoint-rs622-photos.md | sharepoint, rd-handover, rs622-golden, photo-boxes, eugene-branch |
 | 2026-09-11 | 2026-09-11_joinall-vox-fill.md | a19, a20, join-all, vox, sop8, golden-skip, merged-cell, rs1g08, rs2323 |

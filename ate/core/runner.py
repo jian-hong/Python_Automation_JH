@@ -56,7 +56,7 @@ class RunParams:
     current_limit_a: float = 0.10
     vccb: Optional[float] = None  # dual-rail Logic; None = part yaml
     progress_hook: Optional[Callable[..., None]] = field(default=None, repr=False)
-    pause_hook: Optional[Callable[[str], bool]] = field(default=None, repr=False)
+    pause_hook: Optional[Callable[..., bool]] = field(default=None, repr=False)
 
     def resolved_duts(self) -> list[int]:
         if self.dut_indices:
@@ -75,6 +75,31 @@ class RunParams:
         if self.lab_report:
             return self.lab_report
         return str(get_context().lab_report_path())
+
+
+def _apply_part_dual_channel(part: str, batches, channels: list[str]):
+    """recipe.dual_channel_continue: CHA then CHB Continue. Do not wrap TestSpec.run."""
+    try:
+        from ate.tests.logic.product_model import (
+            apply_dual_channel_continue,
+            has_product_model,
+            load_product_model,
+            merge_recipe_channels,
+        )
+
+        key = str(part or "").strip().lower()
+        if not key or not has_product_model(key):
+            return batches, channels
+        model = load_product_model(key)
+        if model is None:
+            return batches, channels
+        new_batches = [
+            (mode, apply_dual_channel_continue(list(specs), model))
+            for mode, specs in batches
+        ]
+        return new_batches, merge_recipe_channels(model, channels)
+    except Exception:
+        return batches, channels
 
 
 @dataclass
@@ -177,7 +202,18 @@ class ATECore:
         if "DMM" not in self._mapping:
             self._log("WARNING DMM not found -- Logic IDD/VOUT/cap_load and OpAmp VOL need it")
         self._log(f"Session open: {list(self._mapping)}")
-        return dict(self._mapping)
+        out = dict(self._mapping)
+        try:
+            from ate.tests.logic.excel_lock import bind_golden_auto
+
+            dest = bind_golden_auto(get_context())
+            if dest:
+                out["golden_auto"] = dest
+                out["lab_report"] = dest
+                self._log(f"Excel golden_auto (never ultimate_manual): {dest}")
+        except Exception as exc:
+            self._log(f"Excel golden_auto bind: {exc}")
+        return out
 
     def close_session(self) -> None:
         if self._instr is None:
@@ -259,12 +295,29 @@ class ATECore:
         try:
             ctx = get_context()
             ctx.ensure_tree()
-            if not params.lab_report:
-                params = replace(params, lab_report=str(ctx.lab_report_path()))
+            try:
+                from ate.tests.logic.excel_lock import (
+                    UltimateWorkbook,
+                    coerce_golden_auto_lab_report,
+                )
+
+                bound = coerce_golden_auto_lab_report(ctx, params.lab_report)
+                if bound:
+                    params = replace(params, lab_report=bound)
+                elif not params.lab_report:
+                    params = replace(params, lab_report=str(ctx.lab_report_path()))
+            except UltimateWorkbook:
+                raise
+            except Exception:
+                if not params.lab_report:
+                    params = replace(params, lab_report=str(ctx.lab_report_path()))
 
             duts = params.resolved_duts()
             channels = params.resolved_channels()
             batches = group_by_fixture(test_ids)
+            batches, channels = _apply_part_dual_channel(
+                params.part, batches, channels
+            )
             gains = {m: mode_gain(m, params.part) for m, _ in batches}
             plan = [
                 {"mode": m, "tests": [s.id for s in specs], "gain": gains[m]}
@@ -622,25 +675,28 @@ class ATECore:
 
                             def _pause(
                                 title: str,
-                                *,
+                                *args,
+                                checklist=None,
                                 _dut=dut,
                                 _spec=spec,
+                                **kwargs,
                             ) -> bool:
                                 if _spec.id == "gbw":
                                     self._log(
                                         f"GBW checkpoint (auto-continue): {title}"
                                     )
                                     return True
+                                items = list(checklist) if checklist is not None else [
+                                    "Confirm AWG CH1 output is ON",
+                                    "Scope CH1=IN+, CH2=VOUT",
+                                    "Then Continue",
+                                ]
                                 return self._ask_operator(
                                     title=title,
                                     kind="config_change",
                                     dut_index=_dut,
                                     test_tag=short_test_tag(_spec),
-                                    checklist=[
-                                        "Confirm AWG CH1 output is ON",
-                                        "Scope CH1=IN+, CH2=VOUT",
-                                        "Then Continue",
-                                    ],
+                                    checklist=items,
                                 )
 
                             batch_params.progress_hook = _hook
@@ -756,16 +812,34 @@ class ATECore:
                                         "auto-continue next unit (no Continue popup)"
                                     )
                                     continue
+                                fail_list = [
+                                    f"Error: {err[:180]}",
+                                    "Bench is SAFE IDLE (PSU/AWG OFF)",
+                                    "Continue -> next DUT, or Abort to stop",
+                                ]
+                                try:
+                                    from ate.tests.logic.product_model import (
+                                        format_fail_lines,
+                                        has_product_model,
+                                        load_product_model,
+                                    )
+
+                                    part_key = str(getattr(batch_params, "part", "") or "").strip().lower()
+                                    if has_product_model(part_key):
+                                        model = load_product_model(part_key)
+                                        if model is not None:
+                                            fail_list = format_fail_lines(
+                                                model, spec.id, err, dut
+                                            )
+                                            fail_list.append("Bench is SAFE IDLE (PSU/AWG OFF)")
+                                except Exception:
+                                    pass
                                 ok = self._ask_operator(
                                     title=f"{st} · DUT #{dut} {use_ch} FAILED",
                                     kind="dut_change",
                                     dut_index=dut,
                                     test_tag=st,
-                                    checklist=[
-                                        f"Error: {err[:180]}",
-                                        "Bench is SAFE IDLE (PSU/AWG OFF)",
-                                        "Continue -> next DUT, or Abort to stop",
-                                    ],
+                                    checklist=fail_list,
                                     next_hint="Continue to next unit, or Abort",
                                 )
                                 if not ok:

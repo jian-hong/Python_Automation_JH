@@ -1,5 +1,7 @@
-# RS1G97 Logic configurable gate — RUN-IC small logic. Owner Lim.
-# Lim codes in Downloads/code/RS1G97 — not imported.
+# RS1G97 Logic configurable gate -- Path B product_model.
+# Lim codes in Downloads/code/RS1G97 -- not imported.
+# truth_table / isolation: CONFIRMED. Jian Hong signed 2026-09-17
+# (RS1G97_card_CONFIRMED.md). See Lim goldens: seelim_dc locator only.
 
 part: RS1G97
 model: RS1G97
@@ -19,20 +21,245 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
+# CONFIRMED VOH/VOL Full load grid (same table as RS1G126). Jian Hong 2026-09-17.
+# 100uA @1.65-5.5 expanded onto CONFIRMED vcc_list only. VOH min = VCC-0.1.
+# PSU CH2 is Y-load: VOH sink rail 0V; VOL source rail = VCC. Not datasheet Vref.
+voh_table:
+  - {id: VOH_1p65V_100uA, vcc: 1.65, ioh_a: -0.0001, spec_min: 1.55}
+  - {id: VOH_2p3V_100uA, vcc: 2.3, ioh_a: -0.0001, spec_min: 2.2}
+  - {id: VOH_3p0V_100uA, vcc: 3.0, ioh_a: -0.0001, spec_min: 2.9}
+  - {id: VOH_4p5V_100uA, vcc: 4.5, ioh_a: -0.0001, spec_min: 4.4}
+  - {id: VOH_5p5V_100uA, vcc: 5.5, ioh_a: -0.0001, spec_min: 5.4}
+  - {id: VOH_1p65V_4mA, vcc: 1.65, ioh_a: -0.004, spec_min: 1.2}
+  - {id: VOH_2p3V_8mA, vcc: 2.3, ioh_a: -0.008, spec_min: 1.9}
+  - {id: VOH_3p0V_16mA, vcc: 3.0, ioh_a: -0.016, spec_min: 2.4}
+  - {id: VOH_3p0V_24mA, vcc: 3.0, ioh_a: -0.024, spec_min: 2.3}
+  - {id: VOH_4p5V_32mA, vcc: 4.5, ioh_a: -0.032, spec_min: 3.8}
+vol_table:
+  - {id: VOL_1p65V_100uA, vcc: 1.65, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_2p3V_100uA, vcc: 2.3, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_3p0V_100uA, vcc: 3.0, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p5V_100uA, vcc: 4.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p5V_100uA, vcc: 5.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_1p65V_4mA, vcc: 1.65, iol_a: 0.004, spec_max: 0.45}
+  - {id: VOL_2p3V_8mA, vcc: 2.3, iol_a: 0.008, spec_max: 0.3}
+  - {id: VOL_3p0V_16mA, vcc: 3.0, iol_a: 0.016, spec_max: 0.4}
+  - {id: VOL_3p0V_24mA, vcc: 3.0, iol_a: 0.024, spec_max: 0.55}
+  - {id: VOL_4p5V_32mA, vcc: 4.5, iol_a: 0.032, spec_max: 0.55}
+
+# Path B DC ids. No ioz (oe none). No ioff (Ioff is a different datasheet
+# partial-power-down param, not Path B DC). tp stays AC.
 enabled_tests:
   - tp
-  - supply_current
-  - input_thresholds
-  - ioff_leakage
+  - input_threshold
+  - vth
+  - icc
+  - delta_icc
+  - ii
+  - voh
+  - vol
 
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1G97 / Lim)"
+    label: "Logic board (RS1G97 / Path B DC)"
     board_class: general
     checklist:
       - "RS1G97 is configurable logic, not analog switch."
+      - "truth_table.status=CONFIRMED (Jian Hong 2026-09-17; Datasheet §4). Not a bench green."
+      - "AWG CH1=A CH2=B; PSU CH1=VCC CH3=C static; CH2 is Y-load/vref for VOH/VOL (no IOZ: oe none)."
+      - "See Lim goldens are detect-only (seelim_dc locator). Limits stay in ate/config/limits."
     tests:
       - tp
-      - supply_current
-      - input_thresholds
-      - ioff_leakage
+      - input_threshold
+      - vth
+      - icc
+      - delta_icc
+      - ii
+      - voh
+      - vol
+
+product_model:
+  part: RS1G97
+  status: CONFIRMED
+  confirmed_by: Jian Hong
+  confirmed_at: "2026-09-17"
+  source_card: RS1G97_card_CONFIRMED.md
+  truth_table_status: CONFIRMED
+  isolation_status: CONFIRMED
+  schmitt: true
+  oe: none
+  output_pin: Y
+  vcc_op_min: 1.65  # range metadata (datasheet recommended VCC). Not a sweep.
+  vcc_op_max: 5.5
+  vcc_op_status: RANGE_METADATA
+  vcc_list: [1.65, 2.3, 3.0, 4.5, 5.5]
+  vcc_list_status: CONFIRMED
+  logic_inputs: [A, B, C]
+  # Datasheet §7 PIN DESCRIPTION SOT23-6/SC70-6: B=1 GND=2 A=3 Y=4 VCC=5 C=6
+  pins:
+    - {name: B, role: input, number: 1}
+    - {name: GND, role: gnd, number: 2}
+    - {name: A, role: input, number: 3}
+    - {name: Y, role: output, number: 4}
+    - {name: VCC, role: vcc, number: 5}
+    - {name: C, role: input, number: 6}
+  # C on PSU CH3 so CH2 stays Y-load/vref (force/sense). PROVISIONAL fixture map.
+  pin_drive:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+    C: {src: psu, ch: 3}
+  recipe:
+    threshold_step_v: 0.05
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null  # current settle: null = NON_TIGHT; do not invent uA
+    settle_timeout_s: 2.0
+    icc_corners: 8  # 2^3
+    delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
+    delta_vcc_min: 3.0    # datasheet dICC: 3V to 5.5V
+  # Schmitt VT+/VT- = range. Not a single input_threshold:range collapse.
+  # pass_mode keys from CONFIRMED card (vth_vt_plus / hysteresis).
+  pass_mode:
+    vth_vt_plus: range
+    vth_vt_minus: range
+    hysteresis: range
+    VT+: range
+    VT-: range
+    HYST: range
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  limit_mode:
+    VT+: range
+    VT-: range
+    HYST: range
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    # Numbers live in ate/config/limits/rs1g97.yaml. Do not invent IOH/IOL.
+    icc: {spec_id: ICC_uA, limit_mode: max_only}
+    delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
+    ii: {spec_id: II_uA, limit_mode: max_only}
+    voh: {status: CONFIRMED, note: "wired CONFIRMED Full IOH grid; PSU CH2 Y-load"}
+    vol: {status: CONFIRMED, note: "wired CONFIRMED Full IOL grid; PSU CH2 Y-load"}
+  # AE/FAE handoff. From CONFIRMED pins + pin_drive only. Never invent nets.
+  wire_map:
+    source: pins+pin_drive
+    status: CONFIRMED
+    note: "From CONFIRMED pins + pin_drive. PSU CH1=VCC (role vcc). PSU CH2=Y-load (CONFIRMED VOH/VOL fixture). Do not invent nets."
+    psu:
+      CH1: {pin: VCC, number: 5, role: vcc}
+      CH2: {pin: Y, number: 4, role: output, use: load}
+      CH3: {pin: C, number: 6, role: input}
+    awg:
+      CH1: {pin: A, number: 3, role: input}
+      CH2: {pin: B, number: 1, role: input}
+    gnd: {pin: GND, number: 2, role: gnd}
+    tests:
+      tp:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      input_threshold:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      vth:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      icc:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      delta_icc:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      ii:
+        psu: [CH1, CH3]
+        awg: [CH1, CH2]
+        dmm: [A, B, C]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      voh:
+        psu: [CH1, CH2, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      vol:
+        psu: [CH1, CH2, CH3]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+  settle_prompt:
+    wait: true
+    voltage: "V eps/N: wait settle_s then stable_n within stable_eps_V; timeout hard-FAIL"
+    current_null: "I NON_TIGHT: wait settle_s once then measure (stable_eps_A null; not greenable as tight-settle)"
+    current_tight: "I tight: wait settle_s then stable_n within stable_eps_A; timeout hard-FAIL"
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    csv: sessions/csv/
+    report_pdf: report.pdf
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
+  workbook_policy:
+    golden_auto: one_per_version_overwrite
+    auto: one_per_version_overwrite
+    ultimate_manual: never_auto_write
+    pretty: never_auto_write
+  excel_plots:
+    series:
+      - vtplus_vs_vcc
+      - vtminus_vs_vcc
+      - dvt_vs_vcc
+      - icc_vs_vcc
+      - delta_icc_vs_vcc
+      - ii_vs_vcc
+      - voh_at_ioh
+      - vol_at_iol
+  # Datasheet §4 FUNCTION TABLE (A B C -> Y). CONFIRMED Jian Hong 2026-09-17.
+  # LLL->L HLL->L LHL->H HHL->H LLH->L HLH->H LHH->L HHH->H
+  truth_table:
+    status: CONFIRMED
+    source: "datasheet §4 / RS1G97_(RevA.2.1)"
+    rows:
+      - {A: L, B: L, C: L, Y: L}
+      - {A: H, B: L, C: L, Y: L}
+      - {A: L, B: H, C: L, Y: H}
+      - {A: H, B: H, C: L, Y: H}
+      - {A: L, B: L, C: H, Y: L}
+      - {A: H, B: L, C: H, Y: H}
+      - {A: L, B: H, C: H, Y: L}
+      - {A: H, B: H, C: H, Y: H}
+  # Isolation from CONFIRMED §4 rows (unused ties). C-track A:H B:L unlocked.
+  isolation:
+    status: CONFIRMED
+    source: "derived from truth_table (Datasheet §4); Jian Hong 2026-09-17"
+    tests:
+      A:
+        - {sweep_pin: A, fix: {B: L, C: H}, y_expect: track}
+        - {sweep_pin: A, fix: {B: H, C: H}, y_expect: track}
+      B:
+        - {sweep_pin: B, fix: {A: L, C: L}, y_expect: track}
+      C:
+        - {sweep_pin: C, fix: {A: H, B: L}, y_expect: track}
+        - {sweep_pin: C, fix: {A: L, B: H}, y_expect: invert, vil_sweep: reverse}
+  threshold_isolation:
+    - {sweep: C, hold: {A: H, B: L}, y_tracks: true}
+    - {sweep: C, hold: {A: L, B: H}, y_tracks: false, vil_sweep: reverse}
+  gaps:
+    - "Q1V / automotive: UNSURE on card -- leave unset"
+    - "Ioff at VCC=0 is on card; Path B IOZ stays OFF (oe: none)"
+    - "oe=none: do not enable ioz/ioff"

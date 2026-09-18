@@ -325,9 +325,14 @@ def sync_report_from_session(session: dict[str, Any], *, ctx=None) -> Path:
     _recompute_header(doc, session)
     path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
     try:
-        from ate.reporting.sts_datalog import export_sts
+        from ate.reporting.sts_datalog import export_latest_report
 
-        export_sts(doc, c.sessions_dir())
+        version_dir = None
+        try:
+            version_dir = Path(c.root()) if hasattr(c, "root") else None
+        except Exception:
+            version_dir = None
+        export_latest_report(doc, sessions_dir=c.sessions_dir(), version_dir=version_dir)
     except Exception:
         pass
     return path

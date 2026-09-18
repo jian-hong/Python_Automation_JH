@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=20260911handover1" />
+  <link rel="stylesheet" href="styles.css?v=20260918logicdc12" />
 </head>
 <body>
   <div class="bg"></div>
@@ -206,7 +206,7 @@
             </div>
             <p class="hint" id="np-hint">Folders: #Test_Database / {class} / {part} / {package} / {operator} / Version_1. Create copies the tracking-sheet xlsx into workbook/ when a report path exists. DEMO never stamps PASS.</p>
             <h3 class="subhead">Detected tests (golden + ate/tests)</h3>
-            <p class="hint">AST scan only -- never runs golden code. Rows with input() stay blocked until rewritten to Continue. Wrap writes a TestSpec scaffold; copy enables ids on another same-family part.</p>
+            <p class="hint">Path C of STANDARD FORMAT. AST scan only -- never runs golden code. Rows with input() stay blocked until rewritten to Continue. Tick wrap-ready rows then <strong>Wrap + enable on part</strong>. Copy enables ids on another same-family part.</p>
             <div class="row" style="margin-top:8px; align-items:flex-end; gap:8px; flex-wrap:wrap">
               <button type="button" id="btn-refresh-detected" class="btn ghost">Refresh scan</button>
               <label>Wrap family
@@ -263,8 +263,8 @@
             <div id="param-advanced" class="param-advanced hidden">
               <div class="param-grid">
                 <label>VCC (V)<input id="vcc" type="number" step="0.1" value="5.0" /></label>
-                <label>Freq (Hz)<input id="freq" type="number" step="1" value="500" /></label>
-                <label>Amp Vpp<input id="amp" type="number" step="0.001" value="0.004" /></label>
+                <label id="freq-label">Freq (Hz)<input id="freq" type="number" step="1" value="500" /></label>
+                <label id="amp-label">Amp Vpp<input id="amp" type="number" step="0.001" value="0.004" /></label>
                 <label>Repeats<input id="repeats" type="number" step="1" value="3" /></label>
               </div>
               <label class="check"><input id="reset" type="checkbox" /> Reset instruments before run</label>
@@ -278,6 +278,39 @@
             <div id="run-conditions" class="param-grid"></div>
           </div>
 
+          <div class="glass panel wide hidden" id="panel-logic-dc">
+            <h2>Logic DC recipe</h2>
+            <p class="hint">Path B of STANDARD FORMAT (checklist is under Test program). Same TestSpec ids; SKU differs by truth table + pin roles + limits. UNCONFIRMED / PROVISIONAL is not Datasheet-signed and not greenable. Isolation is unused ties from the table (Y tracks the swept pin). PROPOSED / HOLD CONFIRM rows stay visible and are skipped at run.</p>
+            <p class="hint" id="logic-dc-status">Apply a Logic campaign with product_model to edit.</p>
+            <p class="hint" id="logic-dc-meta"></p>
+            <div id="logic-dc-gaps" class="hint"></div>
+            <div id="logic-dc-body"></div>
+            <details id="logic-dc-json" class="logic-dc-json">
+              <summary>YAML JSON (engineer -- Save product_model)</summary>
+              <div class="param-grid">
+                <label>vcc_list
+                  <input id="logic-dc-vcc-list" data-card-field="vcc_list" data-card-type="list_csv" type="text" />
+                </label>
+                <label>pass_mode (JSON)
+                  <textarea id="logic-dc-pass-mode" data-card-field="pass_mode" data-card-type="json" class="mono-edit" rows="5"></textarea>
+                </label>
+              </div>
+              <label class="logic-dc-block">truth_table
+                <textarea id="logic-dc-truth" data-card-field="truth_table" data-card-type="json" class="mono-edit" rows="10"></textarea>
+              </label>
+              <label class="logic-dc-block">isolation
+                <textarea id="logic-dc-isolation" data-card-field="isolation" data-card-type="json" class="mono-edit" rows="8"></textarea>
+              </label>
+              <div class="row" style="margin-top:8px">
+                <button type="button" id="btn-save-logic-dc" class="btn">Save product_model</button>
+              </div>
+            </details>
+            <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px">
+              <button type="button" id="btn-save-test-params" class="btn accent">Save Version overlay</button>
+            </div>
+            <p class="hint" id="logic-dc-hint">Save Version overlay writes this campaign <code>_manifest/test_params.yaml</code> only (vcc_grid + merged vcc_list + pass_mode + sample_size + stable_eps_A). Save product_model writes every <code>docs/datasheet/card_fields.schema.yaml</code> field (assign/edit/delete). Cannot promote Datasheet-signed. Customise Parameters is not xyflow.</p>
+          </div>
+
           <div class="glass panel" id="panel-gain-boards">
             <h2>Board gains (locked)</h2>
             <p class="hint">Gain follows the physical board — not a software knob. VOS ≈201 is research-only.</p>
@@ -286,10 +319,22 @@
 
           <div class="glass panel wide">
             <h2>Test program</h2>
-            <p class="hint">Boards start collapsed. Tick the tests to run (Select all / Clear). Order: category (board) → channel → DUTs → tests.</p>
+            <div id="add-test-format" class="add-test-format">
+              <p class="hint"><strong>STANDARD FORMAT</strong> -- stop at the first row that holds. Same three paths as AGENTS.md. Detail: docs/LOGIC_DC.md. No wizard-Python.</p>
+              <table class="logic-dc-table">
+                <thead><tr><th>Path</th><th>Live UI</th><th>Check</th></tr></thead>
+                <tbody>
+                  <tr><td>A -- new body</td><td>register(TestSpec); checkbox appears here after worker restart</td><td>check_family_load</td></tr>
+                  <tr><td>B -- Logic DC recipe</td><td>Logic DC recipe panel (same DC ids, yaml)</td><td>check_logic_dc / check_add_test</td></tr>
+                  <tr><td>C -- Detect / Wrap</td><td>Detected tests (golden + ate/tests) then Wrap + enable on part</td><td>check_test_detect</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="hint">Boards start collapsed. Tick the tests to run (Select all / Clear). Order: category (board) -> channel -> DUTs -> tests. pass_mode per spec is editable below (range / min-only / max-only / fail-open / unspec). Save Version overlay writes campaign _manifest/test_params.yaml. Missing min/max stay unspec unless fail-open.</p>
             <div class="row test-list-actions">
               <button type="button" id="btn-tests-all" class="btn ghost">Select all</button>
               <button type="button" id="btn-tests-none" class="btn ghost">Clear</button>
+              <button type="button" id="btn-save-pass-mode" class="btn ghost">Save pass_mode overlay</button>
             </div>
             <div id="test-plans" class="test-plans"></div>
             <div id="test-list" class="test-list"></div>
@@ -344,13 +389,13 @@
         </div>
         <div class="glass panel wide">
           <h2>Last results</h2>
-          <table id="results-table"><thead><tr><th>DUT</th><th>Test</th><th>Param</th><th>Min</th><th>Max</th><th>Typ</th><th>Value</th><th>Result</th><th>Summary</th></tr></thead><tbody></tbody></table>
+          <table id="results-table"><thead><tr><th>DUT</th><th>Test</th><th>Param</th><th>Mode</th><th>Min</th><th>Max</th><th>Typ</th><th>Value</th><th>Result</th><th>Summary</th></tr></thead><tbody></tbody></table>
           <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:6px">
             <button type="button" id="btn-export-datalog" class="btn accent">Export STS datalog</button>
             <button type="button" id="btn-fill-excel" class="btn">Fill Excel numbers</button>
             <button type="button" id="btn-fetch-datasheet" class="btn ghost">Fetch limits (local PDF first)</button>
           </div>
-          <p class="hint" id="results-db-hint">Limits: ate/config/limits/&lt;part&gt;.yaml from local Reference PDFs first. Each test checkbox shows datasheet min/max/typ when stamped. Fill Excel uses sheet_map paste.values. Photos go in paste.photos cells (RS622 TTSOP = 8 boxes per sheet, ORT = 16). Export writes sessions/datalog.md|.html|.pdf with PASS/FAIL. Never dump the RUN-IC catalog into #Test_Database.</p>
+          <p class="hint" id="results-db-hint">Limits: ate/config/limits/&lt;part&gt;.yaml from local Reference PDFs first. Each test checkbox shows datasheet min/max/typ when stamped. Fill Excel: Path B overwrites the Version auto/golden_auto xlsx (pretty never auto, never ultimate_manual, never an orphan second Version book). Mapped/OpAmp uses sheet_map paste.values. Photos go in paste.photos cells (RS622 TTSOP = 8 boxes per sheet, ORT = 16). Export writes sessions/datalog.md|.html|.pdf with PASS/FAIL. Never dump the RUN-IC catalog into #Test_Database.</p>
         </div>
         <div class="glass panel wide" id="panel-layout">
           <h2>Waveform layout</h2>
@@ -448,6 +493,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260911photo1"></script>
+  <script src="app.js?v=20260918logicdc17"></script>
 </body>
 </html>

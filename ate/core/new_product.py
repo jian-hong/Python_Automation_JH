@@ -462,7 +462,7 @@ def ensure_version(
         cand = campaign_root(component, part, package, src_ver, operator=op, base=base)
         if cand.is_dir():
             src_root = cand
-    for name in ("sheet_map.yaml", "test_catalog.yaml"):
+    for name in ("sheet_map.yaml", "test_catalog.yaml", "test_params.yaml"):
         dest = root / "_manifest" / name
         if dest.is_file():
             continue
@@ -478,9 +478,11 @@ def ensure_version(
                 f"operator: {op}\nversion: {ver}\ntests: {{}}\n",
                 encoding="utf-8",
             )
-        else:
+            created.append(str(dest))
+        elif name == "test_catalog.yaml":
             dest.write_text("enabled_tests: []\n", encoding="utf-8")
-        created.append(str(dest))
+            created.append(str(dest))
+        # test_params.yaml: copy from prior Version only; do not invent a stub.
 
     applied = None
     if apply and base is None:

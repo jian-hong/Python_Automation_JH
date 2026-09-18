@@ -76,7 +76,8 @@ Full table: [AGENTS.md](AGENTS.md). Cheat sheet:
 | New person | `ate/config/owners.yaml` |
 | Tracking SKU | `ate/config/inventory.yaml` |
 | Part recipe / enabled tests | `ate/config/parts/<key>.yaml` |
-| New measurement | `ate/tests/<family>/` + `register(TestSpec)` |
+| New measurement | Path A `ate/tests/<family>/` + `register(TestSpec)`; Path B `docs/LOGIC_DC.md`; Path C Setup Detected tests -> Wrap |
+| Logic DC SKU | `docs/LOGIC_DC.md` (STANDARD FORMAT) -- truth + pins + limits, not a forked runner |
 | New family | Setup Import family or `extra_families.yaml` |
 | Photo cells | campaign `_manifest/sheet_map.yaml` |
 | Console UI | `ate/ui/web/` + UI_CONTRACT |

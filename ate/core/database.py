@@ -172,17 +172,36 @@ class DbContext:
     def test_catalog_path(self) -> Path:
         return self.manifest_dir() / "test_catalog.yaml"
 
+    def test_params_path(self) -> Path:
+        return self.manifest_dir() / "test_params.yaml"
+
     def lab_report_path(self) -> Path:
+        # Path B: Continue/START bind fill/plot to golden_auto Version path only.
+        try:
+            from ate.tests.logic.excel_lock import bind_golden_auto
+
+            bound = bind_golden_auto(self)
+            if bound:
+                return Path(bound)
+        except Exception:
+            pass
         # Prefer sheet_map workbook path; else first xlsx in workbook/; else part yaml.
         sm = self.load_sheet_map()
         rel = ((sm.get("workbook") or {}) if isinstance(sm, dict) else {}).get("path")
         if rel:
             candidate = (self.manifest_dir() / str(rel)).resolve()
             if candidate.is_file():
-                return candidate
+                from ate.tests.logic.excel_lock import is_ultimate_path
+
+                if not is_ultimate_path(candidate):
+                    return candidate
         wb = self.workbook_dir()
         if wb.is_dir():
-            xlsx = sorted(wb.glob("*.xlsx"))
+            from ate.tests.logic.excel_lock import is_ultimate_path
+
+            xlsx = sorted(
+                p for p in wb.glob("*.xlsx") if p.is_file() and not is_ultimate_path(p)
+            )
             if xlsx:
                 return xlsx[0]
         return wb / f"{self.model}_Lab_Report_{self.package}.xlsx"
@@ -279,6 +298,62 @@ class DbContext:
         with path.open(encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
         return data if isinstance(data, dict) else {}
+
+    def load_test_params(self) -> dict[str, Any]:
+        """Version overlay (PRD-004): vcc_list, levels, rails, pass_mode."""
+        path = self.test_params_path()
+        if not path.is_file():
+            return {}
+        with path.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+        return data if isinstance(data, dict) else {}
+
+    def save_test_params(self, blob: dict[str, Any] | None) -> dict[str, Any]:
+        """Write campaign _manifest/test_params.yaml. Does not edit part yaml."""
+        require_write_operator(self.operator)
+        allowed = (
+            "vcc_list",
+            "vcc_sweep_list",
+            "vcc_grid",
+            "vcc_plan",
+            "sample_size",
+            "levels",
+            "rails",
+            "pass_mode",
+            "logic_inputs",
+            "isolation",
+            "threshold_isolation",
+            "gaps",
+            "oe",
+            "schmitt",
+            "stable_eps_A",
+            "recipe",
+        )
+        incoming = blob if isinstance(blob, dict) else {}
+        existing = self.load_test_params()
+        for key in allowed:
+            if key in incoming:
+                existing[key] = incoming[key]
+        if "vcc_plan" in existing and "vcc_grid" not in incoming:
+            plan = existing.get("vcc_plan")
+            if isinstance(plan, dict):
+                existing["vcc_grid"] = plan
+        elif "vcc_grid" in existing:
+            existing["vcc_plan"] = existing.get("vcc_grid")
+        if existing.get("sample_size") is not None:
+            try:
+                self.sample_size = max(1, int(existing["sample_size"]))
+            except (TypeError, ValueError):
+                pass
+        self.manifest_dir().mkdir(parents=True, exist_ok=True)
+        path = self.test_params_path()
+        text = (
+            "# Version overlay (PRD-004 / EPIC-A28). Does not change part yaml or limits yaml.\n"
+            "# Keys: vcc_list, vcc_grid, vcc_plan, sample_size, levels, rails, pass_mode, logic_inputs, isolation, stable_eps_A.\n"
+            + yaml.safe_dump(existing, sort_keys=False, allow_unicode=True)
+        )
+        path.write_text(text, encoding="utf-8")
+        return {"ok": True, "path": str(path), "test_params": existing}
 
     def test_entry(self, test_key: str) -> dict[str, Any]:
         sm = self.load_sheet_map()
@@ -700,6 +775,12 @@ def set_context(
             ctx.version = str(sm.get("version") or ctx.version)
             if sm.get("sample_size"):
                 ctx.sample_size = int(sm["sample_size"])
+        tp = ctx.load_test_params()
+        if isinstance(tp, dict) and tp.get("sample_size") is not None:
+            try:
+                ctx.sample_size = max(1, int(tp["sample_size"]))
+            except (TypeError, ValueError):
+                pass
         ctx.ensure_tree()
         _active = ctx
         return ctx
@@ -873,7 +954,8 @@ def record_step(
         from ate.core.specs import any_fail, enrich_measurement, load_part_specs
 
         pk = str(get_context().part_key or "")
-        specs = load_part_specs(pk)
+        overlay = get_context().load_test_params()
+        specs = load_part_specs(pk, overlay=overlay)
         stamped = [
             enrich_measurement(dict(m), specs=specs, test_id=test_id)
             for m in measurements

@@ -687,6 +687,27 @@ select {
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
+.mono-edit {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  margin-top: 4px;
+  padding: 7px 8px;
+  border-radius: var(--radius);
+  background: #0e1115;
+  border: 1px solid var(--dg4);
+  color: var(--g5);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+}
+label.logic-dc-block {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
 .param-section {
   margin: 8px 0 10px;
   padding: 10px;
@@ -904,7 +925,51 @@ h3.subhead {
   font-weight: 600;
   color: var(--text);
 }
-#panel-run-conditions.hidden { display: none; }
+.panel-run-conditions.hidden,
+#panel-run-conditions.hidden,
+#panel-logic-dc.hidden { display: none; }
+
+.logic-dc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  margin: 6px 0 12px;
+}
+.logic-dc-table th,
+.logic-dc-table td {
+  text-align: left;
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.logic-dc-table select {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+}
+.logic-dc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.vcc-chip, .vcc-range-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  padding: 6px 8px;
+  margin: 4px 0;
+}
+.vcc-chip label, .vcc-range-row label { margin: 0; }
+.vcc-chip input, .vcc-range-row input { width: 5.5em; }
+.vcc-range-row input.vcc-range-label { width: 8em; }
+.logic-dc-stim { display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0; }
+.logic-dc-json { margin-top: 10px; }
+.logic-dc-json summary { cursor: pointer; color: var(--muted); font-size: var(--fs-sm); }
+#logic-dc-card-fields textarea { width: 100%; min-height: 3.2em; }
+.logic-dc-del { font-size: var(--fs-xs); padding: 2px 8px; }
+.test-spec-block { flex: 1; min-width: 0; }
+.test-spec-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; }
+.test-pass-mode { font-family: var(--mono); font-size: var(--fs-xs); }
+.add-test-format { margin: 0 0 10px; }
+.add-test-format .logic-dc-table { margin-top: 6px; }
 
 .test-plan { margin-bottom: 10px; }
 .test-plan.hidden { display: none; }

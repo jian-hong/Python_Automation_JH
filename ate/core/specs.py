@@ -35,7 +35,52 @@ def load_part_yaml(part_key: str = "") -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def load_part_specs(part_key: str = "") -> list[dict[str, Any]]:
+def normalize_pass_mode(raw: Any) -> str:
+    """Canonical: range | min-only | max-only | fail-open | unspec | empty."""
+    s = str(raw or "").strip().lower().replace("_", "-")
+    if s in ("min-only", "min"):
+        return "min-only"
+    if s in ("max-only", "max"):
+        return "max-only"
+    if s in ("range", "minmax", "min-max"):
+        return "range"
+    if s in ("fail-open", "failopen"):
+        return "fail-open"
+    if s in ("unspec", "unspecified"):
+        return "unspec"
+    return ""
+
+
+def infer_pass_mode(spec: dict[str, Any]) -> str:
+    """DC Spec defaults when yaml omits pass_mode. Empty if still unknown."""
+    existing = normalize_pass_mode(spec.get("pass_mode"))
+    if existing:
+        return existing
+    sid = str(spec.get("id") or "").strip().upper()
+    test = str(spec.get("test") or "").strip().lower()
+    if any(tok in sid for tok in ("VTPLUS", "VTMINUS", "HYST", "VCC_")):
+        return "range"
+    if sid.startswith("VIH") or sid.startswith("VOH") or test in ("vih", "voh", "voh_load"):
+        return "min-only"
+    if sid.startswith("VIL") or sid.startswith("VOL") or test in ("vil", "vol", "vol_load"):
+        return "max-only"
+    if any(tok in sid for tok in ("ICC", "DELTA_ICC", "IOZ", "IOFF", "IIN")) or sid.startswith("II_"):
+        return "max-only"
+    if test in ("icc", "delta_icc", "ii", "ioz", "ioff", "ioff_leakage", "input_leakage_sweep"):
+        return "max-only"
+    if spec.get("min") is not None and spec.get("max") is not None:
+        return "range"
+    if spec.get("max") is not None and spec.get("min") is None:
+        return "max-only"
+    if spec.get("min") is not None and spec.get("max") is None:
+        return "min-only"
+    return ""
+
+
+def load_part_specs(
+    part_key: str = "",
+    overlay: Optional[dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
     pk = str(part_key or "").strip().lower()
     rows: list[Any] = []
     lim = LIMITS_DIR / f"{pk}.yaml"
@@ -56,7 +101,23 @@ def load_part_specs(part_key: str = "") -> list[dict[str, Any]]:
         item["max"] = _num(item.get("max"))
         item["typ"] = _num(item.get("typ"))
         stacked[item["id"]] = item
-    return list(stacked.values())
+    mode_overlay: dict[str, Any] = {}
+    if isinstance(overlay, dict):
+        inner = overlay.get("pass_mode") if isinstance(overlay.get("pass_mode"), dict) else overlay
+        if isinstance(inner, dict):
+            mode_overlay = {str(k): v for k, v in inner.items()}
+    out: list[dict[str, Any]] = []
+    for item in stacked.values():
+        sid = item["id"]
+        test = str(item.get("test") or "")
+        if sid in mode_overlay:
+            item["pass_mode"] = normalize_pass_mode(mode_overlay[sid])
+        elif test in mode_overlay:
+            item["pass_mode"] = normalize_pass_mode(mode_overlay[test])
+        else:
+            item["pass_mode"] = infer_pass_mode(item)
+        out.append(item)
+    return out
 
 
 def test_info_map(part_key: str = "") -> dict[str, dict[str, Any]]:
@@ -95,12 +156,28 @@ def load_part_datasheet(part_key: str = "") -> dict[str, Any]:
     return ds
 
 
-def judge_value(value: Any, mn: Any, mx: Any) -> str:
-    """pass / fail / unspec. typ is display-only."""
+def judge_value(value: Any, mn: Any, mx: Any, pass_mode: Any = None) -> str:
+    """pass / fail / unspec. typ is display-only.
+
+    pass_mode: range (both), min_only / min-only, max_only / max-only,
+    fail-open (missing limits -> fail, never fake PASS), unspec (missing
+    limits stay unspec). Empty infers from whichever of min/max is present.
+    """
+    mode = normalize_pass_mode(pass_mode)
+    if mode == "unspec":
+        return "unspec"
+    if mode == "min-only":
+        mx = None
+    elif mode == "max-only":
+        mn = None
     v = _num(value)
     lo = _num(mn)
     hi = _num(mx)
-    if v is None or (lo is None and hi is None):
+    if lo is None and hi is None:
+        if mode == "fail-open":
+            return "fail"
+        return "unspec"
+    if v is None:
         return "unspec"
     if lo is not None and v < lo:
         return "fail"
@@ -113,9 +190,31 @@ def _test_aliases(tid: str) -> set[str]:
     t = str(tid or "").strip().lower()
     if not t:
         return set()
-    if t in ("supply_current", "supply_current_sweep"):
-        return {"supply_current", "supply_current_sweep"}
+    groups = (
+        {"supply_current", "supply_current_sweep", "icc"},
+        {"delta_supply_current", "delta_icc"},
+        {"input_thresholds", "input_threshold", "vth"},
+        {"voh", "voh_load"},
+        {"vol", "vol_load"},
+        {"input_leakage_sweep", "ii"},
+        {"ioz", "ioff", "ioff_leakage"},
+    )
+    for g in groups:
+        if t in g:
+            return set(g)
     return {t}
+
+
+def specs_for_test(specs: list[dict[str, Any]], test_id: str) -> list[dict[str, Any]]:
+    aliases = _test_aliases(test_id)
+    tid = str(test_id or "").strip().lower()
+    out: list[dict[str, Any]] = []
+    for row in specs:
+        test = str(row.get("test") or "").strip().lower()
+        rid = str(row.get("id") or "").strip().lower()
+        if test in aliases or rid == tid or rid in aliases:
+            out.append(row)
+    return out
 
 
 def _spec_for(specs: list[dict[str, Any]], meas_id: str, test_id: str = "") -> dict[str, Any] | None:
@@ -137,6 +236,7 @@ def enrich_measurement(
     *,
     specs: list[dict[str, Any]] | None = None,
     test_id: str = "",
+    part_key: str = "",
 ) -> dict[str, Any]:
     row = dict(raw)
     sid = str(row.get("id") or row.get("name") or test_id or "").strip()
@@ -154,7 +254,28 @@ def enrich_measurement(
             row["unit"] = spec["unit"]
         if not row.get("source") and spec.get("source"):
             row["source"] = spec["source"]
-    row["result"] = judge_value(row.get("value"), row.get("min"), row.get("max"))
+        if not normalize_pass_mode(row.get("pass_mode")) and spec.get("pass_mode"):
+            row["pass_mode"] = spec["pass_mode"]
+    if not normalize_pass_mode(row.get("pass_mode")) and part_key:
+        try:
+            from ate.tests.logic.product_model import has_product_model, load_product_model, lookup_pass_mode
+
+            if has_product_model(part_key):
+                model = load_product_model(part_key)
+                if model is not None:
+                    mode = lookup_pass_mode(model, sid, test_id)
+                    if mode:
+                        row["pass_mode"] = mode
+        except Exception:
+            pass
+    if not normalize_pass_mode(row.get("pass_mode")):
+        row["pass_mode"] = infer_pass_mode(row)
+    row["result"] = judge_value(
+        row.get("value"), row.get("min"), row.get("max"), pass_mode=row.get("pass_mode")
+    )
+    if row.get("greenable") is False and row.get("result") == "pass":
+        row["result"] = "unspec"
+        row.setdefault("note", "PROVISIONAL / UNCONFIRMED; not greenable")
     return row
 
 
@@ -199,7 +320,50 @@ def measurements_from_result(
             hit = _spec_for(specs, test_id, test_id)
             if hit:
                 rows = [{"id": hit["id"]}]
-    out = [enrich_measurement(r, specs=specs, test_id=test_id) for r in rows]
+    out = [
+        enrich_measurement(r, specs=specs, test_id=test_id, part_key=part_key)
+        for r in rows
+    ]
+    if part_key:
+        try:
+            from ate.tests.logic.product_model import (
+                has_product_model,
+                is_unconfirmed_status,
+                load_product_model,
+            )
+
+            if has_product_model(part_key):
+                model = load_product_model(part_key)
+                tid = str(test_id or "").strip().lower()
+                uses_tt = tid in {"input_threshold", "vth", "voh", "vol"}
+                if model is not None and uses_tt and is_unconfirmed_status(model.truth_table_status):
+                    for m in out:
+                        if m.get("result") == "pass":
+                            m["result"] = "unspec"
+                            m["greenable"] = False
+                            m.setdefault(
+                                "note",
+                                f"truth_table.status={model.truth_table_status} not Datasheet-signed; not greenable",
+                            )
+                if model is not None:
+                    block = (model.dc_limits or {}).get(tid)
+                    if isinstance(block, dict) and is_unconfirmed_status(block.get("status")):
+                        for m in out:
+                            if m.get("result") == "pass":
+                                m["result"] = "unspec"
+                                m["greenable"] = False
+                                m.setdefault("note", "dc_limits PROVISIONAL; not greenable")
+                if model is not None and tid in {"input_threshold", "vth"}:
+                    from ate.tests.logic.product_model import vcc_grid_unconfirmed
+
+                    if vcc_grid_unconfirmed(model):
+                        for m in out:
+                            if m.get("result") == "pass":
+                                m["result"] = "unspec"
+                                m["greenable"] = False
+                                m.setdefault("note", "vcc_grid UNCONFIRMED; not greenable")
+        except Exception:
+            pass
     return [m for m in out if m.get("id")]
 
 

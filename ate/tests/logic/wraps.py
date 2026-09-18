@@ -6,6 +6,13 @@ from typing import Any, Callable
 
 from ate.core.registry import TestSpec, register
 from ate.core.runner import RunParams
+from ate.tests.logic.product_model import (
+    has_product_model,
+    load_product_model,
+    path_b_handoff,
+    resolve_data_paths,
+    wire_map_has_test,
+)
 
 _LOGIC_FIXTURE = "LOGIC"
 
@@ -43,10 +50,25 @@ def _register_vcc_test(
     legacy_fn: Callable[..., dict[str, Any]],
 ) -> None:
     def _run(instr, params: RunParams):
-        data = _invoke_legacy(legacy_fn, instr, params)
-        keys = [k for k in data if k not in ("VCC", "VCCA", "VCCB")]
-        summary = " ".join(f"{k}={data[k]}" for k in keys) if keys else f"VCC={data.get('VCC', params.vcc)}"
-        return {"summary": summary, "data": data}
+        def _body():
+            data = _invoke_legacy(legacy_fn, instr, params)
+            keys = [k for k in data if k not in ("VCC", "VCCA", "VCCB")]
+            summary = " ".join(f"{k}={data[k]}" for k in keys) if keys else f"VCC={data.get('VCC', params.vcc)}"
+            return {"summary": summary, "data": data}
+
+        key = str(getattr(params, "part", "") or "").strip().lower()
+        if has_product_model(key):
+            model = load_product_model(key)
+            if model is not None and wire_map_has_test(model, test_id):
+                with path_b_handoff(params, model, test_id):
+                    result = _body()
+                    payload = result.get("data")
+                    if not isinstance(payload, dict):
+                        payload = {}
+                        result["data"] = payload
+                    payload["data_paths"] = resolve_data_paths(model, test_id)
+                    return result
+        return _body()
 
     register(
         TestSpec(

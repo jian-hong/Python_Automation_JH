@@ -1,26 +1,225 @@
-# RS164 shift register -- Qualification Main SOP14.
-
 part: RS164
 model: RS164XP
 component: Logic
 package: SOP14
 version: Version_1
 sample_size: 4
-year: "2026"
+year: '2026'
 part_key: rs164
 product_class: logic
 vcc: 5.0
-current_limit: 0.10
+current_limit: 0.1
 timing:
   timeout_s: 4.0
   settle_s: 0.3
 enabled_tests:
-  - tp
-  - supply_current
+- tp
+- supply_current
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS164)"
+    label: Logic board (RS164)
     board_class: general
     checklist:
-      - "RS164 is an 8-bit shift register. Add serial/clock slots via Wrap, do not copy AND-gate ids."
-    tests: [tp, supply_current]
+    - RS164 is an 8-bit shift register. Add serial/clock slots via Wrap, do not copy AND-gate ids.
+    tests:
+    - tp
+    - supply_current
+product_model:
+  part: RS164
+  status: CONFIRMED
+  source_card: RS164_card_CONFIRMED.md
+  package: SOP14
+  product_class: sequential_shift_register
+  schmitt: false
+  oe: none
+  output_type: push_pull
+  vcc_op_min: 1.65
+  vcc_op_max: 5.5
+  logic_inputs:
+  - A
+  - B
+  - CLK
+  - CLR
+  outputs:
+  - Q0
+  - Q1
+  - Q2
+  - Q3
+  - Q4
+  - Q5
+  - Q6
+  - Q7
+  pins:
+  - name: A
+    role: input
+    number: 1
+  - name: B
+    role: input
+    number: 2
+  - name: Q0
+    role: output
+    number: 3
+  - name: Q1
+    role: output
+    number: 4
+  - name: Q2
+    role: output
+    number: 5
+  - name: Q3
+    role: output
+    number: 6
+  - name: GND
+    role: gnd
+    number: 7
+  - name: CLK
+    role: clock
+    number: 8
+  - name: CLR
+    role: reset
+    number: 9
+    note: CLR active L
+  - name: Q4
+    role: output
+    number: 10
+  - name: Q5
+    role: output
+    number: 11
+  - name: Q6
+    role: output
+    number: 12
+  - name: Q7
+    role: output
+    number: 13
+  - name: VCC
+    role: vcc
+    number: 14
+  truth_table:
+    status: CONFIRMED
+    kind: sequential_functional
+    note: Not 2^n combinational -- CLR L clears; CLK rise shifts; Q0=A·B at setup
+    rows:
+    - CLR: L
+      CLK: X
+      A: X
+      B: X
+      Q: all_L
+    - CLR: H
+      CLK: rise
+      A: l
+      B: l
+      Q0: L
+      shift: q0_to_q6
+    - CLR: H
+      CLK: rise
+      A: h
+      B: h
+      Q0: H
+      shift: q0_to_q6
+  isolation:
+    status: N_A
+    note: sequential -- use functional/shift coverage, not gate isolation
+  vcc_grid:
+    status: CONFIRMED
+    stimulus: PSU_MSO
+    pass_mode:
+      VIH: min_only
+      VIL: max_only
+    ranges:
+    - start: 1.65
+      stop: 1.95
+      step: 0.1
+      VIH_min: 0.7*VCC
+      VIL_max: 0.3*VCC
+    - start: 2.3
+      stop: 2.7
+      step: 0.1
+      VIH_min_V: 1.7
+      VIL_max_V: 0.7
+    - start: 3.0
+      stop: 3.6
+      step: 0.1
+      VIH_min_V: 2.0
+      VIL_max_V: 0.8
+    - start: 4.5
+      stop: 5.5
+      step: 0.1
+      VIH_min: 0.7*VCC
+      VIL_max: 0.3*VCC
+    fixed_points: []
+    note: CONFIRMED from SoT VIH/VIL bands (0.7x/0.3x VCC; do not invent extra rows)
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    voh: min_only
+    vol: max_only
+    icc: max_only
+    ii: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      loads:
+      - IOH_mA: -0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOH_min: VCC-0.1
+      - IOH_mA: -4
+        vcc: 3.0
+        VOH_min_V: 1.2
+      - IOH_mA: -8
+        vcc: 3.3
+        VOH_min_V: 1.9
+      - IOH_mA: -10
+        vcc: 5.5
+        VOH_min_V: 3.8
+    VOL:
+      status: UNCONFIRMED
+      loads:
+      - IOL_mA: 0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOL_max_V: 0.1
+      - IOL_mA: 4
+        vcc: 3.0
+        VOL_max_V: 0.45
+      - IOL_mA: 8
+        vcc: 3.3
+        VOL_max_V: 0.4
+      - IOL_mA: 10
+        vcc: 5.5
+        VOL_max_V: 0.55
+    II_uA:
+      Full: 1.0
+    ICC_uA:
+      Full: 8.0
+    ICCT_uA:
+      status: ABSENT
+      note: not in §8.4 -- do not invent; disable delta_icc
+    Ioff_uA:
+      status: ABSENT
+      note: not on card -- do not invent; not IOZ
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: sequential_shift_register
+    coverage_order:
+    - input_threshold
+    - icc
+    - ii
+    - voh
+    - vol
+  enabled_tests_model: []
+  gaps:
+  - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
+  - vcc_grid/vcc_plan CONFIRMED from SoT VIH/VIL bands; do not invent extra rows
+  - SEQUENTIAL -- Path B gate runner insufficient; needs CLK/CLR functional recipe
+  - ICCT/Ioff absent on card -- delta_icc off
+  - IOZ OFF
+  - gate 2^n / ICC / dICC DISABLED
+  - isolation N_A (sequential, not gate isolation)
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; Ioff+ICCT ABSENT (delta_icc off); sequential not 2^n; do not invent.
