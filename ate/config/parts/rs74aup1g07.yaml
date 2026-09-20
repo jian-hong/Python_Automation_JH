@@ -24,3 +24,8 @@ fixture_modes:
     checklist:
       - "Open-drain buffer. Wait sample / plan to MP."
     tests: [supply_current, delta_supply_current, ioff_leakage]
+
+gaps:
+  - wait sample / plan to MP -- no Datasheet card in workspace
+  - Path B product_model HOLD -- do not copy RS1G07 CONFIRMED numbers
+  - open-drain family -- VOH N_A when card arrives; do not invent IOZ / ICCT

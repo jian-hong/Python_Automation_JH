@@ -253,6 +253,15 @@ Short. Same Path B runner. Tick only DC ids below (97 has no IOZ; 126 keeps ten/
 - VOH/VOL from CONFIRMED `dc_limits` loads / `voh_table`/`vol_table` (100uA on merged `vcc_list`; high-load only at 2.0/3.3/4.5/5.0/5.5). Judge **VOH >= min** (`min_only`) / **VOL <= max** (`max_only`).
 - JH room 2026-09-18 **VOH LIVE SUCCESS** (`min_only`). Board still wired for VOH. VOL needs board change -- **do not invent VOL**. Recorded in `product_model.live` (golden_auto Version `workbook/` + `sessions/`). Not a Verify PASS. Not bench-green for other tests or other SKUs.
 
+**GT34 VOL board-change resume (LIVE -- tomorrow)**
+
+1. START.bat. Person selected. Campaign `#Test_Database/Logic/RS1GT34/...`. Open Session.
+2. Recable PSU CH2 Y-load: VOH sink was 0V; VOL source rail = VCC. Keep CH1=VCC, CH3=A, DMM/SCOPE on Y. PSU_MSO -- no AWG Freq/Amp.
+3. Human Continue after wire_map verify. Tick `vol`. Judge **VOL <= max** (`max_only`). Do not invent VOL measured. `live.vol` stays NOT_RUN until this session.
+4. START (not DEMO). Fill golden_auto only. Do not write pretty. Do not copy VOH LIVE numbers onto VOL or other SKUs.
+
+See `HANDOVER.md` / `docs/LOGIC_DC_HANDOVER.md`.
+
 | IOH | VCC | min | measured | result |
 | -8 mA | 2.0 | 1.6 | 1.7089 | PASS |
 | -24 mA | 3.3 | 2.5 | 2.8968 | PASS |

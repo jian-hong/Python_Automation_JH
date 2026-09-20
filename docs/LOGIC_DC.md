@@ -4,7 +4,7 @@ Live console only (`ate/` + worker **8766** + UI **5174**). Vibe-coder map: `AGE
 
 New RS1Gxx (2-input, 3-input, N-input, with/without OE) should not need a forked `logic_dc.py`.
 
-Operator bench (DEMO/SIM vs HUMAN+instruments, Excel/log paths, 97/126 checklist): `docs/LOGIC_DC_OPERATOR.md`. Dual-channel Continue (future 2Gxx): `docs/LOGIC_DC_DUAL_CHANNEL.md`. DEMO/SIM and `check_logic_dc` are **not** a reproduce claim.
+Operator bench (DEMO/SIM vs HUMAN+instruments, Excel/log paths, 97/126 checklist): `docs/LOGIC_DC_OPERATOR.md`. AE/FAE last-day map: `docs/LOGIC_DC_HANDOVER.md` (also repo-root `HANDOVER.md`). Dual-channel Continue (2Gxx): `docs/LOGIC_DC_DUAL_CHANNEL.md`. DEMO/SIM and `check_logic_dc` are **not** a reproduce claim.
 
 ## Which path (labels match Setup)
 
@@ -60,7 +60,7 @@ product_model:
     stable_eps_A: null  # current: null = NON_TIGHT (wait settle_s once); set amps for eps/N; do not invent uA
     delta_offset_v: 0.6   # dICC; omit if datasheet has ICCT one_input_V instead (do not invent 0.6)
     dual_channel_continue: false  # future 2Gxx CHA then CHB Continue; see docs/LOGIC_DC_DUAL_CHANNEL.md
-    # channels: [CHA, CHB]  # only with dual_channel_continue; no fake 2G YAML without Datasheet card
+    # channels: [CHA, CHB]  # 2Gxx only; extra rs2g yaml without Datasheet card forbidden
     search:               # optional; missing keeps threshold_step_v walk
       vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
       vil: {arm: VCC, direction: down, no_reverse_in_stage: true}

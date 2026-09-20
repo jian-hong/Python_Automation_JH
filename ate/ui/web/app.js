@@ -1462,7 +1462,7 @@ function renderCustomiseParameters(dc) {
     "<p class=\"hint\">vcc_plan editor: FIXED POINTS chips + RANGE SWEEPS + per-band limits + pass_mode (range / min-only / max-only). Same limits for every stepped VCC in a band. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> (test_params + vcc_plan). Card-CONFIRMED vcc_grid unlocks threshold numbers; overlay must not stamp UNCONFIRMED over CONFIRMED. Glyph gaps stay fail-closed. No xyflow. No invent.</p>" +
     `<p class="hint">logic_inputs ${(dc.logic_inputs || []).join(",") || "--"} · OE ${oeTxt} · ICC corners ${corners}${dc && dc.is_sequential ? " (sequential -- 2^n disabled)" : " (2^n)"}</p>` +
     pinWiringHtml(dc || {}) +
-    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. No 2G YAML in inventory -- Continue path ready; do not invent a 2G card.</label>` +
+    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 UNCONFIRMED stubs only. Extra rs2g yaml without Datasheet card forbidden.</label>` +
     `<div class="logic-dc-stim">
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="PSU_MSO" ${stimPsu} /> PSU_MSO</label>
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="AWG" ${stimAwg} /> AWG</label>

@@ -1515,9 +1515,15 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must forbid orphan second xlsx books")
     if not re.search(r"HEAD SHA.*[`']?[0-9a-f]{7,40}", text, re.I | re.S):
         errors.append("LOGIC_DC_OPERATOR.md must list PR HEAD SHA")
+    if "HANDOVER.md" not in text or "LOGIC_DC_HANDOVER.md" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must point at HANDOVER.md / LOGIC_DC_HANDOVER.md")
+    if "VOL board-change resume" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must include GT34 VOL board-change resume")
     logic = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC.md"
     if "LOGIC_DC_OPERATOR.md" not in logic.read_text(encoding="utf-8"):
         errors.append("docs/LOGIC_DC.md must point at LOGIC_DC_OPERATOR.md")
+    if "LOGIC_DC_HANDOVER.md" not in logic.read_text(encoding="utf-8"):
+        errors.append("docs/LOGIC_DC.md must point at LOGIC_DC_HANDOVER.md")
     return errors
 
 
@@ -1638,6 +1644,16 @@ def _panel_ok() -> list[str]:
         errors.append("collectVccGridFromUi must keep CONFIRMED vcc_grid.status (not stamp UNCONFIRMED)")
     if "dual-channel Continue" not in js and "dual_channel_continue" not in js:
         errors.append("Customise Parameters must show 2Gxx dual-channel Continue switch")
+    if "RS2G08" not in js or "CHA then CHB" not in js:
+        errors.append("Customise Parameters dual-channel must name RS2G08/CHA then CHB (UNCONFIRMED stubs)")
+    if "1 << nIn" not in js:
+        errors.append("Customise Parameters must scale ICC corners with n-input 2^n")
+    if "isSchmittGrid" not in js or "VT+" not in js:
+        errors.append("Customise Parameters must keep Schmitt VT+/- (must not collapse to VIH)")
+    if "is_open_drain" not in js or "open-drain skip" not in js:
+        errors.append("limits table must hide VOH on open-drain (VOH N/A skip)")
+    if "has_oe" not in js or "IOZ when OE inactive" not in js:
+        errors.append("panel must gate IOZ on OE (inactive only)")
     if "Pin / wiring" not in js and "pin_wiring" not in js:
         errors.append("Customise Parameters must show pin/wiring map labels")
     if "xyflow" in js.lower() and "no xyflow" not in js.lower():
@@ -3920,6 +3936,140 @@ def _confirmed_sim_sweep_ok() -> list[str]:
     return errors
 
 
+_PATH_B_TREE = (
+    "ate/tests/logic/logic_dc.py",
+    "ate/tests/logic/dc.py",
+    "ate/tests/logic/product_model.py",
+    "ate/tests/logic/threshold_search.py",
+    "ate/tests/logic/excel_lock.py",
+    "ate/core/check_logic_dc.py",
+    "ate/core/check_logic_dc_sim.py",
+    "docs/datasheet/card_fields.schema.yaml",
+    "docs/LOGIC_DC_HANDOVER.md",
+    "HANDOVER.md",
+)
+
+_PATH_A_LOGIC = ("rs29511", "rs1gt32d")
+_WAIT_SAMPLE_LOGIC = ("rs74aup1g07",)
+
+
+def _path_b_tree_ok() -> list[str]:
+    """Local-ready Path B files. Missing file = not AE-ready."""
+    errors: list[str] = []
+    root = Path(__file__).resolve().parents[2]
+    for rel in _PATH_B_TREE:
+        if not (root / rel).is_file():
+            errors.append(f"Path B tree missing {rel}")
+    for part in _CONFIRMED_SIM_PARTS + _NEXT_WAVE_SKUS:
+        if not (PARTS_DIR / f"{part}.yaml").is_file():
+            errors.append(f"Path B part yaml missing {part}.yaml")
+    return errors
+
+
+def _handover_ok() -> list[str]:
+    """AE/FAE handover names add-part flow, status table, physics locks."""
+    errors: list[str] = []
+    root = Path(__file__).resolve().parents[2]
+    paths = (root / "HANDOVER.md", root / "docs" / "LOGIC_DC_HANDOVER.md")
+    for path in paths:
+        if not path.is_file():
+            errors.append(f"{path.name} missing (AE/FAE Path B handover)")
+            continue
+        text = path.read_text(encoding="utf-8")
+        for need in ("PDF", "OCR", "CONFIRM", "product_model", "SIM", "LIVE"):
+            if need not in text:
+                errors.append(f"{path.name} must name {need} in add-part flow")
+        for part in (
+            "RS1GT34",
+            "RS1G08",
+            "RS1G07",
+            "RS1G14",
+            "RS1G32",
+            "RS1GT08",
+            "RS1GT32",
+            "RS1G125",
+            "RS1G97",
+            "RS1G126",
+            "RS164",
+            "RS1G00",
+            "RS1G02",
+            "RS1G04",
+            "RS1G86",
+            "RS2G08",
+            "RS2G32",
+            "RS1G74",
+            "RS1G123",
+        ):
+            if part not in text:
+                errors.append(f"{path.name} must list Path B part {part}")
+        for token in (
+            "CONFIRMED",
+            "UNCONFIRMED",
+            "PARKED",
+            "VOH N_A",
+            "VT+",
+            "IOZ",
+            "2^n",
+            "CHA",
+            "CHB",
+            "delta_icc",
+            "golden_auto",
+            "report.pdf",
+            "sessions/csv",
+            "VOL board-change",
+        ):
+            if token not in text:
+                errors.append(f"{path.name} must name {token}")
+    return errors
+
+
+def _inventory_logic_path_b_ok() -> list[str]:
+    """Inventory Logic SKUs: product_model or gaps[] only. No invent Path B on Path A."""
+    import yaml
+
+    errors: list[str] = []
+    inv_path = PARTS_DIR.parent / "inventory.yaml"
+    if not inv_path.is_file():
+        return ["ate/config/inventory.yaml missing"]
+    blob = yaml.safe_load(inv_path.read_text(encoding="utf-8")) or {}
+    rows = blob.get("parts") if isinstance(blob, dict) else None
+    if not isinstance(rows, list):
+        return ["inventory.yaml parts list missing"]
+    seen: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("category") or "").strip().lower() != "logic":
+            continue
+        key = str(row.get("part") or "").strip().lower().replace("-", "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        yaml_path = PARTS_DIR / f"{key}.yaml"
+        if not yaml_path.is_file():
+            errors.append(f"inventory Logic {key}: part yaml missing")
+            continue
+        raw = load_part_yaml(key)
+        gaps = " ".join(str(x) for x in (raw.get("gaps") or [])).lower()
+        if key in _PATH_A_LOGIC:
+            if has_product_model(key):
+                errors.append(f"{key}: Path A must not grow Path B product_model (no invent)")
+            if "path a" not in gaps:
+                errors.append(f"{key} gaps[] must say Path A (not Path B)")
+            continue
+        if key in _WAIT_SAMPLE_LOGIC:
+            if has_product_model(key):
+                errors.append(f"{key}: wait sample -- no Path B product_model (do not copy G07)")
+            if "wait sample" not in gaps:
+                errors.append(f"{key} gaps[] must say wait sample / no Datasheet card")
+            continue
+        if not has_product_model(key):
+            errors.append(
+                f"{key}: inventory Logic missing product_model -- stub UNCONFIRMED from card or gaps[] only"
+            )
+    return errors
+
+
 def check_logic_dc() -> list[str]:
     errors: list[str] = []
     errors += _no_part_name_ifs(_LOGIC_DC)
@@ -3950,6 +4100,9 @@ def check_logic_dc() -> list[str]:
     errors += _handoff_ok()
     errors += _settle_loop_ok()
     errors += _operator_doc_ok()
+    errors += _handover_ok()
+    errors += _path_b_tree_ok()
+    errors += _inventory_logic_path_b_ok()
     errors += _panel_ok()
     errors += _excel_lock_ok()
     errors += _draft_scaffold_ok()

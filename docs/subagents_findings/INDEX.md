@@ -2,6 +2,7 @@
 
 | Date | File | Keywords |
 |------|------|----------|
+| 2026-09-20 | 2026-09-20_jh-last-day-handover.md | path-b, handover, HANDOVER.md, AE, FAE, GT34 VOL resume, inventory gaps, rs74aup1g07, no invent |
 | 2026-09-18 | 2026-09-18_scale-wave-park.md | path-b, PARKED, rs1g74, rs1g123, rs1g00, rs1g02, rs1g04, rs1g86, rs2g08, rs2g32, UNCONFIRMED, numbers HOLD, dual_channel_continue |
 | 2026-09-18 | 2026-09-18_drop-g74-g123-scale11.md | path-b, logic-dc, sim, archive, rs1g123, rs1g74, dropped, 11 CONFIRMED, 2Gxx, RS74AUP1G07, dc.py |
 | 2026-09-18 | 2026-09-18_sim-first-confirmed.md | path-b, logic-dc, SIM, TestSpec.run, interpolate, vplus, PSU CH3, 0.65*VCC, Schmitt VT, rs164, archive |

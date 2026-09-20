@@ -47,3 +47,7 @@ fixture_modes:
       - supply_current
       - output_voltage
       - cap_load
+
+gaps:
+  - Path A Soo Logic suite -- not Path B
+  - do not invent Path B product_model / truth_table / VOH/VOL / ICCT
