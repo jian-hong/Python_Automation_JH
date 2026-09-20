@@ -1570,7 +1570,7 @@ function renderCustomiseParameters(dc) {
     `<p class="hint">logic_inputs ${(dc.logic_inputs || []).join(",") || "--"} · OE ${oeTxt} · ICC corners ${corners}${dc && dc.is_sequential ? " (sequential -- 2^n disabled)" : " (2^n)"}</p>` +
     pinWiringHtml(dc || {}) +
     logicDcFlowHtml(dc || {}) +
-    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 CONFIRMED CHA then CHB. Do not skip rewire prompt (OpAmp-style switch). Extra rs2g yaml without Datasheet card forbidden.</label>` +
+    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 UNCONFIRMED stubs CHA then CHB. Do not skip rewire prompt (OpAmp-style switch). Extra rs2g yaml without Datasheet card forbidden.</label>` +
     `<div class="logic-dc-stim">
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="PSU_MSO" ${stimPsu} /> PSU_MSO</label>
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="AWG" ${stimAwg} /> AWG</label>

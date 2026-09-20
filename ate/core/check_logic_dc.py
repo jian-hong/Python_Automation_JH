@@ -79,8 +79,9 @@ _PATH_B_IDS = (
     "ioz",
 )
 
-# CONFIRMED Path B SIM walk (JH 17 = 11 prior + 6 scale-wave 2026-09-21).
-# Archive 123/74 optional PARKED if present; missing does not block green.
+# CONFIRMED Path B SIM walk (JH 11). Archive 123/74 optional PARKED if present;
+# missing does not block green. Scale-wave G00/G02/G04/G86/2G08/2G32 stay
+# UNCONFIRMED DRAFT -- JH DM unlock is not Datasheet CONFIRM; not in this set.
 _CONFIRMED_SIM_PARTS = (
     "rs1gt34",
     "rs1g97",
@@ -93,12 +94,6 @@ _CONFIRMED_SIM_PARTS = (
     "rs1gt32",
     "rs1g125",
     "rs164",
-    "rs1g00",
-    "rs1g02",
-    "rs1g04",
-    "rs1g86",
-    "rs2g08",
-    "rs2g32",
 )
 _ARCHIVE_SIM_PARTS = ("rs1g74", "rs1g123")
 _NEXT_WAVE_SKUS = ("rs1g00", "rs1g02", "rs1g04", "rs1g86", "rs2g08", "rs2g32")
@@ -1523,6 +1518,12 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must name next-wave RS1G00 / RS2G08")
     if "numbers HOLD" not in text and "Numbers HOLD" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must say next-wave numbers HOLD")
+    if "17 CONFIRMED" in text:
+        errors.append("LOGIC_DC_OPERATOR.md must not claim 17 CONFIRMED (scale-wave stay UNCONFIRMED)")
+    if "11 CONFIRMED" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name 11 CONFIRMED SIM")
+    if "JH DM unlock" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must say JH DM unlock != Datasheet CONFIRM")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -3151,7 +3152,7 @@ def _sts_latest_ok() -> list[str]:
 
 
 def _dual_channel_recipe_ok() -> list[str]:
-    """2Gxx Continue flag. RS2G08/32 CONFIRMED CHA then CHB. Path B registry stays dual_channel=False."""
+    """2Gxx Continue flag. RS2G08/32 UNCONFIRMED CHA then CHB. Path B registry stays dual_channel=False."""
     errors: list[str] = []
     extra2g = [
         p.name
@@ -3239,12 +3240,14 @@ def _grid_copies_g08_cmos(m) -> bool:
 
 
 def _next_wave_ok() -> list[str]:
-    """JH LAST-DAY UNLOCK 2026-09-21: scale-wave CONFIRMED from on-disk DRAFT cards.
+    """UNCONFIRMED G00/G02/G04/G86/2G08/2G32 locks. Numbers HOLD. No CONFIRM.
 
-    Function/truth/isolation signed. Unsigned vcc_grid (except G86 VIL fragment),
-    VOH/VOL loads, and delta_icc numbers stay fail-closed. Physics locks stay:
-    G02 TTL not CMOS; G86 VIL 0.20*VCC; 2G CHA->CHB; OE/IOZ OFF;
-    ICCT ABSENT != invent ICCT.
+    JH DM unlock is not Datasheet CONFIRM. Function bind stays (NAND/NOR/INV/XOR
+    / dual CHA->CHB, G86 VIL 0.20*VCC formula). Status + nested truth/isolation
+    / vcc_grid stay UNCONFIRMED so numbers are not greenable. Do not call
+    _fail_closed_until_signed here -- unsigned HOLD is the pass path.
+    Physics: G02 TTL not CMOS; 2G CHA->CHB; OE/IOZ OFF; ICCT ABSENT != invent.
+    enabled_tests honesty: input_threshold/icc/ii on; voh/vol/ioz/delta_icc off.
     """
     from ate.tests.logic import logic_dc as ldc
 
@@ -3252,35 +3255,37 @@ def _next_wave_ok() -> list[str]:
     load_family("logic")
     for part in _NEXT_WAVE_SKUS:
         if not has_product_model(part):
-            errors.append(f"{part} CONFIRMED product_model missing (scale-wave bind)")
+            errors.append(f"{part} UNCONFIRMED product_model missing (next-wave bind)")
             continue
         m = load_product_model(part)
         if m is None:
             errors.append(f"{part} product_model failed to load")
             continue
         if is_parked(m):
-            errors.append(f"{part} scale-wave must not be PARKED")
-        if not is_datasheet_signed(m.status):
-            errors.append(f"{part} product_model.status must be CONFIRMED (JH 2026-09-21), got {m.status!r}")
-        if not is_datasheet_signed(m.truth_table_status):
-            errors.append(f"{part} truth_table.status must be CONFIRMED, got {m.truth_table_status!r}")
-        if not is_datasheet_signed(m.isolation_status):
-            errors.append(f"{part} isolation.status must be CONFIRMED, got {m.isolation_status!r}")
-        errors += _fail_closed_until_signed(part, m)
-        gst = str((m.vcc_grid or {}).get("status") or "")
-        if part == "rs1g86":
-            if not is_datasheet_signed(gst):
-                errors.append("rs1g86 vcc_grid.status must be CONFIRMED (VIL 0.20*VCC card lock)")
-        elif is_datasheet_signed(gst):
+            errors.append(f"{part} next-wave must not be PARKED")
+        if (
+            is_datasheet_signed(m.status)
+            or is_datasheet_signed(m.truth_table_status)
+            or is_datasheet_signed(m.isolation_status)
+        ):
             errors.append(
-                f"{part} vcc_grid must stay UNCONFIRMED (no card VIH/VIL bands; do not invent), got {gst!r}"
+                f"{part} must stay UNCONFIRMED (JH DM unlock != Datasheet CONFIRM; numbers HOLD)"
             )
+        if not is_unconfirmed_status(m.status):
+            errors.append(f"{part} status must be UNCONFIRMED, got {m.status!r}")
+        if not is_unconfirmed_status(m.truth_table_status):
+            errors.append(f"{part} truth_table.status must be UNCONFIRMED, got {m.truth_table_status!r}")
+        if not is_unconfirmed_status(m.isolation_status):
+            errors.append(f"{part} isolation.status must be UNCONFIRMED, got {m.isolation_status!r}")
+        gst = str((m.vcc_grid or {}).get("status") or "")
+        if is_datasheet_signed(gst):
+            errors.append(f"{part} vcc_grid must stay UNCONFIRMED (numbers HOLD), got {gst!r}")
         if m.has_oe():
             errors.append(f"{part}: invent OE -> FAIL")
         en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
         for need in ("input_threshold", "icc", "ii"):
             if need not in en:
-                errors.append(f"{part} enabled_tests missing {need} (CONFIRMED process)")
+                errors.append(f"{part} enabled_tests missing {need} (honesty; no invent voh/vol)")
         for banned in ("voh", "vol", "ioz", "delta_icc"):
             if banned in en:
                 errors.append(f"{part}: invent {banned} enabled -> FAIL")
@@ -3309,7 +3314,7 @@ def _next_wave_ok() -> list[str]:
             errors.append(f"{part}: invent delta_icc enabled -> FAIL")
         dicc = _dc_block(m, "delta_icc_uA", "delta_icc")
         if not dicc:
-            errors.append(f"{part} delta_icc_uA block missing (ICCT ABSENT ≠ invent ICCT)")
+            errors.append(f"{part} delta_icc_uA block missing (ICCT ABSENT != invent ICCT)")
         else:
             st_d = str(dicc.get("status") or "").upper().replace("-", "_")
             if st_d not in ("UNCONFIRMED", "ABSENT", "N_A", "NA"):
@@ -3424,6 +3429,17 @@ def _next_wave_ok() -> list[str]:
             blob = "\n".join(format_handoff_begin(m, "icc"))
             if "do not skip rewire" not in blob.lower():
                 errors.append(f"{part} handoff must say do not skip rewire CHA then CHB")
+            ids = [tid for tid in ("input_threshold", "icc", "ii") if tid in en]
+            specs = [s for s in (get(tid) for tid in ids) if s is not None]
+            over = apply_dual_channel_continue(specs, m)
+            if specs and any(not getattr(s, "dual_channel", False) for s in over):
+                errors.append(
+                    f"{part}: CHA->CHB Continue must OR dual_channel onto Path B specs"
+                )
+            if any(getattr(s, "dual_channel", False) for s in specs):
+                errors.append(
+                    f"{part}: apply_dual_channel_continue must not mutate registered spec"
+                )
     return errors
 
 
@@ -3739,15 +3755,15 @@ def _confirmed_sim_sweep_ok() -> list[str]:
 
     errors: list[str] = []
     if frozenset(_CONFIRMED_SIM_PARTS) != frozenset(_ACTIVE_LOGIC):
-        errors.append("CONFIRMED SIM walk must match the 17 CONFIRMED _ACTIVE_LOGIC set")
-    if len(_CONFIRMED_SIM_PARTS) != 17:
-        errors.append(f"_CONFIRMED_SIM_PARTS must be 17 (11 prior + 6 scale-wave), got {len(_CONFIRMED_SIM_PARTS)}")
+        errors.append("CONFIRMED SIM walk must match the 11 CONFIRMED _ACTIVE_LOGIC set")
+    if len(_CONFIRMED_SIM_PARTS) != 11:
+        errors.append(f"_CONFIRMED_SIM_PARTS must be 11 prior CONFIRMED, got {len(_CONFIRMED_SIM_PARTS)}")
     if frozenset(_ARCHIVE_SIM_PARTS) != frozenset(_ARCHIVE_LOGIC):
         errors.append("archive SIM parts must match dropped RS1G74 / RS1G123 set")
     if frozenset(_NEXT_WAVE_SKUS) != frozenset(_NEXT_WAVE_LOGIC):
         errors.append("scale-wave SKUs must match sim _NEXT_WAVE_LOGIC")
-    if set(_NEXT_WAVE_SKUS) - set(_CONFIRMED_SIM_PARTS):
-        errors.append("scale-wave CONFIRMED must join CONFIRMED SIM set")
+    if set(_NEXT_WAVE_SKUS) & set(_CONFIRMED_SIM_PARTS):
+        errors.append("scale-wave UNCONFIRMED must not join CONFIRMED SIM set")
     if set(_ARCHIVE_SIM_PARTS) & set(_CONFIRMED_SIM_PARTS):
         errors.append("PARKED RS1G74 / RS1G123 must stay out of CONFIRMED SIM")
 
@@ -3858,26 +3874,7 @@ def _confirmed_sim_sweep_ok() -> list[str]:
             if part == "rs1g97" and "ioz" in ids:
                 errors.append("rs1g97 SIM: ioz must stay OFF")
             if part in _NEXT_WAVE_SKUS:
-                for banned in ("voh", "vol", "ioz", "delta_icc"):
-                    if banned in ids:
-                        errors.append(f"{part} SIM: {banned} must stay OFF (unsigned / ABSENT)")
-                if part in ("rs2g08", "rs2g32"):
-                    if not dual_channel_continue(m):
-                        errors.append(f"{part} SIM: dual_channel_continue CHA then CHB required")
-                    elif recipe_channels(m) != ["CHA", "CHB"]:
-                        errors.append(f"{part} SIM: skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
-                    else:
-                        specs = [get(tid) for tid in ids]
-                        specs = [s for s in specs if s is not None]
-                        over = apply_dual_channel_continue(specs, m)
-                        if any(not getattr(s, "dual_channel", False) for s in over):
-                            errors.append(
-                                f"{part} SIM: CHA->CHB Continue must OR dual_channel onto Path B specs"
-                            )
-                        if any(getattr(s, "dual_channel", False) for s in specs):
-                            errors.append(
-                                f"{part} SIM: apply_dual_channel_continue must not mutate registered spec"
-                            )
+                errors.append(f"{part} SIM: UNCONFIRMED next-wave must stay out of CONFIRMED walk")
             drive_names = list(m.logic_inputs)
             if m.has_oe() and m.oe_pin and m.oe_pin not in drive_names:
                 drive_names.append(m.oe_pin)
@@ -4120,6 +4117,16 @@ def _handover_ok() -> list[str]:
             errors.append(f"{path.name} must name JH LAST-DAY UNLOCK 2026-09-21")
         if "CONFIRM-all" not in text:
             errors.append(f"{path.name} must name CONFIRM-all scale wave")
+        if "VOID" not in text:
+            errors.append(f"{path.name} must mark CONFIRM-all VOID")
+        if "JH DM unlock" not in text:
+            errors.append(f"{path.name} must say JH DM unlock != Datasheet CONFIRM")
+        if "CONFIRMED (11)" not in text:
+            errors.append(f"{path.name} must list CONFIRMED (11)")
+        if "CONFIRMED (17)" in text:
+            errors.append(f"{path.name} must not claim CONFIRMED (17); scale-wave stay UNCONFIRMED DRAFT")
+        if "UNCONFIRMED (6)" not in text:
+            errors.append(f"{path.name} must list UNCONFIRMED (6) scale-wave DRAFT")
         for family in ("NAND", "NOR", "INV", "XOR", "dual AND", "dual OR"):
             if family not in text:
                 errors.append(f"{path.name} must name LIVE family {family}")

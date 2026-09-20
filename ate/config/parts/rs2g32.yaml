@@ -1,6 +1,5 @@
-# RS2G32 dual OR-2 -- JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur.
-# On-disk DRAFT card is the SoT. Function CONFIRMED. CHA then CHB Continue.
-# Unsigned vcc_grid / VOH / VOL HOLD. Pin numbers HOLD. No invent OE/IOZ.
+# RS2G32 dual OR-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No Datasheet CONFIRM.
+# CHA then CHB Continue. JH DM unlock != Datasheet CONFIRM. SOOT DRAFT.
 
 part: RS2G32
 model: RS2G32
@@ -27,16 +26,16 @@ fixture_modes:
     label: "Logic board (RS2G32 dual OR)"
     board_class: general
     checklist:
-      - "RS2G32 dual OR. CONFIRMED function 2026-09-21. CHA then CHB Continue."
+      - "RS2G32 dual OR. UNCONFIRMED DRAFT. CHA then CHB Continue."
       - "oe none. Do not invent IOZ. Unsigned VIH/VIL/VOH/VOL HOLD. Pin numbers HOLD."
       - "Do not tick voh/vol until CONFIRMED loads. ICCT ABSENT."
     tests: [tp, supply_current, input_threshold, icc, ii]
 
 product_model:
   part: RS2G32
-  status: CONFIRMED
-  source_card: JH_LAST_DAY_UNLOCK_2026-09-21
-  confirm_note: "JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur. On-disk DRAFT card. Function/truth/isolation signed. CHA then CHB. Unsigned numbers HOLD."
+  status: UNCONFIRMED
+  source_card: ON_DISK_DRAFT
+  confirm_note: "SOOT: JH DM unlock != Datasheet CONFIRM. Stay UNCONFIRMED DRAFT. CHA then CHB. Numbers HOLD."
   package: VSSOP8
   product_class: dual_or2
   schmitt: false
@@ -56,16 +55,16 @@ product_model:
     A: {src: awg, ch: 1}
     B: {src: awg, ch: 2}
   truth_table:
-    status: CONFIRMED
+    status: UNCONFIRMED
     kind: combinational
-    note: OR Y=A OR B per channel. Pin numbers HOLD.
+    note: OR Y=A OR B per channel. Pin numbers HOLD. Not Datasheet-signed.
     rows:
     - {A: H, B: H, Y: H}
     - {A: L, B: H, Y: H}
     - {A: H, B: L, Y: H}
     - {A: L, B: L, Y: L}
   isolation:
-    status: CONFIRMED
+    status: UNCONFIRMED
     note: OR other=L -> track. CHA then CHB.
     tests:
       A:
@@ -105,7 +104,7 @@ product_model:
     dual_channel_continue: true
     channels: [CHA, CHB]
   gaps:
-  - CONFIRMED function 2026-09-21; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
+  - UNCONFIRMED DRAFT; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
   - dual OR; CHA then CHB Continue; oe none; IOZ OFF
   - pin numbers HOLD -- do not invent 8-pin map
   - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
@@ -125,7 +124,7 @@ product_model:
     ultimate_manual: never_auto_write
     pretty: never_auto_write
   excel_plots:
-    status: CONFIRMED
+    status: UNCONFIRMED
     series:
       - vih_vs_vcc
       - vil_vs_vcc

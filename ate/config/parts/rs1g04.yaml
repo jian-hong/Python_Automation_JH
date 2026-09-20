@@ -1,6 +1,5 @@
-# RS1G04 inverter -- JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur.
-# On-disk DRAFT card is the SoT. Function CONFIRMED. n=1 Y=NOT A. NC is not OE.
-# Unsigned VIH/VIL/VOH/VOL HOLD. No invent.
+# RS1G04 inverter -- UNCONFIRMED Path B bind. Numbers HOLD. No Datasheet CONFIRM.
+# n=1 Y=NOT A. NC is not OE. JH DM unlock != Datasheet CONFIRM. SOOT DRAFT.
 
 part: RS1G04
 model: RS1G04
@@ -27,15 +26,15 @@ fixture_modes:
     label: "Logic board (RS1G04 INV)"
     board_class: general
     checklist:
-      - "RS1G04 inverter. CONFIRMED function 2026-09-21. Unsigned VIH/VIL/VOH/VOL HOLD."
+      - "RS1G04 inverter. UNCONFIRMED DRAFT. Unsigned VIH/VIL/VOH/VOL HOLD."
       - "NC is not OE. Do not tick IOZ. Do not tick voh/vol until CONFIRMED loads."
     tests: [tp, supply_current, input_threshold, icc, ii]
 
 product_model:
   part: RS1G04
-  status: CONFIRMED
-  source_card: JH_LAST_DAY_UNLOCK_2026-09-21
-  confirm_note: "JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur. On-disk DRAFT card. Function/truth/isolation signed. NC not OE. Unsigned numbers HOLD."
+  status: UNCONFIRMED
+  source_card: ON_DISK_DRAFT
+  confirm_note: "SOOT: JH DM unlock != Datasheet CONFIRM. Stay UNCONFIRMED DRAFT. NC not OE. Numbers HOLD."
   package: SC70-5
   product_class: gate_inv
   schmitt: false
@@ -53,14 +52,14 @@ product_model:
   pin_drive:
     A: {src: awg, ch: 1}
   truth_table:
-    status: CONFIRMED
+    status: UNCONFIRMED
     kind: combinational
-    note: Y=NOT A. Function signed from on-disk DRAFT card.
+    note: Y=NOT A. Function bind from on-disk DRAFT card. Not Datasheet-signed.
     rows:
     - {A: H, Y: L}
     - {A: L, Y: H}
   isolation:
-    status: CONFIRMED
+    status: UNCONFIRMED
     tests:
       A:
       - {sweep_pin: A, fix: {}, y_expect: invert}
@@ -96,7 +95,7 @@ product_model:
     runner: gate_inv
     dual_channel_continue: false
   gaps:
-  - CONFIRMED function 2026-09-21; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
+  - UNCONFIRMED DRAFT; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
   - inverter n=1 Y=NOT A; NC not OE; IOZ OFF
   - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
   - do not invent VOH/VOL / ICCT / VIH/VIL
@@ -115,7 +114,7 @@ product_model:
     ultimate_manual: never_auto_write
     pretty: never_auto_write
   excel_plots:
-    status: CONFIRMED
+    status: UNCONFIRMED
     series:
       - vih_vs_vcc
       - vil_vs_vcc

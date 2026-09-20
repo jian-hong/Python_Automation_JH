@@ -14,4 +14,4 @@ When `dual_channel_continue` is true, the runner ORs that flag onto Path B specs
 
 1Gxx cards (RS1G97 / RS1G126 / RS1GT34 / overnight CONFIRMED / next-wave G00/G02/G04/G86) leave the flag unset/false. Dual-channel Continue is **2Gxx only**.
 
-RS2G08 / RS2G32 are **CONFIRMED** (JH LAST-DAY UNLOCK 2026-09-21) for function/truth/isolation (`recipe.dual_channel_continue: true`, `channels: [CHA, CHB]`). Unsigned VOH/VOL/VIH and pin numbers HOLD. Do not invent OE/IOZ. Extra `rs2g*.yaml` without a Datasheet card stays forbidden.
+RS2G08 / RS2G32 are **UNCONFIRMED** stubs (`recipe.dual_channel_continue: true`, `channels: [CHA, CHB]`). JH DM unlock != Datasheet CONFIRM. Unsigned VOH/VOL/VIH and pin numbers HOLD. Do not invent OE/IOZ. Extra `rs2g*.yaml` without a Datasheet card stays forbidden.
