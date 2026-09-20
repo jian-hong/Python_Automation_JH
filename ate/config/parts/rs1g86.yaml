@@ -1,5 +1,6 @@
-# RS1G86 XOR-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
-# Dual isolation track+invert. VIL 0.20*VCC at 1.65-1.95 from card lock only.
+# RS1G86 XOR-2 -- JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur.
+# On-disk DRAFT card is the SoT. Function CONFIRMED. Dual isolation track+invert.
+# VIL 0.20*VCC at 1.65-1.95 from card CONFIRMED. VIH / VOH / VOL HOLD. No invent.
 
 part: RS1G86
 model: RS1G86
@@ -18,18 +19,24 @@ timing:
 enabled_tests:
   - tp
   - supply_current
+  - input_threshold
+  - icc
+  - ii
 fixture_modes:
   LOGIC:
     label: "Logic board (RS1G86 XOR)"
     board_class: general
     checklist:
-      - "RS1G86 XOR-2. UNCONFIRMED -- numbers HOLD."
-      - "VIL 0.20*VCC at 1.65-1.95 from card. Do not copy G08 VIL 0.15*VCC."
-    tests: [tp, supply_current]
+      - "RS1G86 XOR-2. CONFIRMED function 2026-09-21. VIL 0.20*VCC @1.65-1.95 from card."
+      - "VIH HOLD. Do not copy G08 VIL 0.15*VCC. Do not tick voh/vol until CONFIRMED loads."
+      - "oe none. IOZ OFF. ICCT ABSENT."
+    tests: [tp, supply_current, input_threshold, icc, ii]
 
 product_model:
   part: RS1G86
-  status: UNCONFIRMED
+  status: CONFIRMED
+  source_card: JH_LAST_DAY_UNLOCK_2026-09-21
+  confirm_note: "JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur. On-disk DRAFT card. Function/truth/isolation signed. VIL fragment CONFIRMED. VIH HOLD."
   package: SC70-5
   product_class: gate_xor2
   schmitt: false
@@ -49,7 +56,7 @@ product_model:
     A: {src: awg, ch: 1}
     B: {src: awg, ch: 2}
   truth_table:
-    status: UNCONFIRMED
+    status: CONFIRMED
     kind: combinational
     note: XOR Y=A xor B. Dual isolation track (other=L) + invert (other=H).
     rows:
@@ -58,7 +65,7 @@ product_model:
     - {A: L, B: H, Y: H}
     - {A: H, B: H, Y: L}
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     note: XOR dual isolation -- track other=L, invert other=H.
     tests:
       A:
@@ -68,9 +75,9 @@ product_model:
       - {sweep_pin: B, fix: {A: L}, y_expect: track}
       - {sweep_pin: B, fix: {A: H}, y_expect: invert}
   vcc_grid:
-    status: UNCONFIRMED
+    status: CONFIRMED
     stimulus: AWG
-    note: Card lock VIL 0.20*VCC @ 1.65-1.95 only. VIH HOLD. Not G08 0.15*VCC.
+    note: Card lock VIL 0.20*VCC @ 1.65-1.95 CONFIRMED. VIH HOLD. Not G08 0.15*VCC.
     ranges:
     - start: 1.65
       stop: 1.95
@@ -105,9 +112,9 @@ product_model:
     runner: gate_xor2
     dual_channel_continue: false
   gaps:
-  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - CONFIRMED function 2026-09-21; VIL 0.20*VCC @1.65-1.95 from card; VIH HOLD
   - XOR dual isolation track+invert; oe none; IOZ OFF
-  - VIL 0.20*VCC @1.65-1.95 from card; do not copy G08 0.15*VCC
+  - do not copy G08 VIL 0.15*VCC
   - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
-  - VIH / VOH / VOL HOLD -- do not invent
+  - VOH / VOL HOLD -- do not invent loads
   - stable_eps_A null

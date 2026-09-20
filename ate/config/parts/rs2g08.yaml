@@ -1,5 +1,6 @@
-# RS2G08 dual AND-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
-# dual_channel_continue CHA then CHB. No OE/IOZ invent.
+# RS2G08 dual AND-2 -- JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur.
+# On-disk DRAFT card is the SoT. Function CONFIRMED. CHA then CHB Continue.
+# Unsigned vcc_grid / VOH / VOL HOLD. Pin numbers HOLD. No invent OE/IOZ.
 
 part: RS2G08
 model: RS2G08
@@ -18,18 +19,24 @@ timing:
 enabled_tests:
   - tp
   - supply_current
+  - input_threshold
+  - icc
+  - ii
 fixture_modes:
   LOGIC:
     label: "Logic board (RS2G08 dual AND)"
     board_class: general
     checklist:
-      - "RS2G08 dual AND. UNCONFIRMED -- numbers HOLD."
-      - "CHA then CHB Continue. oe none. Do not invent IOZ."
-    tests: [tp, supply_current]
+      - "RS2G08 dual AND. CONFIRMED function 2026-09-21. CHA then CHB Continue."
+      - "oe none. Do not invent IOZ. Unsigned VIH/VIL/VOH/VOL HOLD. Pin numbers HOLD."
+      - "Do not tick voh/vol until CONFIRMED loads. ICCT ABSENT."
+    tests: [tp, supply_current, input_threshold, icc, ii]
 
 product_model:
   part: RS2G08
-  status: UNCONFIRMED
+  status: CONFIRMED
+  source_card: JH_LAST_DAY_UNLOCK_2026-09-21
+  confirm_note: "JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur. On-disk DRAFT card. Function/truth/isolation signed. CHA then CHB. Unsigned numbers HOLD."
   package: VSSOP8
   product_class: dual_and2
   schmitt: false
@@ -49,7 +56,7 @@ product_model:
     A: {src: awg, ch: 1}
     B: {src: awg, ch: 2}
   truth_table:
-    status: UNCONFIRMED
+    status: CONFIRMED
     kind: combinational
     note: AND Y=A AND B per channel. Pin numbers HOLD.
     rows:
@@ -58,7 +65,7 @@ product_model:
     - {A: H, B: L, Y: L}
     - {A: L, B: L, Y: L}
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     note: AND other=H -> track. CHA then CHB.
     tests:
       A:
@@ -68,7 +75,7 @@ product_model:
   vcc_grid:
     status: UNCONFIRMED
     stimulus: AWG
-    note: Numbers HOLD. Do not copy G08 CMOS bands.
+    note: No card VIH/VIL bands. Do not copy G08 CMOS bands. Numbers HOLD.
     ranges: []
     fixed_points: []
   pass_mode:
@@ -98,7 +105,7 @@ product_model:
     dual_channel_continue: true
     channels: [CHA, CHB]
   gaps:
-  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - CONFIRMED function 2026-09-21; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
   - dual AND; CHA then CHB Continue; oe none; IOZ OFF
   - pin numbers HOLD -- do not invent 8-pin map
   - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only

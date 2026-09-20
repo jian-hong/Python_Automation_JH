@@ -79,7 +79,8 @@ _PATH_B_IDS = (
     "ioz",
 )
 
-# CONFIRMED Path B SIM walk (JH 11). Archive 123/74 optional PARKED if present; missing does not block green.
+# CONFIRMED Path B SIM walk (JH 17 = 11 prior + 6 scale-wave 2026-09-21).
+# Archive 123/74 optional PARKED if present; missing does not block green.
 _CONFIRMED_SIM_PARTS = (
     "rs1gt34",
     "rs1g97",
@@ -92,6 +93,12 @@ _CONFIRMED_SIM_PARTS = (
     "rs1gt32",
     "rs1g125",
     "rs164",
+    "rs1g00",
+    "rs1g02",
+    "rs1g04",
+    "rs1g86",
+    "rs2g08",
+    "rs2g32",
 )
 _ARCHIVE_SIM_PARTS = ("rs1g74", "rs1g123")
 _NEXT_WAVE_SKUS = ("rs1g00", "rs1g02", "rs1g04", "rs1g86", "rs2g08", "rs2g32")
@@ -3108,7 +3115,7 @@ def _sts_latest_ok() -> list[str]:
 
 
 def _dual_channel_recipe_ok() -> list[str]:
-    """2Gxx Continue flag. UNCONFIRMED 08/32 stubs only. Path B registry stays dual_channel=False."""
+    """2Gxx Continue flag. RS2G08/32 CONFIRMED CHA then CHB. Path B registry stays dual_channel=False."""
     errors: list[str] = []
     extra2g = [
         p.name
@@ -3173,7 +3180,7 @@ def _dual_channel_recipe_ok() -> list[str]:
         if "Datasheet" not in txt:
             errors.append("dual-channel doc must forbid fake 2G YAML without Datasheet card")
         if "RS2G08" not in txt or "RS2G32" not in txt:
-            errors.append("LOGIC_DC_DUAL_CHANNEL.md must name UNCONFIRMED RS2G08 / RS2G32 stubs")
+            errors.append("LOGIC_DC_DUAL_CHANNEL.md must name RS2G08 / RS2G32")
     return errors
 
 
@@ -3194,31 +3201,51 @@ def _grid_copies_g08_cmos(m) -> bool:
 
 
 def _next_wave_ok() -> list[str]:
-    """UNCONFIRMED G00/G02/G04/G86/2G08/2G32 locks. Numbers HOLD. No CONFIRM."""
+    """JH LAST-DAY UNLOCK 2026-09-21: scale-wave CONFIRMED from on-disk DRAFT cards.
+
+    Function/truth/isolation signed. Unsigned vcc_grid (except G86 VIL fragment),
+    VOH/VOL loads, and delta_icc numbers stay fail-closed. Physics locks stay:
+    G02 TTL not CMOS; G86 VIL 0.20*VCC; 2G CHA->CHB; OE/IOZ OFF;
+    ICCT ABSENT != invent ICCT.
+    """
     from ate.tests.logic import logic_dc as ldc
 
     errors: list[str] = []
     load_family("logic")
     for part in _NEXT_WAVE_SKUS:
         if not has_product_model(part):
-            errors.append(f"{part} UNCONFIRMED product_model missing (next-wave bind)")
+            errors.append(f"{part} CONFIRMED product_model missing (scale-wave bind)")
             continue
         m = load_product_model(part)
         if m is None:
             errors.append(f"{part} product_model failed to load")
             continue
         if is_parked(m):
-            errors.append(f"{part} next-wave must not be PARKED")
-        if is_datasheet_signed(m.status) or is_datasheet_signed(m.truth_table_status):
-            errors.append(f"{part} must stay UNCONFIRMED (numbers HOLD; no CONFIRM)")
-        if not is_unconfirmed_status(m.status):
-            errors.append(f"{part} status must be UNCONFIRMED, got {m.status!r}")
+            errors.append(f"{part} scale-wave must not be PARKED")
+        if not is_datasheet_signed(m.status):
+            errors.append(f"{part} product_model.status must be CONFIRMED (JH 2026-09-21), got {m.status!r}")
+        if not is_datasheet_signed(m.truth_table_status):
+            errors.append(f"{part} truth_table.status must be CONFIRMED, got {m.truth_table_status!r}")
+        if not is_datasheet_signed(m.isolation_status):
+            errors.append(f"{part} isolation.status must be CONFIRMED, got {m.isolation_status!r}")
+        errors += _fail_closed_until_signed(part, m)
         gst = str((m.vcc_grid or {}).get("status") or "")
-        if is_datasheet_signed(gst):
-            errors.append(f"{part} vcc_grid must stay UNCONFIRMED (numbers HOLD), got {gst!r}")
+        if part == "rs1g86":
+            if not is_datasheet_signed(gst):
+                errors.append("rs1g86 vcc_grid.status must be CONFIRMED (VIL 0.20*VCC card lock)")
+        elif is_datasheet_signed(gst):
+            errors.append(
+                f"{part} vcc_grid must stay UNCONFIRMED (no card VIH/VIL bands; do not invent), got {gst!r}"
+            )
         if m.has_oe():
             errors.append(f"{part}: invent OE -> FAIL")
         en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
+        for need in ("input_threshold", "icc", "ii"):
+            if need not in en:
+                errors.append(f"{part} enabled_tests missing {need} (CONFIRMED process)")
+        for banned in ("voh", "vol", "ioz", "delta_icc"):
+            if banned in en:
+                errors.append(f"{part}: invent {banned} enabled -> FAIL")
         if "ioz" in en:
             errors.append(f"{part}: invent IOZ enabled -> FAIL")
         try:
@@ -3333,6 +3360,9 @@ def _next_wave_ok() -> list[str]:
                     )
             except (TypeError, ValueError):
                 errors.append(f"rs1g86 VIL@1.65 formula eval failed, got {got_vil!r}")
+            got_vih = lim165.get("VIH_min_V")
+            if got_vih is not None:
+                errors.append("rs1g86 VIH HOLD -- do not invent VIH_min on the VIL card lock")
             if dual_channel_continue(m):
                 errors.append("rs1g86 is 1Gxx -- dual_channel_continue off")
         elif part in ("rs2g08", "rs2g32"):
@@ -3668,13 +3698,17 @@ def _confirmed_sim_sweep_ok() -> list[str]:
 
     errors: list[str] = []
     if frozenset(_CONFIRMED_SIM_PARTS) != frozenset(_ACTIVE_LOGIC):
-        errors.append("CONFIRMED SIM walk must match the 11 CONFIRMED _ACTIVE_LOGIC set")
+        errors.append("CONFIRMED SIM walk must match the 17 CONFIRMED _ACTIVE_LOGIC set")
+    if len(_CONFIRMED_SIM_PARTS) != 17:
+        errors.append(f"_CONFIRMED_SIM_PARTS must be 17 (11 prior + 6 scale-wave), got {len(_CONFIRMED_SIM_PARTS)}")
     if frozenset(_ARCHIVE_SIM_PARTS) != frozenset(_ARCHIVE_LOGIC):
         errors.append("archive SIM parts must match dropped RS1G74 / RS1G123 set")
     if frozenset(_NEXT_WAVE_SKUS) != frozenset(_NEXT_WAVE_LOGIC):
-        errors.append("next-wave SKUs must match sim _NEXT_WAVE_LOGIC")
-    if set(_NEXT_WAVE_SKUS) & set(_CONFIRMED_SIM_PARTS):
-        errors.append("next-wave UNCONFIRMED must not join CONFIRMED SIM set")
+        errors.append("scale-wave SKUs must match sim _NEXT_WAVE_LOGIC")
+    if set(_NEXT_WAVE_SKUS) - set(_CONFIRMED_SIM_PARTS):
+        errors.append("scale-wave CONFIRMED must join CONFIRMED SIM set")
+    if set(_ARCHIVE_SIM_PARTS) & set(_CONFIRMED_SIM_PARTS):
+        errors.append("PARKED RS1G74 / RS1G123 must stay out of CONFIRMED SIM")
 
     load_family("logic")
 
@@ -3782,6 +3816,27 @@ def _confirmed_sim_sweep_ok() -> list[str]:
                 errors.append("rs1g07 SIM: voh must stay SKIP/N_A")
             if part == "rs1g97" and "ioz" in ids:
                 errors.append("rs1g97 SIM: ioz must stay OFF")
+            if part in _NEXT_WAVE_SKUS:
+                for banned in ("voh", "vol", "ioz", "delta_icc"):
+                    if banned in ids:
+                        errors.append(f"{part} SIM: {banned} must stay OFF (unsigned / ABSENT)")
+                if part in ("rs2g08", "rs2g32"):
+                    if not dual_channel_continue(m):
+                        errors.append(f"{part} SIM: dual_channel_continue CHA then CHB required")
+                    elif recipe_channels(m) != ["CHA", "CHB"]:
+                        errors.append(f"{part} SIM: skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+                    else:
+                        specs = [get(tid) for tid in ids]
+                        specs = [s for s in specs if s is not None]
+                        over = apply_dual_channel_continue(specs, m)
+                        if any(not getattr(s, "dual_channel", False) for s in over):
+                            errors.append(
+                                f"{part} SIM: CHA->CHB Continue must OR dual_channel onto Path B specs"
+                            )
+                        if any(getattr(s, "dual_channel", False) for s in specs):
+                            errors.append(
+                                f"{part} SIM: apply_dual_channel_continue must not mutate registered spec"
+                            )
             drive_names = list(m.logic_inputs)
             if m.has_oe() and m.oe_pin and m.oe_pin not in drive_names:
                 drive_names.append(m.oe_pin)
@@ -4020,6 +4075,13 @@ def _handover_ok() -> list[str]:
         ):
             if token not in text:
                 errors.append(f"{path.name} must name {token}")
+        if "2026-09-21" not in text:
+            errors.append(f"{path.name} must name JH LAST-DAY UNLOCK 2026-09-21")
+        if "CONFIRM-all" not in text:
+            errors.append(f"{path.name} must name CONFIRM-all scale wave")
+        for family in ("NAND", "NOR", "INV", "XOR", "dual AND", "dual OR"):
+            if family not in text:
+                errors.append(f"{path.name} must name LIVE family {family}")
     return errors
 
 

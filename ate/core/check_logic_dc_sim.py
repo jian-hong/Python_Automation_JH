@@ -2,9 +2,10 @@
 
 Run: python -m ate.core.check_logic_dc_sim
 
-Covers the 11 CONFIRMED Logic product_model SKUs. Overlay one VCC so SIM stays
-fast. stable_eps_A stays null (NON_TIGHT). RS1G123 / RS1G74 are dropped/archive
-(optional UNCONFIRMED stubs -- not in this mandatory set). Do not invent limits.
+Covers the 17 CONFIRMED Logic product_model SKUs (11 prior + 6 scale-wave
+2026-09-21). Overlay one VCC so SIM stays fast. stable_eps_A stays null
+(NON_TIGHT). RS1G123 / RS1G74 are dropped/archive PARKED -- not in this
+mandatory set. Do not invent limits.
 """
 from __future__ import annotations
 
@@ -18,12 +19,15 @@ from ate.core.registry import get, load_family
 from ate.fixture.modes import enabled_tests_for_part
 from ate.tests.logic import logic_dc as ldc
 from ate.tests.logic.product_model import (
+    apply_dual_channel_continue,
+    dual_channel_continue,
     has_product_model,
     is_open_drain,
     is_parked,
     is_sequential,
     live_session,
     load_product_model,
+    recipe_channels,
     voh_series_allowed,
 )
 
@@ -38,7 +42,8 @@ _PATH_B_DC = (
     "ioz",
 )
 
-# Mandatory Path B SIM set (JH 11 CONFIRMED). Sequential skip OK for rs164.
+# Mandatory Path B SIM set (JH 17 CONFIRMED = 11 prior + 6 scale-wave).
+# Sequential skip OK for rs164. PARKED 74/123 stay out.
 _ACTIVE_LOGIC = (
     "rs1gt34",
     "rs1g08",
@@ -51,10 +56,16 @@ _ACTIVE_LOGIC = (
     "rs164",
     "rs1g97",
     "rs1g126",
+    "rs1g00",
+    "rs1g02",
+    "rs1g04",
+    "rs1g86",
+    "rs2g08",
+    "rs2g32",
 )
 # Dropped from Path B scale. Optional UNCONFIRMED archive -- do not block green.
 _ARCHIVE_LOGIC = frozenset({"rs1g123", "rs1g74"})
-# UNCONFIRMED next-wave bind. Numbers HOLD. Not in mandatory SIM.
+# Scale-wave SKUs (CONFIRMED 2026-09-21). Physics locks; now in mandatory SIM.
 _NEXT_WAVE_LOGIC = (
     "rs1g00",
     "rs1g02",
@@ -73,17 +84,29 @@ def _icct_mapped(model: Any) -> bool:
     return bool(ldc._icct_blob(model)) or (model.recipe or {}).get("delta_offset_v") is not None
 
 
+def _sim_part_key(model: Any) -> str:
+    raw = getattr(model, "raw", None) or {}
+    key = str((raw.get("part_key") if isinstance(raw, dict) else "") or getattr(model, "part", "") or "")
+    return key.strip().lower()
+
+
 def applicable_path_b_dc(model: Any) -> list[str]:
-    """Physics catalog for this product_model. Sequential is not gate 2^n."""
+    """Physics catalog for this product_model. Sequential is not gate 2^n.
+
+    VOH/VOL join only when CONFIRMED loads / campaign tables exist. Empty
+    tables stay fail-closed (do not invent; do not _assert_ran unsigned VOH).
+    """
     if is_sequential(model):
         return []
     ids: list[str] = ["vth" if model.schmitt else "input_threshold", "icc"]
     if _icct_mapped(model):
         ids.append("delta_icc")
     ids.append("ii")
-    if voh_series_allowed(model) and not is_open_drain(model):
+    key = _sim_part_key(model)
+    if voh_series_allowed(model) and not is_open_drain(model) and ldc._voh_vol_table(key, "voh", model=model):
         ids.append("voh")
-    ids.append("vol")
+    if ldc._voh_vol_table(key, "vol", model=model):
+        ids.append("vol")
     if model.has_oe():
         ids.append("ioz")
     return ids
@@ -321,17 +344,17 @@ def _assert_ran(part: str, tid: str, model: Any) -> list[str]:
 
 
 def check_logic_dc_sim() -> list[str]:
-    """SIM the 11 CONFIRMED Logic SKUs. Archive 123/74 do not block green."""
+    """SIM the 17 CONFIRMED Logic SKUs. Archive 123/74 do not block green."""
     errors: list[str] = []
     load_family("logic")
     saved = _patch_sleep()
     try:
-        if len(_ACTIVE_LOGIC) != 11:
-            errors.append(f"_ACTIVE_LOGIC must be the 11 CONFIRMED SKUs, got {len(_ACTIVE_LOGIC)}")
+        if len(_ACTIVE_LOGIC) != 17:
+            errors.append(f"_ACTIVE_LOGIC must be the 17 CONFIRMED SKUs, got {len(_ACTIVE_LOGIC)}")
         if _ARCHIVE_LOGIC & set(_ACTIVE_LOGIC):
             errors.append("RS1G123 / RS1G74 archive must not join mandatory SIM set")
-        if set(_NEXT_WAVE_LOGIC) & set(_ACTIVE_LOGIC):
-            errors.append("next-wave UNCONFIRMED must not join mandatory SIM set")
+        if set(_NEXT_WAVE_LOGIC) - set(_ACTIVE_LOGIC):
+            errors.append("scale-wave CONFIRMED must join mandatory SIM set")
         seen: set[str] = set()
         for path in sorted(PARTS_DIR.glob("*.yaml")):
             part = path.stem.lower()
@@ -359,6 +382,23 @@ def check_logic_dc_sim() -> list[str]:
                 errors += _expect_raise(part, "voh", m, "open-drain")
             if not m.has_oe() and "ioz" in en:
                 errors.append(f"{part}: oe none must not enable ioz")
+            if part in _NEXT_WAVE_LOGIC:
+                for banned in ("voh", "vol", "ioz", "delta_icc"):
+                    if banned in en:
+                        errors.append(f"{part}: invent {banned} enabled -> FAIL")
+                if part in ("rs2g08", "rs2g32"):
+                    if not dual_channel_continue(m):
+                        errors.append(f"{part}: dual_channel_continue CHA then CHB required")
+                    elif recipe_channels(m) != ["CHA", "CHB"]:
+                        errors.append(f"{part}: skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+                    else:
+                        specs = [get(tid) for tid in catalog]
+                        specs = [s for s in specs if s is not None]
+                        over = apply_dual_channel_continue(specs, m)
+                        if any(not getattr(s, "dual_channel", False) for s in over):
+                            errors.append(
+                                f"{part}: CHA->CHB Continue must OR dual_channel onto Path B specs"
+                            )
             run_ids = list(catalog)
             if "vth" in run_ids and "input_threshold" in run_ids:
                 run_ids = [x for x in run_ids if x != "vth"]
@@ -378,7 +418,7 @@ def check_logic_dc_sim() -> list[str]:
                     errors.append("rs1gt34 must not invent VOL live measured")
         for part in _ACTIVE_LOGIC:
             if not has_product_model(part):
-                errors.append(f"{part}: product_model missing (11 CONFIRMED SIM)")
+                errors.append(f"{part}: product_model missing (17 CONFIRMED SIM)")
         missing = [p for p in _ACTIVE_LOGIC if p not in seen]
         if missing:
             errors.append(f"SIM missed active parts {missing}")
@@ -437,6 +477,10 @@ def part_sim_status() -> list[dict[str, Any]]:
                 extra = "G07 VOH SKIP N_A. " if part == "rs1g07" else ""
                 if part == "rs1gt34":
                     extra += "VOL live NOT_RUN. "
+                if part in _NEXT_WAVE_LOGIC:
+                    extra += "unsigned VOH/VOL/ICCT HOLD. "
+                if part in ("rs2g08", "rs2g32"):
+                    extra += "CHA then CHB Continue. "
                 rows.append(
                     {
                         "part": part,
@@ -466,6 +510,8 @@ def part_sim_status() -> list[dict[str, Any]]:
                     }
                 )
         for part in _NEXT_WAVE_LOGIC:
+            if part in _ACTIVE_LOGIC:
+                continue
             m = load_product_model(part) if has_product_model(part) else None
             if m is None:
                 rows.append(
@@ -491,7 +537,7 @@ def part_sim_status() -> list[dict[str, Any]]:
 def main() -> int:
     errors = check_logic_dc_sim()
     rows = part_sim_status()
-    print("Logic 11 CONFIRMED SIM (visa-free; not a Verify PASS / not bench green)")
+    print("Logic 17 CONFIRMED SIM (visa-free; not a Verify PASS / not bench green)")
     for row in rows:
         print(f"  {row['part']}: {row['ready']} -- {row['reason']}")
     if errors:

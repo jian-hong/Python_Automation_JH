@@ -1,5 +1,6 @@
-# RS1G02 NOR-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
-# TTL-style VIH/VIL (not G08 CMOS). Band numbers HOLD until Datasheet CONFIRM.
+# RS1G02 NOR-2 -- JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur.
+# On-disk DRAFT card is the SoT. Function CONFIRMED. TTL-style VIH/VIL (not G08 CMOS).
+# Band numbers HOLD. No invent.
 
 part: RS1G02
 model: RS1G02
@@ -18,18 +19,24 @@ timing:
 enabled_tests:
   - tp
   - supply_current
+  - input_threshold
+  - icc
+  - ii
 fixture_modes:
   LOGIC:
     label: "Logic board (RS1G02 NOR)"
     board_class: general
     checklist:
-      - "RS1G02 NOR-2. UNCONFIRMED -- numbers HOLD."
+      - "RS1G02 NOR-2. CONFIRMED function 2026-09-21. Unsigned VIH/VIL/VOH/VOL HOLD."
       - "TTL-style VIH/VIL -- do not copy G08 CMOS 0.65/0.15 bands."
-    tests: [tp, supply_current]
+      - "oe none. IOZ OFF. ICCT ABSENT. Do not tick voh/vol until CONFIRMED loads."
+    tests: [tp, supply_current, input_threshold, icc, ii]
 
 product_model:
   part: RS1G02
-  status: UNCONFIRMED
+  status: CONFIRMED
+  source_card: JH_LAST_DAY_UNLOCK_2026-09-21
+  confirm_note: "JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur. On-disk DRAFT card. Function/truth/isolation signed. TTL kind lock. Unsigned numbers HOLD."
   package: SC70-5
   product_class: gate_nor2
   schmitt: false
@@ -49,16 +56,16 @@ product_model:
     A: {src: awg, ch: 1}
     B: {src: awg, ch: 2}
   truth_table:
-    status: UNCONFIRMED
+    status: CONFIRMED
     kind: combinational
-    note: NOR Y=NOT(A OR B). Function lock only. Numbers HOLD.
+    note: NOR Y=NOT(A OR B). Function signed from on-disk DRAFT card.
     rows:
     - {A: L, B: L, Y: H}
     - {A: H, B: L, Y: L}
     - {A: L, B: H, Y: L}
     - {A: H, B: H, Y: L}
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     note: NOR other=L -> invert. Do not copy G32 OR track.
     tests:
       A:
@@ -69,7 +76,7 @@ product_model:
     status: UNCONFIRMED
     stimulus: AWG
     kind: TTL
-    note: TTL-style VIH/VIL (not G08 CMOS 0.65*VCC / 0.15*VCC). Numbers HOLD.
+    note: TTL-style VIH/VIL (not G08 CMOS 0.65*VCC / 0.15*VCC). Band numbers HOLD.
     ranges: []
     fixed_points: []
   pass_mode:
@@ -98,9 +105,9 @@ product_model:
     runner: gate_nor2
     dual_channel_continue: false
   gaps:
-  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - CONFIRMED function 2026-09-21; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
   - NOR other=L invert; oe none; IOZ OFF
   - TTL-style VIH/VIL -- do not copy G08 CMOS bands
   - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
-  - do not invent VOH/VOL / ICCT
+  - do not invent VOH/VOL / ICCT / VIH/VIL numbers
   - stable_eps_A null

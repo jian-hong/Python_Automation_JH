@@ -1,5 +1,6 @@
-# RS1G00 NAND-2 -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
-# ate_ds_extract/models missing in workspace -- locks from JH scale-wave only.
+# RS1G00 NAND-2 -- JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur.
+# On-disk DRAFT card is the SoT (ate_ds_extract/models missing). Function CONFIRMED.
+# Unsigned vcc_grid / VOH / VOL / delta_icc HOLD. No invent.
 
 part: RS1G00
 model: RS1G00
@@ -18,18 +19,24 @@ timing:
 enabled_tests:
   - tp
   - supply_current
+  - input_threshold
+  - icc
+  - ii
 fixture_modes:
   LOGIC:
     label: "Logic board (RS1G00 NAND)"
     board_class: general
     checklist:
-      - "RS1G00 NAND-2. UNCONFIRMED -- numbers HOLD. Do not copy G08 CMOS bands."
+      - "RS1G00 NAND-2. CONFIRMED function 2026-09-21. Unsigned VIH/VIL/VOH/VOL HOLD."
       - "oe none. IOZ OFF. ICCT ABSENT -- delta_icc from delta_icc_uA only; do not invent offset_v."
-    tests: [tp, supply_current]
+      - "Do not copy G08 CMOS bands. Do not tick voh/vol until CONFIRMED loads."
+    tests: [tp, supply_current, input_threshold, icc, ii]
 
 product_model:
   part: RS1G00
-  status: UNCONFIRMED
+  status: CONFIRMED
+  source_card: JH_LAST_DAY_UNLOCK_2026-09-21
+  confirm_note: "JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur. On-disk DRAFT card. Function/truth/isolation signed. Unsigned numbers HOLD."
   package: SC70-5
   product_class: gate_nand2
   schmitt: false
@@ -49,16 +56,16 @@ product_model:
     A: {src: awg, ch: 1}
     B: {src: awg, ch: 2}
   truth_table:
-    status: UNCONFIRMED
+    status: CONFIRMED
     kind: combinational
-    note: NAND Y=NOT(A AND B). Function lock only. Numbers HOLD.
+    note: NAND Y=NOT(A AND B). Function signed from on-disk DRAFT card.
     rows:
     - {A: H, B: H, Y: L}
     - {A: L, B: H, Y: H}
     - {A: H, B: L, Y: H}
     - {A: L, B: L, Y: H}
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     note: NAND other=H -> invert. Do not copy G08 AND track.
     tests:
       A:
@@ -68,7 +75,7 @@ product_model:
   vcc_grid:
     status: UNCONFIRMED
     stimulus: AWG
-    note: Numbers HOLD. Do not copy G08 CMOS 0.65/0.15.
+    note: No card VIH/VIL bands. Do not copy G08 CMOS 0.65/0.15. Numbers HOLD.
     ranges: []
     fixed_points: []
   pass_mode:
@@ -97,8 +104,8 @@ product_model:
     runner: gate_nand2
     dual_channel_continue: false
   gaps:
-  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - CONFIRMED function 2026-09-21; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
   - NAND other=H invert; oe none; IOZ OFF
   - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
-  - do not invent VOH/VOL loads
+  - do not invent VOH/VOL loads / VIH/VIL bands
   - stable_eps_A null

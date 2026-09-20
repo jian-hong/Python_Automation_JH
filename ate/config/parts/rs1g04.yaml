@@ -1,5 +1,6 @@
-# RS1G04 inverter -- UNCONFIRMED Path B bind. Numbers HOLD. No CONFIRM.
-# n=1 Y=NOT A. NC is not OE. IOZ OFF.
+# RS1G04 inverter -- JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur.
+# On-disk DRAFT card is the SoT. Function CONFIRMED. n=1 Y=NOT A. NC is not OE.
+# Unsigned VIH/VIL/VOH/VOL HOLD. No invent.
 
 part: RS1G04
 model: RS1G04
@@ -18,18 +19,23 @@ timing:
 enabled_tests:
   - tp
   - supply_current
+  - input_threshold
+  - icc
+  - ii
 fixture_modes:
   LOGIC:
     label: "Logic board (RS1G04 INV)"
     board_class: general
     checklist:
-      - "RS1G04 inverter. UNCONFIRMED -- numbers HOLD."
-      - "NC is not OE. Do not tick IOZ."
-    tests: [tp, supply_current]
+      - "RS1G04 inverter. CONFIRMED function 2026-09-21. Unsigned VIH/VIL/VOH/VOL HOLD."
+      - "NC is not OE. Do not tick IOZ. Do not tick voh/vol until CONFIRMED loads."
+    tests: [tp, supply_current, input_threshold, icc, ii]
 
 product_model:
   part: RS1G04
-  status: UNCONFIRMED
+  status: CONFIRMED
+  source_card: JH_LAST_DAY_UNLOCK_2026-09-21
+  confirm_note: "JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur. On-disk DRAFT card. Function/truth/isolation signed. NC not OE. Unsigned numbers HOLD."
   package: SC70-5
   product_class: gate_inv
   schmitt: false
@@ -47,21 +53,21 @@ product_model:
   pin_drive:
     A: {src: awg, ch: 1}
   truth_table:
-    status: UNCONFIRMED
+    status: CONFIRMED
     kind: combinational
-    note: Y=NOT A. Function lock only. Numbers HOLD.
+    note: Y=NOT A. Function signed from on-disk DRAFT card.
     rows:
     - {A: H, Y: L}
     - {A: L, Y: H}
   isolation:
-    status: UNCONFIRMED
+    status: CONFIRMED
     tests:
       A:
       - {sweep_pin: A, fix: {}, y_expect: invert}
   vcc_grid:
     status: UNCONFIRMED
     stimulus: AWG
-    note: Numbers HOLD. Do not invent VIH/VIL.
+    note: No card VIH/VIL bands. Numbers HOLD. Do not invent.
     ranges: []
     fixed_points: []
   pass_mode:
@@ -90,7 +96,7 @@ product_model:
     runner: gate_inv
     dual_channel_continue: false
   gaps:
-  - UNCONFIRMED -- numbers HOLD; Datasheet CONFIRM needed
+  - CONFIRMED function 2026-09-21; unsigned vcc_grid / VOH / VOL / delta_icc HOLD
   - inverter n=1 Y=NOT A; NC not OE; IOZ OFF
   - ICCT ABSENT -- do not invent ICCT map; delta_icc_uA only
   - do not invent VOH/VOL / ICCT / VIH/VIL
