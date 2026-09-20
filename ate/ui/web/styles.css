@@ -961,6 +961,28 @@ h3.subhead {
 .vcc-chip input, .vcc-range-row input { width: 5.5em; }
 .vcc-range-row input.vcc-range-label { width: 8em; }
 .logic-dc-stim { display: flex; flex-wrap: wrap; gap: 12px; margin: 6px 0; }
+.logic-dc-flow {
+  width: 100%;
+  max-width: 560px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: 6px 0 12px;
+  background: rgba(0,0,0,0.2);
+  touch-action: none;
+}
+.logic-dc-flow svg { display: block; width: 100%; height: auto; }
+.logic-dc-flow-chip {
+  fill: rgba(80, 120, 180, 0.35);
+  stroke: var(--hairline);
+}
+.logic-dc-flow-node { cursor: grab; }
+.logic-dc-flow-node text {
+  fill: var(--text);
+  font-size: 10px;
+  font-family: var(--mono);
+  pointer-events: none;
+}
 .logic-dc-json { margin-top: 10px; }
 .logic-dc-json summary { cursor: pointer; color: var(--muted); font-size: var(--fs-sm); }
 #logic-dc-card-fields textarea { width: 100%; min-height: 3.2em; }

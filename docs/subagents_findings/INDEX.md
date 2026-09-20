@@ -2,6 +2,7 @@
 
 | Date | File | Keywords |
 |------|------|----------|
+| 2026-09-21 | 2026-09-21_jh-coordinator-p1-p2.md | path-b, xyflow, logic-dc-flow, customise, NAND, NOR, INV, XOR, do not skip rewire, golden_auto, VOL board-change, 5-step cheat |
 | 2026-09-21 | 2026-09-21_jh-confirm-all-scale-wave.md | path-b, CONFIRM-all, rs1g00, rs1g02, rs1g04, rs1g86, rs2g08, rs2g32, CONFIRMED, 17 SIM, VIL 0.20*VCC, no invent |
 | 2026-09-20 | 2026-09-20_jh-last-day-handover.md | path-b, handover, HANDOVER.md, AE, FAE, GT34 VOL resume, inventory gaps, rs74aup1g07, no invent |
 | 2026-09-18 | 2026-09-18_scale-wave-park.md | path-b, PARKED, rs1g74, rs1g123, rs1g00, rs1g02, rs1g04, rs1g86, rs2g08, rs2g32, UNCONFIRMED, numbers HOLD, dual_channel_continue |

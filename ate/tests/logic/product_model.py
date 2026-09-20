@@ -1292,6 +1292,8 @@ def panel_payload(part_key: str) -> dict[str, Any]:
         "data_paths": dict(model.data_paths),
         "excel_plots": dict(model.excel_plots or {}),
         "workbook_policy": model.workbook_policy,
+        "product_class": str((_raw_blob(model).get("product_class") or "")),
+        "runner": str((model.recipe or {}).get("runner") or ""),
         "card_fields": card_fields_for_panel(blob, model),
         "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }
@@ -1897,6 +1899,8 @@ def model_to_ui(model: ProductModel) -> dict[str, Any]:
         "data_paths": dict(model.data_paths),
         "excel_plots": dict(model.excel_plots or {}),
         "workbook_policy": model.workbook_policy,
+        "product_class": str((_raw_blob(model).get("product_class") or "")),
+        "runner": str((model.recipe or {}).get("runner") or ""),
         "card_fields": card_fields_for_panel(model.raw if isinstance(model.raw, dict) else {}, model),
         "oop_schema": CARD_FIELDS_SCHEMA_PATH.name,
     }
@@ -2089,7 +2093,8 @@ def format_pin_wiring_labels(model: ProductModel) -> list[str]:
     """Panel pin/wiring labels from CONFIRMED pins + pin_drive. Never invent nets."""
     lines: list[str] = []
     for p in model.pins:
-        bit = f"{p.name} pin {p.number} {p.role}"
+        num = p.number if p.number is not None else "?"
+        bit = f"{p.name} pin {num} {p.role}"
         dm = (model.pin_drive or {}).get(p.name)
         if dm is not None:
             src = str(getattr(dm, "src", "") or "").strip().upper()
@@ -2117,6 +2122,11 @@ def format_pin_wiring_labels(model: ProductModel) -> list[str]:
 def format_wire_lines(model: ProductModel, test_id: str) -> list[str]:
     """PSU CH->pin, AWG CH->input, DMM->VCC or Y, SCOPE CH->Y/debug."""
     wm = model.wire_map if isinstance(model.wire_map, dict) else {}
+    if not wire_map_has_test(model, test_id):
+        return [
+            "Wire map empty -- CONFIRMED pins + pin_drive only; do not invent nets",
+            "Human Continue after verify.",
+        ]
     block = wire_map_for_test(model, test_id)
     lines = [
         "Wire map (CONFIRMED pins + pin_drive only; do not invent nets)",
@@ -2203,15 +2213,18 @@ def format_settle_lines(model: ProductModel, test_id: str) -> list[str]:
 
 def format_measure_lines(model: ProductModel, test_id: str) -> list[str]:
     tid = str(test_id or "").strip().lower()
-    block = wire_map_for_test(model, tid)
-    dmm = block.get("dmm")
-    if isinstance(dmm, list):
-        sense = ", ".join(str(x).strip().upper() for x in dmm if str(x).strip())
-    elif dmm not in (None, ""):
-        sense = str(dmm).strip().upper()
+    if wire_map_has_test(model, tid):
+        block = wire_map_for_test(model, tid)
+        dmm = block.get("dmm")
+        if isinstance(dmm, list):
+            sense = ", ".join(str(x).strip().upper() for x in dmm if str(x).strip())
+        elif dmm not in (None, ""):
+            sense = str(dmm).strip().upper()
+        else:
+            scope = block.get("scope") if isinstance(block.get("scope"), dict) else {}
+            sense = "MSO " + ", ".join(str(k) for k in scope) if scope else "see wire_map"
     else:
-        scope = block.get("scope") if isinstance(block.get("scope"), dict) else {}
-        sense = "MSO " + ", ".join(str(k) for k in scope) if scope else "see wire_map"
+        sense = "see pin_drive (no wire_map -- do not invent nets)"
     mode = lookup_pass_mode(model, tid, tid) or (model.pass_mode or {}).get(tid)
     extra = []
     if tid in ("voh",):
@@ -2255,8 +2268,43 @@ def format_fail_lines(
     ]
 
 
+def format_vol_resume_lines(model: ProductModel, test_id: str) -> list[str]:
+    """GT34 VOL board-change resume. live.vol stays NOT_RUN until measured."""
+    tid = str(test_id or "").strip().lower()
+    if tid != "vol":
+        return []
+    live = live_session(model)
+    vol_live = live.get("vol") if isinstance(live.get("vol"), dict) else {}
+    st = str(vol_live.get("status") or "").strip().upper().replace("-", "_")
+    if st and st != "NOT_RUN":
+        return []
+    if not st and not vol_live:
+        return []
+    return [
+        "GT34 VOL board-change resume -- live.vol stays NOT_RUN until measured",
+        "Recable PSU CH2 Y-load: VOH sink was 0V; VOL source rail = VCC",
+        "Keep CH1=VCC, CH3=A, DMM/SCOPE on Y. PSU_MSO -- no AWG Freq/Amp",
+        "Do not invent VOL measured / rows. Judge VOL <= max (max_only)",
+        "Human Continue after recable verify",
+    ]
+
+
+def format_dual_rewire_lines(model: ProductModel) -> list[str]:
+    """2Gxx CHA then CHB -- do not skip rewire prompt."""
+    if not dual_channel_continue(model):
+        return []
+    chans = recipe_channels(model) or ["CHA", "CHB"]
+    return [
+        "2Gxx dual-channel Continue CHA then CHB -- do not skip rewire prompt",
+        "After CHA Human Continue, recable Channel B (OpAmp-style switch). Do not skip rewire.",
+        f"Channels: {', '.join(chans)}",
+    ]
+
+
 def format_handoff_begin(model: ProductModel, test_id: str) -> list[str]:
     lines: list[str] = []
+    lines.extend(format_vol_resume_lines(model, test_id))
+    lines.extend(format_dual_rewire_lines(model))
     lines.extend(format_wire_lines(model, test_id))
     lines.extend(format_stimulus_lines(model, test_id))
     lines.extend(format_settle_lines(model, test_id))
@@ -2318,7 +2366,12 @@ def operator_pause(params: Any, title: str, checklist: Optional[list[str]] = Non
 def path_b_handoff(params: Any, model: ProductModel, test_id: str):
     """Continue prompts: wire, stimulus, settle, measure; FAIL attach; save path."""
     tid = str(test_id or "").strip().lower()
-    if not wire_map_has_test(model, tid):
+    need = (
+        wire_map_has_test(model, tid)
+        or bool(format_vol_resume_lines(model, tid))
+        or dual_channel_continue(model)
+    )
+    if not need:
         yield
         return
     begin = format_handoff_begin(model, tid)

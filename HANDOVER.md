@@ -4,6 +4,16 @@ JH last day unlock **2026-09-21 Asia/Kuala_Lumpur**. **CONFIRM-all** scale wave:
 
 Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LOGIC_DC_OPERATOR.md`. Writer format: `docs/LOGIC_DC.md`. Dual Continue: `docs/LOGIC_DC_DUAL_CHANNEL.md`.
 
+## 5-step cheat (AE/FAE add a part)
+
+1. **PDF** -- local Reference extract under `ate/config/datasheets/text/` (or attached card). Do not scrape en.run-ic.com.
+2. **OCR** -- PaddleOCR onto `docs/datasheet/card_fields.schema.yaml` (Part / Pin / TruthTable / Isolation / Limit / Recipe). No Baidu unless asked.
+3. **CONFIRM** -- JH Datasheet-signed `product_model.status: CONFIRMED` (and truth_table / isolation / signed `vcc_grid`). Until then **UNCONFIRMED** -- numbers HOLD, not greenable. Panel Save cannot promote signed.
+4. **product_model YAML** -- copy into `ate/config/parts/<key>.yaml`. Enable only card-backed tests. Isolation from truth_table. Do not fork `logic_dc.py`. Do not invent ICCT / OE / loads.
+5. **SIM then LIVE** -- `python -m ate.core.check_logic_dc` + `python -m ate.core.check_logic_dc_sim`. START.bat, Open Session, Human Continue. Fill **golden_auto**. STS `report.pdf`. DEMO/SIM is not Verify PASS.
+
+CONFIRMED 17 + PARKED 2 listed below. G07 VOH N_A forever. IOZ only OE. RS164 != 2^n. Do not invent VOL live.
+
 ## Tomorrow without JH
 
 1. GT34 **VOL board-change resume** (LIVE). Do not invent VOL. Keep VOH LIVE table as-is.
@@ -82,7 +92,7 @@ Shared LIVE start: START.bat, person selected, Open Session, Human Continue afte
 2. **LIVE NOR (RS1G02)** -- AWG A/B. Isolation other=L invert. TTL-style VIH/VIL kind lock; band numbers HOLD. Do not copy G08 CMOS.
 3. **LIVE INV (RS1G04)** -- AWG A only. n=1 Y=NOT A. NC is not OE. Do not tick IOZ.
 4. **LIVE XOR (RS1G86)** -- AWG A/B. Dual isolation track (other=L) + invert (other=H). Judge **VIL <= 0.20*VCC** at 1.65-1.95 (`max_only`). VIH HOLD -- do not invent. Do not copy G08 VIL 0.15*VCC.
-5. **LIVE dual AND (RS2G08)** -- CHA then CHB Continue. Recable Channel B after CHA Human Continue. Isolation other=H track. Pin numbers HOLD. Extra `rs2g*.yaml` forbidden.
+5. **LIVE dual AND (RS2G08)** -- CHA then CHB Continue. Do not skip rewire. Recable Channel B after CHA Human Continue. Isolation other=H track. Pin numbers HOLD. Extra `rs2g*.yaml` forbidden.
 6. **LIVE dual OR (RS2G32)** -- same CHA then CHB Continue. Isolation other=L track. Pin numbers HOLD.
 
 G07 VOH stays N_A forever. Do not unpark G74/G123.
@@ -105,13 +115,13 @@ G07 VOH stays N_A forever. Do not unpark G74/G123.
 
 ## Customise Parameters (Setup Logic DC recipe)
 
-Works from product_model -- no xyflow, no per-SKU Python.
+Works from product_model -- no xyflow, no per-SKU Python. Vanilla `#logic-dc-flow` pin/wiring D&D (layout only; never invent nets). No xyflow npm.
 
 - **n-input:** `logic_inputs` length; ICC corners = 2^n (OE extra when present). Sequential shows 0.
 - **OE:** meta + IOZ row only if OE on card (inactive only).
 - **Schmitt:** FIXED POINTS / RANGE SWEEPS show VT+ / VT- / HYST, not plain VIH/VIL.
 - **Open-drain:** VOH N/A skip on limits table; do not tick voh.
-- **Dual-channel Continue:** checkbox CHA then CHB (2Gxx). Off on 1Gxx.
+- **Dual-channel Continue:** checkbox CHA then CHB (2Gxx). Do not skip rewire prompt. Off on 1Gxx.
 - **Stimulus:** PSU_MSO hides Freq/Amp. AWG keeps them.
 - Save Version overlay -> `_manifest/test_params.yaml`. Save product_model -> part yaml via card_fields. Cannot CONFIRM from the panel.
 

@@ -1430,9 +1430,115 @@ function pinWiringHtml(dc) {
   }
   return (
     "<h3 class=\"subhead\">Pin / wiring map</h3>" +
-    "<p class=\"hint\">From product_model pins + pin_drive. Human Continue after verify. Never invent nets.</p>" +
-    `<ul class="hint" id="logic-dc-wire-labels">${items.map((x) => `<li>${x}</li>`).join("")}</ul>`
+    "<p class=\"hint\">From product_model pins + pin_drive. Human Continue after verify. Never invent nets. Missing pin numbers stay ? (HOLD).</p>" +
+    `<ul class="hint" id="logic-dc-wire-labels">${items.map((x) => `<li>${escapeAttr(x)}</li>`).join("")}</ul>`
   );
+}
+
+function familyClassToken(dc) {
+  const rec = (dc && dc.recipe) || {};
+  return String((dc && dc.product_class) || rec.runner || rec.product_class || "")
+    .toLowerCase()
+    .replace(/-/g, "_");
+}
+
+function familyScaleHint(dc) {
+  const cls = familyClassToken(dc);
+  const nIn = ((dc && dc.logic_inputs) || []).length;
+  const oe = dc && dc.oe;
+  const seq = !!(dc && dc.is_sequential);
+  const corners = seq ? 0 : (1 << nIn);
+  const bits = [
+    `N-input + OE scale: n=${nIn} ICC 2^n=${corners}${oe ? " + OE" : " (OE none)"}`,
+  ];
+  if (cls.indexOf("nand") >= 0) {
+    bits.push("LIVE NAND: other=H invert. Do not copy G08 CMOS.");
+  } else if (cls.indexOf("nor") >= 0) {
+    bits.push("LIVE NOR: other=L invert. TTL not G08 CMOS.");
+  } else if (cls.indexOf("xor") >= 0) {
+    bits.push("LIVE XOR: track+invert. G86 VIL 0.20*VCC; VIH HOLD.");
+  } else if (cls.indexOf("inv") >= 0) {
+    bits.push("LIVE INV: n=1 Y=NOT A. NC is not OE.");
+  } else if (cls.indexOf("dual_and") >= 0 || (cls.indexOf("dual") >= 0 && cls.indexOf("and") >= 0)) {
+    bits.push("LIVE dual AND: CHA then CHB. Do not skip rewire.");
+  } else if (cls.indexOf("dual_or") >= 0 || (cls.indexOf("dual") >= 0 && cls.indexOf("or") >= 0)) {
+    bits.push("LIVE dual OR: CHA then CHB. Do not skip rewire.");
+  }
+  if (dc && dc.dual_channel_continue) {
+    bits.push("2Gxx dual-channel Continue CHA then CHB -- do not skip rewire prompt (OpAmp-style switch). Recable Channel B after CHA Human Continue.");
+  }
+  if (dc && dc.is_open_drain) bits.push("Open-drain: hide VOH (N_A).");
+  if (dc && dc.schmitt) bits.push("Schmitt: VT+ / VT- range. Do not collapse to VIH.");
+  if (oe) bits.push(`OE ${oe.pin} active-${oe.active} -- IOZ when inactive only.`);
+  return bits.join(" ");
+}
+
+function logicDcFlowNodes(dc) {
+  const pins = (dc && dc.pins) || [];
+  const drive = (dc && dc.pin_drive) || {};
+  return pins.map((p, i) => {
+    const d = drive[p.name] || {};
+    const num = p.number != null ? p.number : "?";
+    return {
+      id: "pin-" + String(p.name || i),
+      label: `${p.name || "?"} pin ${num}`,
+      role: p.role || "pin",
+      x: 56 + (i % 4) * 120,
+      y: 36 + Math.floor(i / 4) * 64,
+      src: d.src || "",
+      ch: d.ch,
+    };
+  });
+}
+
+function logicDcFlowHtml(dc) {
+  const nodes = logicDcFlowNodes(dc);
+  const w = 520;
+  const h = Math.max(120, 48 + Math.ceil(Math.max(nodes.length, 1) / 4) * 64);
+  const shapes = nodes.map((n) => {
+    const lab = escapeAttr(n.label);
+    return `<g class="logic-dc-flow-node" data-id="${escapeAttr(n.id)}" transform="translate(${n.x},${n.y})">
+      <rect class="logic-dc-flow-chip" x="-48" y="-16" width="96" height="32" rx="6" />
+      <text text-anchor="middle" dy="4">${lab}</text>
+    </g>`;
+  }).join("");
+  return (
+    "<h3 class=\"subhead\">Pin / wiring D&amp;D</h3>" +
+    "<p class=\"hint\">Vanilla pin/wiring D&amp;D canvas (#logic-dc-flow). Drag nodes to layout only -- never invent nets. No React xyflow. No xyflow npm.</p>" +
+    `<div id="logic-dc-flow" class="logic-dc-flow" data-w="${w}" data-h="${h}">
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${shapes}</svg>
+    </div>`
+  );
+}
+
+function wireLogicDcFlow() {
+  const box = $("logic-dc-flow");
+  if (!box) return;
+  const svg = box.querySelector("svg");
+  if (!svg) return;
+  let drag = null;
+  svg.onpointerdown = (ev) => {
+    const g = ev.target && ev.target.closest && ev.target.closest(".logic-dc-flow-node");
+    if (!g) return;
+    const m = g.getAttribute("transform") || "";
+    const nums = /translate\(([^,]+),([^)]+)\)/.exec(m);
+    drag = {
+      el: g,
+      x: nums ? Number(nums[1]) : 0,
+      y: nums ? Number(nums[2]) : 0,
+      px: ev.clientX,
+      py: ev.clientY,
+    };
+    try { g.setPointerCapture(ev.pointerId); } catch (e) {}
+  };
+  svg.onpointermove = (ev) => {
+    if (!drag) return;
+    const nx = drag.x + (ev.clientX - drag.px);
+    const ny = drag.y + (ev.clientY - drag.py);
+    drag.el.setAttribute("transform", `translate(${nx},${ny})`);
+  };
+  svg.onpointerup = () => { drag = null; };
+  svg.onpointercancel = () => { drag = null; };
 }
 
 function renderCustomiseParameters(dc) {
@@ -1460,9 +1566,11 @@ function renderCustomiseParameters(dc) {
   return (
     "<h3 class=\"subhead\">Customise Parameters</h3>" +
     "<p class=\"hint\">vcc_plan editor: FIXED POINTS chips + RANGE SWEEPS + per-band limits + pass_mode (range / min-only / max-only). Same limits for every stepped VCC in a band. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> (test_params + vcc_plan). Card-CONFIRMED vcc_grid unlocks threshold numbers; overlay must not stamp UNCONFIRMED over CONFIRMED. Glyph gaps stay fail-closed. No xyflow. No invent.</p>" +
+    `<p class="hint" id="logic-dc-family-scale">${familyScaleHint(dc || {})}</p>` +
     `<p class="hint">logic_inputs ${(dc.logic_inputs || []).join(",") || "--"} · OE ${oeTxt} · ICC corners ${corners}${dc && dc.is_sequential ? " (sequential -- 2^n disabled)" : " (2^n)"}</p>` +
     pinWiringHtml(dc || {}) +
-    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 CONFIRMED CHA then CHB. Extra rs2g yaml without Datasheet card forbidden.</label>` +
+    logicDcFlowHtml(dc || {}) +
+    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 CONFIRMED CHA then CHB. Do not skip rewire prompt (OpAmp-style switch). Extra rs2g yaml without Datasheet card forbidden.</label>` +
     `<div class="logic-dc-stim">
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="PSU_MSO" ${stimPsu} /> PSU_MSO</label>
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="AWG" ${stimAwg} /> AWG</label>
@@ -1523,6 +1631,7 @@ function wireCustomiseParams() {
   });
   applyStimulusHide();
   refreshVccPreview();
+  wireLogicDcFlow();
 }
 
 function renderLogicDc() {

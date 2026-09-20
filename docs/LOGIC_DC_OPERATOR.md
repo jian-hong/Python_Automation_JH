@@ -74,7 +74,7 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 1. Product-model schema load (`ate/config/parts/<key>.yaml` `product_model` / `logic_dc:`). Isolation derives from `truth_table` (Y tracks the swept pin; invert only if no track combo).
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
 3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **CONFIRMED** (Jian Hong 2026-09-18) for the status gate only -- that is not a bench green.
-4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (pin/wiring map labels, 2Gxx dual-channel Continue switch, FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, per-band limits + `pass_mode` range/min-only/max-only, stimulus PSU_MSO vs AWG, n) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (`vcc_plan` alias of `vcc_grid`, merged `vcc_list`, `pass_mode`, `sample_size`, `stable_eps_A`). PSU_MSO hides Freq/Amp. Not xyflow. Visual tables still write pass_mode on the limits table.
+4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (pin/wiring map labels, vanilla `#logic-dc-flow` D&D layout -- No xyflow npm, 2Gxx dual-channel Continue switch -- do not skip rewire, FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, per-band limits + `pass_mode` range/min-only/max-only, stimulus PSU_MSO vs AWG, n, N-input + OE) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (`vcc_plan` alias of `vcc_grid`, merged `vcc_list`, `pass_mode`, `sample_size`, `stable_eps_A`). PSU_MSO hides Freq/Amp. Not xyflow. Visual tables still write pass_mode on the limits table.
 5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free Path B catalog: `python -m ate.core.check_logic_dc_sim` (the 17 CONFIRMED; overlay one VCC; `stable_eps_A` null = NON_TIGHT; G07 VOH SKIP; RS164 sequential 2^n SKIP). CONFIRMED Path B `TestSpec.run` walk (`_confirmed_sim_sweep_ok`) for GT34, G97, G126, G08, G07, G14, G32, GT08, GT32, G125, RS164 + scale-wave G00/G02/G04/G86/2G08/2G32 -- `fixture_modes.SIM.tests` if present, else LOGIC `enabled_tests`. RS164 Path B gate ids stay OFF (sequential, not 2^n). Import-format alias `ate/tests/logic/dc.py` is the same runner (not a second fork). RS1G123 / RS1G74 are PARKED UNCONFIRMED archive -- not in the mandatory SIM set; missing yaml does not block green; FAIL if treated as gate 2^n. Scale-wave G00/G02/G04/G86/2G08/2G32 CONFIRMED function 2026-09-21 -- unsigned VOH/VOL/VIH (except G86 VIL) numbers HOLD. Timeout SIM raises. **Not a reproduce claim.**
 
 DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure. START.bat is still how the zip console comes up.
@@ -99,7 +99,7 @@ PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC 
 
 ## Customise Parameters (`vcc_grid`)
 
-Setup **Logic DC recipe** -- Customise Parameters (no xyflow):
+Setup **Logic DC recipe** -- Customise Parameters (no xyflow; vanilla `#logic-dc-flow` pin/wiring D&D; No xyflow npm):
 
 1. **FIXED POINTS** chips -- add/remove VCC; each chip has editable VIH min / VIL max.
 2. **RANGE SWEEPS** -- Add range start/stop/step (default 0.1); optional label; **same** VIH/VIL limits for every stepped VCC in that band. Range steps inherit band limits -- they are not stored as a fixed-point row.
@@ -124,7 +124,7 @@ Optional `product_model.live` (sibling of `data_paths`, not a data_paths key) re
 
 OpAmp dual Continue is reused as DATA, not hardcoded OpAmp. See `docs/LOGIC_DC_DUAL_CHANNEL.md`.
 
-`recipe.dual_channel_continue` + `recipe.channels: [CHA, CHB]` -- operator Continue CHA then CHB. Path B TestSpecs stay registered `dual_channel=False`; the runner ORs the recipe flag at run (does not wrap `TestSpec.run`). 1Gxx cards leave the flag off. No fake 2G part YAML without a Datasheet card.
+`recipe.dual_channel_continue` + `recipe.channels: [CHA, CHB]` -- operator Continue CHA then CHB. **Do not skip rewire prompt** (OpAmp-style switch). Recable Channel B after CHA Human Continue. Path B TestSpecs stay registered `dual_channel=False`; the runner ORs the recipe flag at run (does not wrap `TestSpec.run`). 1Gxx cards leave the flag off. No fake 2G part YAML without a Datasheet card.
 
 ## Excel path -- never invent cells
 

@@ -1,6 +1,6 @@
 # STANDARD FORMAT -- write / import a test (live UI)
 
-Live console only (`ate/` + worker **8766** + UI **5174**). Vibe-coder map: `AGENTS.md`. Plug-in slots: `docs/ATE_PLUGIN.md`. UI chrome: `ate/ui/web/UI_CONTRACT.md`. Path B TestSpecs stay physics bodies. Do not add wizard-Python, xyflow, a second runner, or scrape en.run-ic.com.
+Live console only (`ate/` + worker **8766** + UI **5174**). Vibe-coder map: `AGENTS.md`. Plug-in slots: `docs/ATE_PLUGIN.md`. UI chrome: `ate/ui/web/UI_CONTRACT.md`. Path B TestSpecs stay physics bodies. Do not add wizard-Python, xyflow, a second runner, or scrape en.run-ic.com. Customise Parameters pin/wiring D&D is vanilla `#logic-dc-flow` (layout only; never invent nets). No React xyflow npm.
 
 New RS1Gxx (2-input, 3-input, N-input, with/without OE) should not need a forked `logic_dc.py`.
 

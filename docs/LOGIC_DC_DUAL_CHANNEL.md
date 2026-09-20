@@ -10,7 +10,7 @@ recipe:
   channels: [CHA, CHB]
 ```
 
-When `dual_channel_continue` is true, the runner ORs that flag onto Path B specs at run (registry stays `dual_channel=False`; do not wrap `TestSpec.run`). Operator Continue: Channel A, then Channel B. `recipe.channels` is the channel list. Default CHA then CHB when the flag is on and channels are omitted.
+When `dual_channel_continue` is true, the runner ORs that flag onto Path B specs at run (registry stays `dual_channel=False`; do not wrap `TestSpec.run`). Operator Continue: Channel A, then Channel B. **Do not skip rewire prompt** (OpAmp-style switch). Recable Channel B after CHA Human Continue. `recipe.channels` is the channel list. Default CHA then CHB when the flag is on and channels are omitted.
 
 1Gxx cards (RS1G97 / RS1G126 / RS1GT34 / overnight CONFIRMED / next-wave G00/G02/G04/G86) leave the flag unset/false. Dual-channel Continue is **2Gxx only**.
 

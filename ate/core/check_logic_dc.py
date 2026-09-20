@@ -1174,6 +1174,13 @@ def _gt34_voh_live_ok(m) -> list[str]:
             errors.append(f"{key} must not invent VOL live measured")
         if key == "rs1g07" and (ovoh.get("loads") or ovoh.get("rows")):
             errors.append("rs1g07 must not invent VOH live (VOH N_A)")
+    begin_vol = "\n".join(format_handoff_begin(m, "vol"))
+    if "board-change" not in begin_vol.lower() and "board change" not in begin_vol.lower():
+        errors.append("format_handoff_begin(vol) must include GT34 VOL board-change recable")
+    if "recable" not in begin_vol.lower():
+        errors.append("format_handoff_begin(vol) must say recable PSU CH2 Y-load")
+    if "do not invent" not in begin_vol.lower():
+        errors.append("format_handoff_begin(vol) must say do not invent VOL")
     return errors
 
 
@@ -1653,8 +1660,14 @@ def _panel_ok() -> list[str]:
         errors.append("Customise Parameters must show 2Gxx dual-channel Continue switch")
     if "RS2G08" not in js or "CHA then CHB" not in js:
         errors.append("Customise Parameters dual-channel must name RS2G08/CHA then CHB (UNCONFIRMED stubs)")
+    if "do not skip rewire" not in js.lower():
+        errors.append("Customise Parameters dual-channel must say do not skip rewire")
     if "1 << nIn" not in js:
         errors.append("Customise Parameters must scale ICC corners with n-input 2^n")
+    if "familyScaleHint" not in js or "NAND" not in js or "NOR" not in js:
+        errors.append("Customise Parameters must scale NAND/NOR family hints")
+    if "INV" not in js or "XOR" not in js:
+        errors.append("Customise Parameters must scale INV/XOR family hints")
     if "isSchmittGrid" not in js or "VT+" not in js:
         errors.append("Customise Parameters must keep Schmitt VT+/- (must not collapse to VIH)")
     if "is_open_drain" not in js or "open-drain skip" not in js:
@@ -1663,6 +1676,10 @@ def _panel_ok() -> list[str]:
         errors.append("panel must gate IOZ on OE (inactive only)")
     if "Pin / wiring" not in js and "pin_wiring" not in js:
         errors.append("Customise Parameters must show pin/wiring map labels")
+    if "logic-dc-flow" not in js or "wireLogicDcFlow" not in js:
+        errors.append("Customise Parameters must have vanilla pin/wiring D&D canvas (#logic-dc-flow)")
+    if "no xyflow npm" not in js.lower():
+        errors.append("Customise Parameters D&D must say No xyflow npm")
     if "xyflow" in js.lower() and "no xyflow" not in js.lower():
         errors.append("Customise Parameters must not introduce xyflow")
     if "freq-label" not in html:
@@ -2018,6 +2035,25 @@ def _excel_lock_ok() -> list[str]:
         if not el.uses_excel_lock(m):
             errors.append(f"{part} must bind excel_plots + workbook_policy")
         errors.extend(el.binding_errors(m, list(enabled_tests_for_part(part) or [])))
+    for part in _NEXT_WAVE_SKUS:
+        m = load_product_model(part)
+        if m is None:
+            errors.append(f"{part} product_model missing for excel lock")
+            continue
+        if el.workbook_policy(m) != el.WORKBOOK_POLICY:
+            errors.append(
+                f"{part} workbook_policy.golden_auto must be {el.WORKBOOK_POLICY}, got {el.workbook_policy(m)!r}"
+            )
+        if not el.uses_excel_lock(m):
+            errors.append(f"{part} must bind excel_plots + workbook_policy (golden_auto)")
+        errors.extend(el.binding_errors(m, list(enabled_tests_for_part(part) or [])))
+        bound = el.bound_series_ids(m)
+        for banned in ("voh_at_ioh", "vol_at_iol", "ioz_vs_vcc", "delta_icc_vs_vcc"):
+            if banned in bound:
+                errors.append(f"{part} excel_plots must not bind {banned} (not enabled; no invent)")
+        for need in ("vih_vs_vcc", "vil_vs_vcc", "icc_vs_vcc", "ii_vs_vcc"):
+            if need not in bound:
+                errors.append(f"{part} excel_plots missing {need}")
     m08 = load_product_model("rs1g08")
     if m08 is not None and el.uses_excel_lock(m08):
         errors.append("rs1g08 must keep sheet_map paste.values (no Path B excel_lock)")
@@ -3181,6 +3217,8 @@ def _dual_channel_recipe_ok() -> list[str]:
             errors.append("dual-channel doc must forbid fake 2G YAML without Datasheet card")
         if "RS2G08" not in txt or "RS2G32" not in txt:
             errors.append("LOGIC_DC_DUAL_CHANNEL.md must name RS2G08 / RS2G32")
+        if "do not skip rewire" not in txt.lower():
+            errors.append("LOGIC_DC_DUAL_CHANNEL.md must say do not skip rewire")
     return errors
 
 
@@ -3383,6 +3421,9 @@ def _next_wave_ok() -> list[str]:
             fake = SimpleNamespace(recipe=dict(rec))
             if merge_recipe_channels(fake, ["CHA"]) != ["CHA", "CHB"]:
                 errors.append(f"{part} merge_recipe_channels CHA-only must expand CHA then CHB")
+            blob = "\n".join(format_handoff_begin(m, "icc"))
+            if "do not skip rewire" not in blob.lower():
+                errors.append(f"{part} handoff must say do not skip rewire CHA then CHB")
     return errors
 
 
@@ -4082,6 +4123,8 @@ def _handover_ok() -> list[str]:
         for family in ("NAND", "NOR", "INV", "XOR", "dual AND", "dual OR"):
             if family not in text:
                 errors.append(f"{path.name} must name LIVE family {family}")
+        if "5-step cheat" not in text:
+            errors.append(f"{path.name} must include 5-step cheat (AE/FAE add a part)")
     return errors
 
 
