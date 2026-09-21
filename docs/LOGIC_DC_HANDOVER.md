@@ -2,7 +2,7 @@
 
 **JH DEMO DAY 2026-09-21.** **CONFIRM-all** scale wave: G00/G02/G04/G86/2G08/2G32 function/truth/isolation **CONFIRMED** from SoT `docs/datasheet/*_card_CONFIRMED.md` (models/attachments missing -- reconstruct grounded rows only). Unsigned vcc_grid (except G86 VIL 0.20*VCC) / VOH / VOL / delta_icc stay fail-closed. `excel_plots.status` UNCONFIRMED -- gated to enabled series only; do not overstate unsigned loads. PARKED is not scale. DEMO/SIM is not a reproduce / not Verify PASS / not LIVE.
 
-Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LOGIC_DC_OPERATOR.md`. LIVE START order: `docs/LIVE_MATRIX_17.md`. Writer format: `docs/LOGIC_DC.md`. Dual Continue: `docs/LOGIC_DC_DUAL_CHANNEL.md`.
+Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LOGIC_DC_OPERATOR.md`. LIVE START order: `docs/LIVE_MATRIX_17.md` (per part, per DC test). Scale-wave FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. Writer format: `docs/LOGIC_DC.md`. Dual Continue: `docs/LOGIC_DC_DUAL_CHANNEL.md`.
 
 ## Demo cheat (open console -> pick part -> customise -> SIM -> Excel/STS)
 
