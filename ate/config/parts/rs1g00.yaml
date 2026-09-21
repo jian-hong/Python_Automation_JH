@@ -125,7 +125,7 @@ product_model:
       vcc_min: 3.0
       offset_v: 0.6
       map_to: delta_icc
-      datasheet_symbol: DeltaICC
+      datasheet_symbol: "ΔICC"
       ICCT_name: ABSENT
   recipe:
     settle_s: 0.05

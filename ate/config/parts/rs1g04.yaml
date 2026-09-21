@@ -119,7 +119,7 @@ product_model:
       vcc_min: 3.0
       offset_v: 0.6
       map_to: delta_icc
-      datasheet_symbol: DeltaICC
+      datasheet_symbol: "ΔICC"
       ICCT_name: ABSENT
   recipe:
     settle_s: 0.05
@@ -142,7 +142,7 @@ product_model:
   - CONFIRMED SoT 2026-09-21 signed TTL vcc_grid / VOH / VOL / delta_icc_uA; excel_plots CONFIRMED
   - inverter n=1 Y=NOT A; NC not OE; IOZ OFF
   - ICCT ABSENT -- DeltaICC via delta_icc_uA.offset_v 0.6 only
-  - UNSURE remain fail-closed: stable_eps_A, retention MAX, VO MAX=5.5 intent
+  - UNSURE remain fail-closed: stable_eps_A, retention MAX, ROC VO MAX=5.5 intent (do not promote to operating limit)
   data_paths:
     excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
     report: sessions/report.json

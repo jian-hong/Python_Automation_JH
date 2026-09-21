@@ -125,7 +125,7 @@ product_model:
       vcc_min: 3.0
       offset_v: 0.6
       map_to: delta_icc
-      datasheet_symbol: DeltaICC
+      datasheet_symbol: "ΔICC"
       ICCT_name: ABSENT
   recipe:
     settle_s: 0.05
@@ -135,6 +135,8 @@ product_model:
     settle_timeout_s: 2.0
     runner: dual_or2
     dual_channel_continue: true
+    continue_switch: true
+    unused_channel_hold: VCC_or_GND
     channels: [CHA, CHB]
     search:
       status: PROPOSED_FROM_LIVE
