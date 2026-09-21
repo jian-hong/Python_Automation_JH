@@ -1,13 +1,13 @@
 # Path B Logic DC -- AE/FAE handover
 
-**JH DEMO DAY 2026-09-21.** **CONFIRM-all** scale wave: G00/G02/G04/G86/2G08/2G32 function/truth/isolation **CONFIRMED** from SoT `docs/datasheet/*_card_CONFIRMED.md` (models/attachments missing -- reconstruct grounded rows only). Unsigned vcc_grid (except G86 VIL 0.20*VCC) / VOH / VOL / delta_icc stay fail-closed. `excel_plots.status` UNCONFIRMED -- gated to enabled series only; do not overstate unsigned loads. PARKED is not scale. DEMO/SIM is not a reproduce / not Verify PASS / not LIVE.
+**JH DEMO DAY 2026-09-21 + GT-wave.** Scale-wave G00/G02/G04/G86/2G08/2G32 function/truth/isolation **CONFIRMED**. GT-wave RS1GT00/GT02/GT04/GT14 + RS2G00/2G125/2GT08 **CONFIRMED**. HOLD stubs RS1GT125/GT126 process-only (OE present, IOZ ABSENT). Unsigned vcc_grid (except G86 VIL 0.20*VCC) / VOH / VOL stay fail-closed unless a signed table exists. `excel_plots.status` UNCONFIRMED unless every enabled series is signed. PARKED G74/G123 is not scale. DEMO/SIM is not a reproduce / not Verify PASS / not LIVE.
 
-Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LOGIC_DC_OPERATOR.md`. LIVE START order: `docs/LIVE_MATRIX_17.md` (per part, per DC test). Scale-wave FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. Writer format: `docs/LOGIC_DC.md`. Dual Continue: `docs/LOGIC_DC_DUAL_CHANNEL.md`.
+Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LOGIC_DC_OPERATOR.md`. LIVE START order: `docs/LIVE_MATRIX_17.md` (per part, per DC test). Scale-wave FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. GT-wave FAIL bars: `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. Writer format: `docs/LOGIC_DC.md`. Dual Continue: `docs/LOGIC_DC_DUAL_CHANNEL.md`.
 
 ## Demo cheat (open console -> pick part -> customise -> SIM -> Excel/STS)
 
 1. **START.bat** -- UI `127.0.0.1:5174`, worker `8766`. Person selected. Ctrl+F5 after yaml.
-2. **Pick part** -- Logic family, CONFIRMED 17 (or PARKED skip). Open Session.
+2. **Pick part** -- Logic family, CONFIRMED 24 (or HOLD/PARKED skip). Open Session.
 3. **Customise** -- truth / isolation / vcc_plan / pass_mode / loads on the form. Pin D&D `#logic-dc-flow` is **layout only** -- drag does not write product_model / wire_map. Never invent nets. PSU_MSO hides Freq/Amp. 2G tick CHA then CHB (do not skip rewire).
 4. **SIM** -- `python -m ate.core.check_logic_dc` then `python -m ate.core.check_logic_dc_sim`. Overlay one VCC. Null `stable_eps_A` = NON_TIGHT. Not bench green.
 5. **Excel / STS land** -- Version `workbook/` **golden_auto** (one_per_version_overwrite). pretty / ultimate_manual never auto. STS `sessions/datalog.md|.pdf` + Version-root `report.pdf`. `sessions/csv/` + `datapoints.csv` + `path_b_write.json`.
@@ -20,7 +20,7 @@ Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LO
 4. **product_model YAML** -- copy into `ate/config/parts/<key>.yaml`. Enable only card-backed tests. Isolation from truth_table. Do not fork `logic_dc.py`. Do not invent ICCT / OE / loads.
 5. **SIM then LIVE** -- `python -m ate.core.check_logic_dc` + `python -m ate.core.check_logic_dc_sim`. START.bat, Open Session, Human Continue. Fill **golden_auto**. STS `report.pdf`. DEMO/SIM is not Verify PASS.
 
-CONFIRMED 17 + PARKED 2 listed below. G07 VOH N_A forever. IOZ only OE. RS164 != 2^n. Do not invent VOL live.
+CONFIRMED 24 + HOLD 2 + PARKED 2 listed below. G07 VOH N_A forever. IOZ only OE. RS164 != 2^n. Do not invent VOL live. Do not invent VIH on GT14. Do not invent IOZ on GT125/126.
 
 ## Tomorrow without JH
 
@@ -51,7 +51,7 @@ Campaign tree: `#Test_Database/Logic/<Part>/<Package>/<Operator>/Version_N/`. Id
 
 ## Path B parts (status)
 
-### CONFIRMED (17) -- SIM mandatory; status gate only until LIVE
+### CONFIRMED (24) -- SIM mandatory; status gate only until LIVE
 
 | Part | Function lock | SIM | Live / blocked |
 |------|---------------|-----|----------------|
@@ -72,8 +72,22 @@ Campaign tree: `#Test_Database/Logic/<Part>/<Package>/<Operator>/Version_N/`. Id
 | RS1G86 | XOR track+invert; VIL 0.20*VCC @1.65-1.95 CONFIRMED | SIM green | VIH/VOH/VOL HOLD; excel_plots UNCONFIRMED |
 | RS2G08 | dual AND; CHA then CHB Continue | SIM green | pin numbers HOLD; unsigned loads HOLD; excel_plots UNCONFIRMED |
 | RS2G32 | dual OR; CHA then CHB Continue | SIM green | pin numbers HOLD; unsigned loads HOLD; excel_plots UNCONFIRMED |
+| RS1GT00 | TTL NAND other=H invert; ICCT->dICC @3.4 (not 0.6) | SIM green | unsigned VIH/VIL/VOH/VOL HOLD; excel_plots UNCONFIRMED |
+| RS1GT02 | TTL NOR other=L invert | SIM green | TTL kind; not G08 CMOS; unsigned bands HOLD |
+| RS1GT04 | TTL INV n=1; NC not OE | SIM green | IOZ OFF; unsigned loads HOLD |
+| RS1GT14 | Schmitt INV VT+/- ONLY | SIM green | do not invent VIH/VIL; VT numbers HOLD; tick vth |
+| RS2G00 | dual NAND; CHA then CHB Continue | SIM green | pin numbers HOLD; unsigned loads HOLD |
+| RS2G125 | dual buf OE-L; IOZ ON @3.6V UNSURE | SIM green | CHA then CHB; do not invent IOZ uA / VOH/VOL |
+| RS2GT08 | dual TTL AND; CHA then CHB Continue | SIM green | TTL kind; not G08 CMOS; ICCT ABSENT |
 
-`check_logic_dc` FAIL: invent OE/IOZ, invent ICCT, wrong G02/G86 bands, skip CHA->CHB, invent delta_icc numbers, invent VOH/VOL loads. Unsigned numbers stay fail-closed (not greenable). excel_plots.status UNCONFIRMED on the six -- do not overstate unsigned loads.
+`check_logic_dc` FAIL: invent OE/IOZ, invent ICCT, invent VIH on GT14, invent IOZ on GT125/126, G02 CMOS swap, skip CHA->CHB, invent delta_icc numbers, invent VOH/VOL loads. Unsigned numbers stay fail-closed (not greenable). excel_plots.status UNCONFIRMED unless every enabled series is signed.
+
+### HOLD (2) -- process-only; not SIM 24
+
+| Part | Locks |
+|------|-------|
+| RS1GT125 | UNCONFIRMED stub. OE present (active L). IOZ ABSENT -- do not invent IOZ. VOH/VOL UNSURE fail-closed. |
+| RS1GT126 | UNCONFIRMED stub. OE present (active H). IOZ ABSENT -- do not invent IOZ. VOH/VOL UNSURE fail-closed. |
 
 ### PARKED (2) -- optional archive; not mandatory SIM
 
@@ -100,8 +114,17 @@ Per-part START order: `docs/LIVE_MATRIX_17.md`. JH starts instruments locally --
 2. **LIVE NOR (RS1G02)** -- AWG A/B. Isolation other=L invert. TTL-style VIH/VIL kind lock; band numbers HOLD. Do not copy G08 CMOS.
 3. **LIVE INV (RS1G04)** -- AWG A only. n=1 Y=NOT A. NC is not OE. Do not tick IOZ.
 4. **LIVE XOR (RS1G86)** -- AWG A/B. Dual isolation track (other=L) + invert (other=H). Judge **VIL <= 0.20*VCC** at 1.65-1.95 (`max_only`) -- vcc_grid CONFIRMED for that fragment. VIH HOLD -- do not invent. Do not copy G08 VIL 0.15*VCC.
-5. **LIVE dual AND (RS2G08)** -- CHA then CHB Continue. Do not skip rewire. Recable Channel B after CHA Human Continue. Isolation other=H track. Pin numbers HOLD. Extra `rs2g*.yaml` forbidden.
+5. **LIVE dual AND (RS2G08)** -- CHA then CHB Continue. Do not skip rewire. Recable Channel B after CHA Human Continue. Isolation other=H track. Pin numbers HOLD.
 6. **LIVE dual OR (RS2G32)** -- same CHA then CHB Continue. Isolation other=L track. Pin numbers HOLD.
+7. **LIVE TTL NAND (RS1GT00)** -- ICCT->dICC @3.4 (not 0.6). Unsigned VIH/VIL/VOH/VOL HOLD.
+8. **LIVE TTL NOR (RS1GT02)** -- TTL kind. Do not copy G08 CMOS.
+9. **LIVE TTL INV (RS1GT04)** -- NC not OE. IOZ OFF.
+10. **LIVE Schmitt GT14 (RS1GT14)** -- tick vth VT+/- only. Do not invent VIH/VIL. Do not copy G14 VT numbers.
+11. **LIVE dual NAND (RS2G00)** -- CHA then CHB Continue. Do not skip rewire.
+12. **LIVE dual buf (RS2G125)** -- OE active-L. IOZ when OE inactive H @3.6V UNSURE. CHA then CHB. Do not invent IOZ uA.
+13. **LIVE dual TTL AND (RS2GT08)** -- CHA then CHB. TTL kind. Do not copy G08 CMOS. ICCT ABSENT.
+
+HOLD (not LIVE / not SIM): RS1GT125, RS1GT126 -- OE present, IOZ ABSENT, VOH/VOL UNSURE. Extra `rs2g*.yaml` without a Datasheet card forbidden (named duals with cards: RS2G08/32/00/125 + RS2GT08).
 
 G07 VOH stays N_A forever. Do not unpark G74/G123.
 
@@ -113,7 +136,7 @@ G07 VOH stays N_A forever. Do not unpark G74/G123.
 | G14 / Schmitt | VT+ / VT- / dVT (range). Do not collapse to single VIH |
 | OE -> IOZ | IOZ only when OE inactive. G126 active-H -> IOZ OE=L. G125 active-L -> IOZ OE=H. oe none -> IOZ OFF |
 | sequential != 2^n | RS164 / G74 / G123: Path B icc / delta_icc / vth / voh / vol / ioz OFF. `sim_icc_plan` n=0 |
-| 2G CHA then CHB | `recipe.dual_channel_continue` + `channels: [CHA, CHB]`. 1Gxx off. Extra `rs2g*.yaml` without Datasheet card forbidden |
+| 2G CHA then CHB | `recipe.dual_channel_continue` + `channels: [CHA, CHB]`. 1Gxx off. Extra `rs2g*.yaml` without Datasheet card forbidden. Named duals with cards: RS2G08 / RS2G32 / RS2G00 / RS2G125 / RS2GT08 |
 | delta_icc | from card ICCT symbol (`one_input_V` / `offset_v`) or `delta_icc_uA` only. ICCT ABSENT != invent. Do not invent 0.6 |
 | VOH/VOL | CONFIRMED `dc_limits` loads only (formula VCC-0.1). Do not invent extra loads |
 | `stable_eps_A` | null = NON_TIGHT. Do not reuse `stable_eps_V` as amps |
@@ -172,8 +195,10 @@ Do not fork these. Missing file = not local-ready.
 - `docs/datasheet/card_fields.schema.yaml`
 - `ate/config/parts/` CONFIRMED + PARKED yamls above (scale-wave unsigned nested fields stay UNCONFIRMED)
 - `docs/datasheet/RS1G00_card_CONFIRMED.md` (and G02/G04/G86/2G08/2G32)
+- `docs/datasheet/RS1GT00_card_CONFIRMED.md` (and GT02/GT04/GT14 / 2G00 / 2G125 / 2GT08)
 - `docs/LIVE_MATRIX_17.md`
 - `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`
+- `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`
 
 Checks: `python -m ate.core.check_logic_dc` and `python -m ate.core.check_logic_dc_sim`.
 

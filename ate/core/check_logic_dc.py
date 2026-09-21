@@ -79,9 +79,10 @@ _PATH_B_IDS = (
     "ioz",
 )
 
-# CONFIRMED Path B SIM walk (JH 17 = 11 prior + 6 scale-wave DEMO DAY 2026-09-21).
+# CONFIRMED Path B SIM walk (JH 24 = 11 prior + 6 scale-wave + 7 GT-wave).
 # Archive 123/74 optional PARKED if present; missing does not block green.
 # Scale-wave: grounded function CONFIRMED; unsigned VOH/VOL/vcc_grid (except G86 VIL) HOLD.
+# GT-wave HOLD stubs rs1gt125/rs1gt126 are process-only -- not in this set.
 _CONFIRMED_SIM_PARTS = (
     "rs1gt34",
     "rs1g97",
@@ -100,9 +101,28 @@ _CONFIRMED_SIM_PARTS = (
     "rs1g86",
     "rs2g08",
     "rs2g32",
+    "rs1gt00",
+    "rs1gt02",
+    "rs1gt04",
+    "rs1gt14",
+    "rs2g00",
+    "rs2g125",
+    "rs2gt08",
 )
 _ARCHIVE_SIM_PARTS = ("rs1g74", "rs1g123")
 _NEXT_WAVE_SKUS = ("rs1g00", "rs1g02", "rs1g04", "rs1g86", "rs2g08", "rs2g32")
+_GT_WAVE_SKUS = (
+    "rs1gt00",
+    "rs1gt02",
+    "rs1gt04",
+    "rs1gt14",
+    "rs2g00",
+    "rs2g125",
+    "rs2gt08",
+)
+_HOLD_STUB_SKUS = ("rs1gt125", "rs1gt126")
+_ALLOWED_2G_YAML = frozenset({"rs2g08", "rs2g32", "rs2g00", "rs2g125", "rs2gt08"})
+_DUAL_CHA_CHB = ("rs2g08", "rs2g32", "rs2g00", "rs2g125", "rs2gt08")
 
 
 def _params(**kw):
@@ -1524,8 +1544,8 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must name next-wave RS1G00 / RS2G08")
     if "numbers HOLD" not in text and "Numbers HOLD" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must say next-wave numbers HOLD")
-    if "17 CONFIRMED" not in text:
-        errors.append("LOGIC_DC_OPERATOR.md must name 17 CONFIRMED SIM")
+    if "24 CONFIRMED" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name 24 CONFIRMED SIM")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -2076,6 +2096,43 @@ def _excel_lock_ok() -> list[str]:
             errors.append(
                 f"{part} excel_plots.status must not be CONFIRMED "
                 "(unsigned VOH/VOL/vcc_grid -- do not overstate loads)"
+            )
+    for part in _GT_WAVE_SKUS:
+        m = load_product_model(part)
+        if m is None:
+            errors.append(f"{part} product_model missing for excel lock")
+            continue
+        if el.workbook_policy(m) != el.WORKBOOK_POLICY:
+            errors.append(
+                f"{part} workbook_policy.golden_auto must be {el.WORKBOOK_POLICY}, got {el.workbook_policy(m)!r}"
+            )
+        if not el.uses_excel_lock(m):
+            errors.append(f"{part} must bind excel_plots + workbook_policy (golden_auto)")
+        errors.extend(el.binding_errors(m, list(enabled_tests_for_part(part) or [])))
+        bound = el.bound_series_ids(m)
+        for banned in ("voh_at_ioh", "vol_at_iol"):
+            if banned in bound:
+                errors.append(f"{part} excel_plots must not bind {banned} (not enabled; no invent)")
+        if part != "rs2g125" and "ioz_vs_vcc" in bound:
+            errors.append(f"{part} excel_plots must not bind ioz_vs_vcc (no invent IOZ)")
+        if part != "rs1gt00" and "delta_icc_vs_vcc" in bound:
+            errors.append(f"{part} excel_plots must not bind delta_icc_vs_vcc (no invent ICCT)")
+        if part == "rs1gt14":
+            for banned in ("vih_vs_vcc", "vil_vs_vcc"):
+                if banned in bound:
+                    errors.append(f"{part} excel_plots must not bind {banned} (Schmitt VT+/- only)")
+            for need in ("vtplus_vs_vcc", "vtminus_vs_vcc", "dvt_vs_vcc", "icc_vs_vcc", "ii_vs_vcc"):
+                if need not in bound:
+                    errors.append(f"{part} excel_plots missing {need}")
+        else:
+            for need in ("vih_vs_vcc", "vil_vs_vcc", "icc_vs_vcc", "ii_vs_vcc"):
+                if need not in bound:
+                    errors.append(f"{part} excel_plots missing {need}")
+        plots_st = str(el.excel_plots_status(m) or "").upper()
+        if plots_st == "CONFIRMED":
+            errors.append(
+                f"{part} excel_plots.status must not be CONFIRMED "
+                "(unsigned loads -- do not overstate)"
             )
     m08 = load_product_model("rs1g08")
     if m08 is not None and el.uses_excel_lock(m08):
@@ -3179,7 +3236,7 @@ def _dual_channel_recipe_ok() -> list[str]:
     extra2g = [
         p.name
         for p in sorted(PARTS_DIR.glob("rs2g*.yaml"))
-        if p.stem.lower() not in ("rs2g08", "rs2g32")
+        if p.stem.lower() not in _ALLOWED_2G_YAML
     ]
     if extra2g:
         errors.append(f"must not invent extra 2G part YAML, got {extra2g}")
@@ -3198,6 +3255,12 @@ def _dual_channel_recipe_ok() -> list[str]:
         "rs1g02",
         "rs1g04",
         "rs1g86",
+        "rs1gt00",
+        "rs1gt02",
+        "rs1gt04",
+        "rs1gt14",
+        "rs1gt125",
+        "rs1gt126",
     ):
         m = load_product_model(part)
         if m is None:
@@ -3240,6 +3303,8 @@ def _dual_channel_recipe_ok() -> list[str]:
             errors.append("dual-channel doc must forbid fake 2G YAML without Datasheet card")
         if "RS2G08" not in txt or "RS2G32" not in txt:
             errors.append("LOGIC_DC_DUAL_CHANNEL.md must name RS2G08 / RS2G32")
+        if "RS2G00" not in txt or "RS2G125" not in txt or "RS2GT08" not in txt:
+            errors.append("LOGIC_DC_DUAL_CHANNEL.md must name RS2G00 / RS2G125 / RS2GT08")
         if "do not skip rewire" not in txt.lower():
             errors.append("LOGIC_DC_DUAL_CHANNEL.md must say do not skip rewire")
     return errors
@@ -3778,9 +3843,309 @@ def _sim_power_on_protected(psu, channel, voltage, current_limit, ovp=None, ocp=
     psu.write(f":OUTP CH{channel},ON")
 
 
+def _gt_wave_ok() -> list[str]:
+    """GT-wave 2026-09-21: 7 CONFIRMED + 2 HOLD stubs. No invent VIH/IOZ/OE/ICCT.
+
+    FAIL bars: invent VIH on GT14; invent IOZ on GT125/126; invent OE/ICCT;
+    G02 CMOS swap; skip CHA->CHB.
+    """
+    from ate.tests.logic import logic_dc as ldc
+    from ate.tests.logic import excel_lock as el
+
+    errors: list[str] = []
+    load_family("logic")
+    if set(_HOLD_STUB_SKUS) & set(_CONFIRMED_SIM_PARTS):
+        errors.append("HOLD stubs rs1gt125/rs1gt126 must stay out of CONFIRMED SIM 24")
+    if set(_GT_WAVE_SKUS) - set(_CONFIRMED_SIM_PARTS):
+        errors.append("GT-wave CONFIRMED must join CONFIRMED SIM 24")
+    for part in _GT_WAVE_SKUS:
+        if not has_product_model(part):
+            errors.append(f"{part} CONFIRMED product_model missing (GT-wave bind)")
+            continue
+        m = load_product_model(part)
+        if m is None:
+            errors.append(f"{part} product_model failed to load")
+            continue
+        if is_parked(m):
+            errors.append(f"{part} GT-wave must not be PARKED")
+        if not is_datasheet_signed(m.status):
+            errors.append(f"{part} product_model.status must be CONFIRMED, got {m.status!r}")
+        if not is_datasheet_signed(m.truth_table_status):
+            errors.append(f"{part} truth_table.status must be CONFIRMED, got {m.truth_table_status!r}")
+        if not is_datasheet_signed(m.isolation_status):
+            errors.append(f"{part} isolation.status must be CONFIRMED, got {m.isolation_status!r}")
+        want_card = f"{part.upper()}_card_CONFIRMED.md"
+        src = str((m.raw or {}).get("source_card") or "")
+        if src != want_card:
+            errors.append(f"{part} source_card must be {want_card} (SoT), got {src!r}")
+        card_path = Path(__file__).resolve().parents[2] / "docs" / "datasheet" / want_card
+        if not card_path.is_file():
+            errors.append(f"docs/datasheet/{want_card} missing (GT-wave SoT)")
+        plots_st = str(el.excel_plots_status(m) or "").upper()
+        if plots_st == "CONFIRMED":
+            errors.append(
+                f"{part} excel_plots.status must stay UNCONFIRMED "
+                "(unsigned loads -- do not overstate)"
+            )
+        en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
+        for banned in ("voh", "vol"):
+            if banned in en:
+                errors.append(f"{part}: invent {banned} enabled -> FAIL")
+        if ldc._voh_vol_table(part, "voh") or ldc._voh_vol_table(part, "vol"):
+            errors.append(f"{part} UNCONFIRMED VOH/VOL must not expand (do not invent loads)")
+        rec = m.recipe if isinstance(m.recipe, dict) else {}
+        if rec.get("stable_eps_A") is not None:
+            errors.append(f"{part} recipe.stable_eps_A must stay null")
+        runner = str(rec.get("runner") or "").lower().replace("-", "_")
+        a_iso = isolation_for(m, "A") or []
+        b_iso = isolation_for(m, "B") or []
+        icct = _dc_block(m, "ICCT_uA", "ICCT")
+        st_icct = str(icct.get("status") or "").upper().replace("-", "_")
+        if icct.get("offset_v") is not None:
+            errors.append(f"{part}: invent ICCT offset_v -> FAIL")
+        try:
+            one_in = float(icct["one_input_V"]) if icct.get("one_input_V") is not None else None
+        except (TypeError, ValueError):
+            one_in = None
+        if one_in is not None and abs(one_in - 0.6) < 1e-9:
+            errors.append(f"{part}: invent ICCT 0.6 -> FAIL")
+        if rec.get("delta_offset_v") is not None:
+            errors.append(f"{part}: invent recipe.delta_offset_v -> FAIL")
+
+        if part == "rs1gt00":
+            if "nand" not in runner:
+                errors.append("rs1gt00 runner must be gate_nand2")
+            if not any(p.fix.get("B") == "H" and p.y_expect == "invert" for p in a_iso):
+                errors.append("rs1gt00 NAND isolation A must invert with B=H")
+            if dual_channel_continue(m):
+                errors.append("rs1gt00 is 1Gxx -- dual_channel_continue off")
+            if m.has_oe() or "ioz" in en:
+                errors.append("rs1gt00: invent OE/IOZ -> FAIL")
+            if "delta_icc" not in en:
+                errors.append("rs1gt00 enabled_tests missing delta_icc (ICCT->dICC map)")
+            if one_in is None or abs(one_in - 3.4) > 1e-9:
+                errors.append("rs1gt00 ICCT one_input_V must be 3.4 (do not invent 0.6)")
+            if str(icct.get("map_to") or "").strip().lower() != "delta_icc":
+                errors.append("rs1gt00 ICCT must map_to delta_icc")
+            if ldc._icct_blob(m) is None or not ldc._icct_blob(m):
+                errors.append("rs1gt00 ICCT map must be visible to Path B delta_icc")
+            if icct.get("Full") not in (None, "", [], ()):
+                errors.append("rs1gt00: invent ICCT Full uA -> FAIL")
+            if _grid_copies_g08_cmos(m):
+                errors.append("rs1gt00 must use TTL-style VIH/VIL (not G08 CMOS 0.65/0.15)")
+            kind = str((m.vcc_grid or {}).get("kind") or "").upper()
+            if kind and kind != "TTL":
+                errors.append(f"rs1gt00 vcc_grid.kind must be TTL, got {kind!r}")
+        elif part == "rs1gt02":
+            if "nor" not in runner:
+                errors.append("rs1gt02 runner must be gate_nor2")
+            if not any(p.fix.get("B") == "L" and p.y_expect == "invert" for p in a_iso):
+                errors.append("rs1gt02 NOR isolation A must invert with B=L")
+            if _grid_copies_g08_cmos(m):
+                errors.append("rs1gt02 must use TTL-style VIH/VIL (not G08 CMOS 0.65/0.15)")
+            kind = str((m.vcc_grid or {}).get("kind") or "").upper()
+            if kind and kind != "TTL":
+                errors.append(f"rs1gt02 vcc_grid.kind must be TTL (not CMOS), got {kind!r}")
+            if dual_channel_continue(m):
+                errors.append("rs1gt02 is 1Gxx -- dual_channel_continue off")
+            if m.has_oe() or "ioz" in en:
+                errors.append("rs1gt02: invent OE/IOZ -> FAIL")
+            if st_icct not in ("ABSENT", "N_A", "NA"):
+                errors.append(f"rs1gt02 ICCT must stay ABSENT, got {icct.get('status')!r}")
+            if "delta_icc" in en:
+                errors.append("rs1gt02: invent delta_icc enabled -> FAIL")
+            if ldc._icct_blob(m):
+                errors.append("rs1gt02: invent ICCT map into Path B delta_icc -> FAIL")
+        elif part == "rs1gt04":
+            if "inv" not in runner:
+                errors.append("rs1gt04 runner must be gate_inv")
+            if set(m.logic_inputs) != {"A"}:
+                errors.append(f"rs1gt04 logic_inputs must be A only (n=1), got {m.logic_inputs}")
+            nc = [p for p in m.pins if p.name == "NC"]
+            if not nc or str(nc[0].role or "").lower() != "nc":
+                errors.append("rs1gt04 NC pin must be role nc (NC not OE)")
+            if "NC" in set(m.logic_inputs) or str(m.oe_pin or "").upper() == "NC":
+                errors.append("rs1gt04 NC must not be a logic input or OE")
+            if m.has_oe() or "ioz" in en:
+                errors.append("rs1gt04: invent OE/IOZ (NC is not OE) -> FAIL")
+            if dual_channel_continue(m):
+                errors.append("rs1gt04 is 1Gxx -- dual_channel_continue off")
+            if st_icct not in ("ABSENT", "N_A", "NA"):
+                errors.append(f"rs1gt04 ICCT must stay ABSENT, got {icct.get('status')!r}")
+            if "delta_icc" in en:
+                errors.append("rs1gt04: invent delta_icc enabled -> FAIL")
+        elif part == "rs1gt14":
+            if not m.schmitt:
+                errors.append("rs1gt14 schmitt must be true (VT+/- only)")
+            if "vth" not in en:
+                errors.append("rs1gt14 enabled_tests missing vth")
+            if "input_threshold" in en:
+                errors.append("rs1gt14: invent VIH via input_threshold -> FAIL")
+            kind = str((m.vcc_grid or {}).get("kind") or "")
+            if kind != "schmitt_VT":
+                errors.append(f"rs1gt14 vcc_grid.kind must be schmitt_VT, got {kind!r}")
+            grid = m.vcc_grid if isinstance(m.vcc_grid, dict) else {}
+            for row in list(grid.get("ranges") or []) + list(grid.get("fixed_points") or []):
+                if not isinstance(row, dict):
+                    continue
+                for k in row:
+                    ku = str(k).upper().replace("-", "").replace("_", "")
+                    if "VIH" in ku or "VIL" in ku:
+                        errors.append("rs1gt14: invent VIH/VIL on Schmitt VT+/- card -> FAIL")
+                        break
+            pm = m.pass_mode if isinstance(m.pass_mode, dict) else {}
+            for k in pm:
+                ku = str(k).upper().replace("-", "").replace("_", "")
+                if ku in ("VIH", "VIL") or ku.startswith("VIH") or ku.startswith("VIL"):
+                    errors.append("rs1gt14: invent VIH/VIL pass_mode -> FAIL")
+                    break
+            bound = el.bound_series_ids(m)
+            for banned in ("vih_vs_vcc", "vil_vs_vcc"):
+                if banned in bound:
+                    errors.append(f"rs1gt14: invent {banned} excel_plots -> FAIL")
+            if m.has_oe() or "ioz" in en:
+                errors.append("rs1gt14: invent OE/IOZ -> FAIL")
+            if dual_channel_continue(m):
+                errors.append("rs1gt14 is 1Gxx -- dual_channel_continue off")
+            if st_icct not in ("ABSENT", "N_A", "NA"):
+                errors.append("rs1gt14 ICCT must stay ABSENT (do not copy G14 0.6)")
+            if "delta_icc" in en:
+                errors.append("rs1gt14: invent delta_icc enabled -> FAIL")
+            nc = [p for p in m.pins if p.name == "NC"]
+            if not nc or str(nc[0].role or "").lower() != "nc":
+                errors.append("rs1gt14 NC pin must be role nc (NC not OE)")
+        elif part == "rs2g00":
+            if not dual_channel_continue(m):
+                errors.append("rs2g00 skip CHA->CHB -> FAIL")
+            if recipe_channels(m) != ["CHA", "CHB"]:
+                errors.append(f"rs2g00 skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+            if "nand" not in runner:
+                errors.append("rs2g00 runner must be dual_nand2")
+            if not any(p.fix.get("B") == "H" and p.y_expect == "invert" for p in a_iso):
+                errors.append("rs2g00 NAND isolation A must invert with B=H")
+            if m.has_oe() or "ioz" in en:
+                errors.append("rs2g00: invent OE/IOZ -> FAIL")
+            if st_icct not in ("ABSENT", "N_A", "NA"):
+                errors.append("rs2g00 ICCT must stay ABSENT")
+            if "delta_icc" in en:
+                errors.append("rs2g00: invent delta_icc enabled -> FAIL")
+        elif part == "rs2g125":
+            if not dual_channel_continue(m):
+                errors.append("rs2g125 skip CHA->CHB -> FAIL")
+            if recipe_channels(m) != ["CHA", "CHB"]:
+                errors.append(f"rs2g125 skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+            if not m.has_oe() or str(m.oe_mode or "").lower() not in ("low", "active_low", "l"):
+                errors.append("rs2g125 OE must be active L")
+            if "ioz" not in en:
+                errors.append("rs2g125 enabled_tests missing ioz (OE inactive H @3.6V)")
+            ioz = _dc_block(m, "IOZ_uA", "IOZ")
+            st_ioz = str(ioz.get("status") or "").upper().replace("-", "_")
+            if st_ioz in ("CONFIRMED",):
+                errors.append("rs2g125 IOZ_uA must stay UNSURE (do not invent uA)")
+            if ioz.get("Full") not in (None, "", [], ()):
+                errors.append("rs2g125: invent IOZ Full uA -> FAIL")
+            at = ioz.get("at_vcc")
+            vlist = rec.get("ioz_vcc_list") or []
+            try:
+                at_ok = at is not None and abs(float(at) - 3.6) < 1e-9
+            except (TypeError, ValueError):
+                at_ok = False
+            list_ok = False
+            try:
+                list_ok = any(abs(float(x) - 3.6) < 1e-9 for x in vlist)
+            except (TypeError, ValueError):
+                list_ok = False
+            if not at_ok and not list_ok:
+                errors.append("rs2g125 IOZ ON @3.6V missing (at_vcc / ioz_vcc_list)")
+            if str(rec.get("ioz_when") or "").strip().lower() not in ("oe_inactive", "inactive"):
+                errors.append("rs2g125 recipe.ioz_when must be oe_inactive")
+            if not any(p.fix.get("OE") == "L" and p.y_expect == "track" for p in a_iso):
+                errors.append("rs2g125 isolation A must track with OE=L")
+            if st_icct not in ("ABSENT", "N_A", "NA"):
+                errors.append("rs2g125 ICCT must stay ABSENT")
+            if "delta_icc" in en:
+                errors.append("rs2g125: invent delta_icc enabled -> FAIL")
+            if _grid_copies_g08_cmos(m):
+                errors.append("rs2g125 must not copy G08 CMOS bands")
+        elif part == "rs2gt08":
+            if not dual_channel_continue(m):
+                errors.append("rs2gt08 skip CHA->CHB -> FAIL")
+            if recipe_channels(m) != ["CHA", "CHB"]:
+                errors.append(f"rs2gt08 skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+            if "and" not in runner:
+                errors.append("rs2gt08 runner must be dual_and2")
+            if not any(p.fix.get("B") == "H" and p.y_expect == "track" for p in a_iso):
+                errors.append("rs2gt08 AND isolation A must track with B=H")
+            if _grid_copies_g08_cmos(m):
+                errors.append("rs2gt08 must use TTL-style VIH/VIL (not G08 CMOS 0.65/0.15)")
+            kind = str((m.vcc_grid or {}).get("kind") or "").upper()
+            if kind and kind != "TTL":
+                errors.append(f"rs2gt08 vcc_grid.kind must be TTL, got {kind!r}")
+            if m.has_oe() or "ioz" in en:
+                errors.append("rs2gt08: invent OE/IOZ -> FAIL")
+            if st_icct not in ("ABSENT", "N_A", "NA"):
+                errors.append("rs2gt08 ICCT must stay ABSENT (do not invent 0.6)")
+            if "delta_icc" in en:
+                errors.append("rs2gt08: invent delta_icc enabled -> FAIL")
+
+    for part in _HOLD_STUB_SKUS:
+        if not has_product_model(part):
+            errors.append(f"{part} HOLD stub product_model missing")
+            continue
+        m = load_product_model(part)
+        if m is None:
+            errors.append(f"{part} HOLD stub failed to load")
+            continue
+        if is_parked(m):
+            errors.append(f"{part} HOLD stub must not be PARKED")
+        if is_datasheet_signed(m.status):
+            errors.append(f"{part} HOLD stub must stay UNCONFIRMED, got {m.status!r}")
+        if not m.has_oe():
+            errors.append(f"{part} HOLD stub must keep OE present")
+        en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
+        if "ioz" in en:
+            errors.append(f"{part}: invent IOZ enabled -> FAIL")
+        ioz = _dc_block(m, "IOZ_uA", "IOZ")
+        st_ioz = str(ioz.get("status") or "").upper().replace("-", "_")
+        if st_ioz not in ("ABSENT", "N_A", "NA"):
+            errors.append(f"{part} IOZ must stay ABSENT (OE present but IOZ ABSENT), got {ioz.get('status')!r}")
+        if ioz.get("Full") not in (None, "", [], ()):
+            errors.append(f"{part}: invent IOZ Full uA -> FAIL")
+        if ioz.get("at_vcc") not in (None, "", [], ()):
+            errors.append(f"{part}: invent IOZ at_vcc -> FAIL")
+        for banned in ("voh", "vol", "delta_icc"):
+            if banned in en:
+                errors.append(f"{part}: invent {banned} enabled -> FAIL")
+        voh = _dc_block(m, "VOH")
+        vol = _dc_block(m, "VOL")
+        for label, blk in (("VOH", voh), ("VOL", vol)):
+            st = str((blk or {}).get("status") or "").upper().replace("-", "_")
+            if st in ("CONFIRMED",):
+                errors.append(f"{part} {label} must stay UNCONFIRMED/UNSURE fail-closed")
+        if dual_channel_continue(m):
+            errors.append(f"{part} is 1Gxx -- dual_channel_continue off")
+        if part == "rs1gt125" and str(m.oe_mode or "").lower() not in ("low", "active_low", "l"):
+            errors.append("rs1gt125 OE must be active L")
+        if part == "rs1gt126" and str(m.oe_mode or "").lower() not in ("high", "active_high", "h"):
+            errors.append("rs1gt126 OE must be active H")
+        try:
+            ldc._run_ioz(None, _params(part=part, vcc=5.0))
+            # HOLD may still run ioz if enabled; we already ban enable. If oe present
+            # the runner will try -- that is OK as long as ioz is not enabled.
+        except Exception:
+            pass
+    return errors
+
+
 def _confirmed_sim_sweep_ok() -> list[str]:
     """Walk enabled Path B DC TestSpec.run for CONFIRMED parts. Visa-free SIM."""
-    from ate.core.check_logic_dc_sim import _ACTIVE_LOGIC, _ARCHIVE_LOGIC, _NEXT_WAVE_LOGIC
+    from ate.core.check_logic_dc_sim import (
+        _ACTIVE_LOGIC,
+        _ARCHIVE_LOGIC,
+        _NEXT_WAVE_LOGIC,
+        _GT_WAVE_LOGIC,
+        _HOLD_LOGIC,
+    )
     from ate.core.specs import enrich_measurement
     from ate.tests.logic import logic_dc as ldc
     from ate.tests.logic.product_model import DriveMap
@@ -3788,17 +4153,25 @@ def _confirmed_sim_sweep_ok() -> list[str]:
 
     errors: list[str] = []
     if frozenset(_CONFIRMED_SIM_PARTS) != frozenset(_ACTIVE_LOGIC):
-        errors.append("CONFIRMED SIM walk must match the 17 CONFIRMED _ACTIVE_LOGIC set")
-    if len(_CONFIRMED_SIM_PARTS) != 17:
-        errors.append(f"_CONFIRMED_SIM_PARTS must be 17 (11 prior + 6 scale-wave), got {len(_CONFIRMED_SIM_PARTS)}")
+        errors.append("CONFIRMED SIM walk must match the 24 CONFIRMED _ACTIVE_LOGIC set")
+    if len(_CONFIRMED_SIM_PARTS) != 24:
+        errors.append(f"_CONFIRMED_SIM_PARTS must be 24 (11 prior + 6 scale-wave + 7 GT-wave), got {len(_CONFIRMED_SIM_PARTS)}")
     if frozenset(_ARCHIVE_SIM_PARTS) != frozenset(_ARCHIVE_LOGIC):
         errors.append("archive SIM parts must match dropped RS1G74 / RS1G123 set")
     if frozenset(_NEXT_WAVE_SKUS) != frozenset(_NEXT_WAVE_LOGIC):
         errors.append("scale-wave SKUs must match sim _NEXT_WAVE_LOGIC")
+    if frozenset(_GT_WAVE_SKUS) != frozenset(_GT_WAVE_LOGIC):
+        errors.append("GT-wave SKUs must match sim _GT_WAVE_LOGIC")
+    if frozenset(_HOLD_STUB_SKUS) != frozenset(_HOLD_LOGIC):
+        errors.append("HOLD stubs must match sim _HOLD_LOGIC")
     if set(_NEXT_WAVE_SKUS) - set(_CONFIRMED_SIM_PARTS):
         errors.append("scale-wave CONFIRMED must join CONFIRMED SIM set")
+    if set(_GT_WAVE_SKUS) - set(_CONFIRMED_SIM_PARTS):
+        errors.append("GT-wave CONFIRMED must join CONFIRMED SIM set")
     if set(_ARCHIVE_SIM_PARTS) & set(_CONFIRMED_SIM_PARTS):
         errors.append("PARKED RS1G74 / RS1G123 must stay out of CONFIRMED SIM")
+    if set(_HOLD_STUB_SKUS) & set(_CONFIRMED_SIM_PARTS):
+        errors.append("HOLD stubs rs1gt125/rs1gt126 must stay out of CONFIRMED SIM")
 
     load_family("logic")
 
@@ -3910,7 +4283,32 @@ def _confirmed_sim_sweep_ok() -> list[str]:
                 for banned in ("voh", "vol", "ioz", "delta_icc"):
                     if banned in ids:
                         errors.append(f"{part} SIM: {banned} must stay OFF (unsigned / ABSENT)")
-                if part in ("rs2g08", "rs2g32"):
+                if part in _DUAL_CHA_CHB:
+                    if not dual_channel_continue(m):
+                        errors.append(f"{part} SIM: dual_channel_continue CHA then CHB required")
+                    elif recipe_channels(m) != ["CHA", "CHB"]:
+                        errors.append(f"{part} SIM: skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+                    else:
+                        specs = [get(tid) for tid in ids]
+                        specs = [s for s in specs if s is not None]
+                        over = apply_dual_channel_continue(specs, m)
+                        if any(not getattr(s, "dual_channel", False) for s in over):
+                            errors.append(
+                                f"{part} SIM: CHA->CHB Continue must OR dual_channel onto Path B specs"
+                            )
+                        if any(getattr(s, "dual_channel", False) for s in specs):
+                            errors.append(
+                                f"{part} SIM: apply_dual_channel_continue must not mutate registered spec"
+                            )
+            if part in _GT_WAVE_SKUS:
+                for banned in ("voh", "vol"):
+                    if banned in ids:
+                        errors.append(f"{part} SIM: {banned} must stay OFF (unsigned loads)")
+                if part != "rs2g125" and "ioz" in ids:
+                    errors.append(f"{part} SIM: invent IOZ enabled -> FAIL")
+                if part != "rs1gt00" and "delta_icc" in ids:
+                    errors.append(f"{part} SIM: invent delta_icc enabled -> FAIL")
+                if part in _DUAL_CHA_CHB:
                     if not dual_channel_continue(m):
                         errors.append(f"{part} SIM: dual_channel_continue CHA then CHB required")
                     elif recipe_channels(m) != ["CHA", "CHB"]:
@@ -4027,6 +4425,10 @@ def _confirmed_sim_sweep_ok() -> list[str]:
                             errors.append(
                                 "rs1g125 ioz SIM must force OE inactive H, not active L"
                             )
+                        if part == "rs2g125" and oe == "L":
+                            errors.append(
+                                "rs2g125 ioz SIM must force OE inactive H, not active L"
+                            )
                 if tid == "voh" and greenable:
                     if any(
                         isinstance(r, dict) and str(r.get("Result") or "").upper() == "FAIL"
@@ -4105,7 +4507,7 @@ def _path_b_tree_ok() -> list[str]:
     for rel in _PATH_B_TREE:
         if not (root / rel).is_file():
             errors.append(f"Path B tree missing {rel}")
-    for part in _CONFIRMED_SIM_PARTS + _NEXT_WAVE_SKUS:
+    for part in _CONFIRMED_SIM_PARTS + _HOLD_STUB_SKUS:
         if not (PARTS_DIR / f"{part}.yaml").is_file():
             errors.append(f"Path B part yaml missing {part}.yaml")
     return errors
@@ -4142,6 +4544,15 @@ def _handover_ok() -> list[str]:
             "RS1G86",
             "RS2G08",
             "RS2G32",
+            "RS1GT00",
+            "RS1GT02",
+            "RS1GT04",
+            "RS1GT14",
+            "RS2G00",
+            "RS2G125",
+            "RS2GT08",
+            "RS1GT125",
+            "RS1GT126",
             "RS1G74",
             "RS1G123",
         ):
@@ -4169,8 +4580,8 @@ def _handover_ok() -> list[str]:
             errors.append(f"{path.name} must name JH DEMO DAY / LAST-DAY 2026-09-21")
         if "CONFIRM-all" not in text and "DEMO DAY" not in text:
             errors.append(f"{path.name} must name CONFIRM-all or DEMO DAY scale wave")
-        if "CONFIRMED (17)" not in text:
-            errors.append(f"{path.name} must list CONFIRMED (17)")
+        if "CONFIRMED (24)" not in text:
+            errors.append(f"{path.name} must list CONFIRMED (24)")
         if "Demo cheat" not in text and "demo cheat" not in text:
             errors.append(f"{path.name} must include Demo cheat (open console -> pick part)")
         if "layout only" not in text.lower():
@@ -4207,6 +4618,15 @@ def _handover_ok() -> list[str]:
             "RS1G86",
             "RS2G08",
             "RS2G32",
+            "RS1GT00",
+            "RS1GT02",
+            "RS1GT04",
+            "RS1GT14",
+            "RS2G00",
+            "RS2G125",
+            "RS2GT08",
+            "RS1GT125",
+            "RS1GT126",
             "RS1G74",
             "RS1G123",
         ):
@@ -4310,6 +4730,7 @@ def check_logic_dc() -> list[str]:
     errors += _sts_latest_ok()
     errors += _dual_channel_recipe_ok()
     errors += _next_wave_ok()
+    errors += _gt_wave_ok()
     errors += _seq_stub_ok()
     from ate.core.check_logic_dc_sim import check_logic_dc_sim
 

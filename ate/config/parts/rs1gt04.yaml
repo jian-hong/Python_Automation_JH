@@ -1,0 +1,121 @@
+# RS1GT04 TTL inverter -- GT-wave 2026-09-21. Function CONFIRMED.
+# n=1 Y=NOT A. NC is not OE. Unsigned VIH/VIL/VOH/VOL HOLD. No invent.
+
+part: RS1GT04
+model: RS1GT04
+component: Logic
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+part_key: rs1gt04
+product_class: logic
+vcc: 5.0
+current_limit: 0.05
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+enabled_tests:
+  - tp
+  - supply_current
+  - input_threshold
+  - icc
+  - ii
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1GT04 TTL INV)"
+    board_class: general
+    checklist:
+      - "RS1GT04 TTL inverter. CONFIRMED function 2026-09-21. Unsigned VIH/VIL/VOH/VOL HOLD."
+      - "NC is not OE. Do not tick IOZ. Do not invent ICCT. Do not tick voh/vol until CONFIRMED loads."
+    tests: [tp, supply_current, input_threshold, icc, ii]
+
+product_model:
+  part: RS1GT04
+  status: CONFIRMED
+  source_card: RS1GT04_card_CONFIRMED.md
+  confirm_note: "GT-wave 2026-09-21. INV n=1 CONFIRMED. NC not OE. Unsigned numbers HOLD. excel_plots UNCONFIRMED."
+  package: SC70-5
+  product_class: gate_inv
+  schmitt: false
+  oe: none
+  output_pin: Y
+  output_type: push_pull
+  logic_inputs:
+  - A
+  pins:
+  - {name: A, role: input}
+  - {name: NC, role: nc, note: "NC not OE -- do not invent IOZ"}
+  - {name: GND, role: gnd}
+  - {name: Y, role: output}
+  - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+  truth_table:
+    status: CONFIRMED
+    kind: combinational
+    note: Y=NOT A. Function CONFIRMED (GT-wave). NC not OE.
+    rows:
+    - {A: H, Y: L}
+    - {A: L, Y: H}
+  isolation:
+    status: CONFIRMED
+    tests:
+      A:
+      - {sweep_pin: A, fix: {}, y_expect: invert}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: AWG
+    kind: TTL
+    note: TTL-style VIH/VIL. Band numbers HOLD. Do not invent.
+    ranges: []
+    fixed_points: []
+  pass_mode:
+    icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: do not invent loads
+    ICCT_uA:
+      status: ABSENT
+      note: do not invent ICCT
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD. ICCT ABSENT is not a map
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: gate_inv
+    dual_channel_continue: false
+  gaps:
+  - CONFIRMED TTL INV n=1; unsigned vcc_grid / VOH / VOL HOLD; excel_plots UNCONFIRMED
+  - NC not OE; IOZ OFF; ICCT ABSENT
+  - stable_eps_A null
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    csv: sessions/csv/
+    report_pdf: report.pdf
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
+  workbook_policy:
+    golden_auto: one_per_version_overwrite
+    auto: one_per_version_overwrite
+    ultimate_manual: never_auto_write
+    pretty: never_auto_write
+  excel_plots:
+    status: UNCONFIRMED
+    series:
+      - vih_vs_vcc
+      - vil_vs_vcc
+      - icc_vs_vcc
+      - ii_vs_vcc

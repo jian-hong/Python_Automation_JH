@@ -1,4 +1,4 @@
-# LIVE matrix -- 17 CONFIRMED Path B (JH STARTS locally)
+# LIVE matrix -- 24 CONFIRMED Path B (JH STARTS locally)
 
 No remote LIVE. Operator owns instruments. Code owns config. DEMO/SIM is not Verify PASS.
 
@@ -6,9 +6,9 @@ Shared START: `START.bat` -> UI `127.0.0.1:5174` worker `8766` -> person selecte
 
 Pin D&D `#logic-dc-flow` is **layout only** -- drag does not write product_model / wire_map. Form customise is SoT (truth / vcc_plan / pass_mode / loads). PSU_MSO hides Freq/Amp. excel_plots.status must match SoT; scale-wave plots stay UNCONFIRMED (enabled series only -- do not overstate unsigned loads).
 
-SoT cards (scale-wave reconstruct; unsigned loads HOLD): `docs/datasheet/RS1G00_card_CONFIRMED.md` `RS1G02_card_CONFIRMED.md` `RS1G04_card_CONFIRMED.md` `RS1G86_card_CONFIRMED.md` `RS2G08_card_CONFIRMED.md` `RS2G32_card_CONFIRMED.md`. FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`.
+SoT cards (scale-wave reconstruct; unsigned loads HOLD): `docs/datasheet/RS1G00_card_CONFIRMED.md` `RS1G02_card_CONFIRMED.md` `RS1G04_card_CONFIRMED.md` `RS1G86_card_CONFIRMED.md` `RS2G08_card_CONFIRMED.md` `RS2G32_card_CONFIRMED.md`. GT-wave: `RS1GT00_card_CONFIRMED.md` `RS1GT02_card_CONFIRMED.md` `RS1GT04_card_CONFIRMED.md` `RS1GT14_card_CONFIRMED.md` `RS2G00_card_CONFIRMED.md` `RS2G125_card_CONFIRMED.md` `RS2GT08_card_CONFIRMED.md`. FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md` `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`.
 
-PARKED (not LIVE): RS1G74, RS1G123.
+PARKED (not LIVE): RS1G74, RS1G123. HOLD process-only (not SIM 24): RS1GT125, RS1GT126 -- OE present, IOZ ABSENT, VOH/VOL UNSURE.
 
 Settle: PSU -> settle -> measure. Voltage `stable_eps_V`. Current NON_TIGHT unless overlay `stable_eps_A`. PSU CH1=VCC always. PSU CH2=Y-load only when VOH/VOL ticked (VOH sink 0V; VOL source=VCC -- recable). DMM-on-VCC for ICC/delta_icc; DMM-on-Y for VOH/VOL/threshold; DMM-on-input for II; DMM-on-Y series for IOZ.
 
@@ -120,5 +120,56 @@ Settle: PSU -> settle -> measure. Voltage `stable_eps_V`. Current NON_TIGHT unle
 | RS2G32 | VOH | NO | unsigned HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
 | RS2G32 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
 | RS2G32 | IOZ | NO | oe none | -- | -- | -- | do not tick |
+| RS1GT00 | VIH/VIL | yes | TTL kind; bands HOLD. do not copy G08 CMOS | names only. AWG CH1=A CH2=B | AWG. NAND other=H invert | bands HOLD | CHA |
+| RS1GT00 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
+| RS1GT00 | delta_icc | yes | ICCT 3.4 -- do not invent 0.6. Full uA HOLD | DMM-on-VCC | AWG | delta_icc max_only | CHA |
+| RS1GT00 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA |
+| RS1GT00 | VOH | NO | unsigned loads HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
+| RS1GT00 | VOL | NO | unsigned loads HOLD | -- | -- | -- | do not tick |
+| RS1GT00 | IOZ | NO | oe none | -- | -- | -- | do not tick |
+| RS1GT02 | VIH/VIL | yes | TTL kind; band numbers HOLD. not G08 CMOS | names only. AWG CH1=A CH2=B | AWG. NOR other=L invert | bands HOLD | CHA |
+| RS1GT02 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
+| RS1GT02 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
+| RS1GT02 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA |
+| RS1GT02 | VOH | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1GT02 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1GT02 | IOZ | NO | oe none | -- | -- | -- | do not tick |
+| RS1GT04 | VIH/VIL | yes | bands HOLD | names only. AWG CH1=A. NC not OE | AWG. INV Y=NOT A | bands HOLD | CHA |
+| RS1GT04 | ICC 2^1 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
+| RS1GT04 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
+| RS1GT04 | II | yes | -- | DMM series A | AWG | ii max_only | CHA |
+| RS1GT04 | VOH | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1GT04 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1GT04 | IOZ | NO | NC not OE | -- | -- | -- | do not tick |
+| RS1GT14 | VT+/- | yes tick vth | do not invent VIH/VIL. do not copy G14 VT numbers | names only. AWG CH1=A. NC not OE | AWG. Schmitt INV | VT+/VT-/HYST range; numbers HOLD | CHA |
+| RS1GT14 | ICC 2^1 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
+| RS1GT14 | delta_icc | NO | ICCT ABSENT. do not copy G14 0.6 | -- | -- | -- | do not invent ICCT |
+| RS1GT14 | II | yes | -- | DMM series A | AWG | ii max_only | CHA |
+| RS1GT14 | VOH | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1GT14 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1GT14 | IOZ | NO | NC not OE | -- | -- | -- | do not tick |
+| RS2G00 | VIH/VIL | yes | bands HOLD. pin numbers HOLD | names only. AWG CH1=A CH2=B per channel | AWG. dual NAND other=H invert | bands HOLD | **CHA then CHB**. Do not skip rewire |
+| RS2G00 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA then CHB |
+| RS2G00 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
+| RS2G00 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA then CHB |
+| RS2G00 | VOH | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2G00 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2G00 | IOZ | NO | oe none | -- | -- | -- | do not tick |
+| RS2G125 | VIH/VIL | yes | bands HOLD. pin numbers HOLD | names only. AWG CH1=A CH2=OE per channel | AWG. dual buf track OE=L | bands HOLD | **CHA then CHB**. Do not skip rewire |
+| RS2G125 | ICC 2^(A+OE) | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA then CHB |
+| RS2G125 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
+| RS2G125 | II | yes | -- | DMM series A | AWG | ii max_only | CHA then CHB |
+| RS2G125 | VOH | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2G125 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2G125 | IOZ | yes | OE inactive H only (never active L). @3.6V UNSURE. do not invent uA | DMM series Y. Force OE=H | AWG | ioz max_only | CHA then CHB |
+| RS2GT08 | VIH/VIL | yes | TTL kind; bands HOLD. not G08 CMOS. pin numbers HOLD | names only. AWG CH1=A CH2=B per channel | AWG. dual TTL AND other=H track | bands HOLD | **CHA then CHB**. Do not skip rewire |
+| RS2GT08 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA then CHB |
+| RS2GT08 | delta_icc | NO | ICCT ABSENT. do not invent 0.6 | -- | -- | -- | do not invent ICCT |
+| RS2GT08 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA then CHB |
+| RS2GT08 | VOH | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2GT08 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2GT08 | IOZ | NO | oe none | -- | -- | -- | do not tick |
+| RS1GT125 | Path B DC | HOLD | process-only. OE present. IOZ ABSENT. VOH/VOL UNSURE. not SIM 24 | names only | -- | -- | do not invent IOZ |
+| RS1GT126 | Path B DC | HOLD | process-only. OE present active-H. IOZ ABSENT. VOH/VOL UNSURE. not SIM 24 | names only | -- | -- | do not invent IOZ |
 
-Ready (SIM): 17 CONFIRMED visa-free catalog (RS164 skip sequential). Not ready (LIVE): JH board-by-board START; scale-wave unsigned loads HOLD; GT34 VOL recable first.
+Ready (SIM): 24 CONFIRMED visa-free catalog (RS164 skip sequential). HOLD stubs process-only. Not ready (LIVE): JH board-by-board START; unsigned loads HOLD; GT34 VOL recable first.
