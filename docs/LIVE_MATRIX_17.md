@@ -4,9 +4,9 @@ No remote LIVE. Operator owns instruments. Code owns config. DEMO/SIM is not Ver
 
 Shared START: `START.bat` -> UI `127.0.0.1:5174` worker `8766` -> person selected -> Open Session -> Human Continue on `wire_map` -> START (not DEMO). Null `stable_eps_A` = NON_TIGHT. Fill **golden_auto** Version `workbook/` only. pretty / ultimate_manual `never_auto_write`. STS `sessions/datalog.md|.pdf` + Version-root `report.pdf`. `sessions/csv/` + `datapoints.csv` + `path_b_write.json`. Campaign `#Test_Database/Logic/<Part>/<Package>/<Operator>/Version_N/`.
 
-Pin D&D `#logic-dc-flow` is **layout only** -- drag does not write product_model / wire_map. Form customise is SoT (truth / vcc_plan / pass_mode / loads). PSU_MSO hides Freq/Amp. excel_plots.status must match SoT; scale-wave plots stay UNCONFIRMED (enabled series only -- do not overstate unsigned loads).
+Pin D&D `#logic-dc-flow` is **layout only** -- drag does not write product_model / wire_map. Form customise is SoT (truth / vcc_plan / pass_mode / loads). PSU_MSO hides Freq/Amp. excel_plots.status must match SoT; scale-wave plots CONFIRMED (signed enabled series). GT-wave plots stay UNCONFIRMED (unsigned loads).
 
-SoT cards (scale-wave reconstruct; unsigned loads HOLD): `docs/datasheet/RS1G00_card_CONFIRMED.md` `RS1G02_card_CONFIRMED.md` `RS1G04_card_CONFIRMED.md` `RS1G86_card_CONFIRMED.md` `RS2G08_card_CONFIRMED.md` `RS2G32_card_CONFIRMED.md`. GT-wave: `RS1GT00_card_CONFIRMED.md` `RS1GT02_card_CONFIRMED.md` `RS1GT04_card_CONFIRMED.md` `RS1GT14_card_CONFIRMED.md` `RS2G00_card_CONFIRMED.md` `RS2G125_card_CONFIRMED.md` `RS2GT08_card_CONFIRMED.md`. FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md` `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`.
+SoT cards (scale-wave signed vcc_grid/VOH/VOL/delta_icc_uA): `docs/datasheet/RS1G00_card_CONFIRMED.md` `RS1G02_card_CONFIRMED.md` `RS1G04_card_CONFIRMED.md` `RS1G86_card_CONFIRMED.md` `RS2G08_card_CONFIRMED.md` `RS2G32_card_CONFIRMED.md`. GT-wave: `RS1GT00_card_CONFIRMED.md` `RS1GT02_card_CONFIRMED.md` `RS1GT04_card_CONFIRMED.md` `RS1GT14_card_CONFIRMED.md` `RS2G00_card_CONFIRMED.md` `RS2G125_card_CONFIRMED.md` `RS2GT08_card_CONFIRMED.md`. FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md` `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`.
 
 PARKED (not LIVE): RS1G74, RS1G123. HOLD process-only (not SIM 24): RS1GT125, RS1GT126 -- OE present, IOZ ABSENT, VOH/VOL UNSURE.
 
@@ -77,48 +77,47 @@ Settle: PSU -> settle -> measure. Voltage `stable_eps_V`. Current NON_TIGHT unle
 | RS1G126 | VOL | yes | -- | PSU CH2 source=VCC | AWG | vol max_only | CHA |
 | RS1G126 | IOZ | yes | OE inactive L only (never active H) | DMM series Y. Force OE=L | AWG | ioz max_only | CHA |
 | RS164 | Path B DC | NO | not combinational 2^n. VOH/VOL UNCONFIRMED. Ioff+ICCT ABSENT | 14-pin yaml map | sequential_shift_register | n/a | CHA. FAIL if treated as gate 2^n |
-| RS1G00 | VIH/VIL | yes | bands HOLD. do not copy G08 CMOS | names only. AWG CH1=A CH2=B | AWG. NAND other=H invert | VIH/VIL not greenable | CHA |
-| RS1G00 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
-| RS1G00 | delta_icc | NO | ICCT ABSENT. delta_icc_uA HOLD | -- | -- | -- | do not invent ICCT |
-| RS1G00 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA |
-| RS1G00 | VOH | NO | unsigned loads HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
-| RS1G00 | VOL | NO | unsigned loads HOLD | -- | -- | -- | do not tick |
+| RS1G00 | VIH/VIL | yes | SoT CMOS 0.65/0.15 -- this SKU, not a G02 swap | 1=A 2=B 3=GND 4=Y 5=VCC. AWG CH1=A CH2=B | PSU_MSO hide Freq + AWG pin_drive. NAND other=H invert | VIH min_only; VIL max_only | CHA |
+| RS1G00 | ICC 2^2 | yes | -- | DMM-on-VCC | PSU_MSO + AWG | icc max_only | CHA |
+| RS1G00 | delta_icc | yes | ICCT ABSENT. DeltaICC offset_v 0.6 via delta_icc_uA | DMM-on-VCC | PSU_MSO + AWG | delta_icc max_only | CHA. Do not invent ICCT name |
+| RS1G00 | II | yes | -- | DMM series A/B | PSU_MSO + AWG | ii max_only | CHA |
+| RS1G00 | VOH | yes | IOZ OFF. excel_plots CONFIRMED | PSU CH2 Y-load sink 0V. DMM Y | PSU_MSO + CH2 load | voh min_only | CHA |
+| RS1G00 | VOL | yes | recable CH2 source=VCC | PSU CH2 Y-load source=VCC. DMM Y | PSU_MSO + CH2 load | vol max_only | CHA |
 | RS1G00 | IOZ | NO | oe none | -- | -- | -- | do not tick |
-| RS1G02 | VIH/VIL | yes | TTL kind; band numbers HOLD. not G08 CMOS | names only. AWG CH1=A CH2=B | AWG. NOR other=L invert | bands HOLD | CHA |
-| RS1G02 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
-| RS1G02 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
-| RS1G02 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA |
-| RS1G02 | VOH | NO | unsigned HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
-| RS1G02 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1G02 | VIH/VIL | yes | TTL kind 0.65/0.35. not G08 CMOS pair | 1=A 2=B 3=GND 4=Y 5=VCC. AWG CH1=A CH2=B | PSU_MSO hide Freq + AWG. NOR other=L invert | VIH min_only; VIL max_only | CHA |
+| RS1G02 | ICC 2^2 | yes | -- | DMM-on-VCC | PSU_MSO + AWG | icc max_only | CHA |
+| RS1G02 | delta_icc | yes | ICCT ABSENT. DeltaICC offset_v 0.6 via delta_icc_uA | DMM-on-VCC | PSU_MSO + AWG | delta_icc max_only | CHA. Do not invent ICCT name |
+| RS1G02 | II | yes | -- | DMM series A/B | PSU_MSO + AWG | ii max_only | CHA |
+| RS1G02 | VOH | yes | IOZ OFF. excel_plots CONFIRMED | PSU CH2 Y-load sink 0V | PSU_MSO + CH2 load | voh min_only | CHA |
+| RS1G02 | VOL | yes | recable CH2 source=VCC | PSU CH2 Y-load source=VCC | PSU_MSO + CH2 load | vol max_only | CHA |
 | RS1G02 | IOZ | NO | oe none | -- | -- | -- | do not tick |
-| RS1G04 | VIH/VIL | yes | bands HOLD | names only. AWG CH1=A. NC not OE | AWG. INV Y=NOT A | bands HOLD | CHA |
-| RS1G04 | ICC 2^1 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
-| RS1G04 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
-| RS1G04 | II | yes | -- | DMM series A | AWG | ii max_only | CHA |
-| RS1G04 | VOH | NO | unsigned HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
-| RS1G04 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1G04 | VIH/VIL | yes | TTL-style 0.65/0.35 | 1=NC 2=A 3=GND 4=Y 5=VCC. AWG CH1=A. NC not OE | PSU_MSO hide Freq + AWG. INV Y=NOT A | VIH min_only; VIL max_only | CHA |
+| RS1G04 | ICC 2^1 | yes | -- | DMM-on-VCC | PSU_MSO + AWG | icc max_only | CHA |
+| RS1G04 | delta_icc | yes | ICCT ABSENT. DeltaICC offset_v 0.6 via delta_icc_uA | DMM-on-VCC | PSU_MSO + AWG | delta_icc max_only | CHA. Do not invent ICCT name |
+| RS1G04 | II | yes | -- | DMM series A | PSU_MSO + AWG | ii max_only | CHA |
+| RS1G04 | VOH | yes | IOZ OFF. excel_plots CONFIRMED | PSU CH2 Y-load sink 0V | PSU_MSO + CH2 load | voh min_only | CHA |
+| RS1G04 | VOL | yes | recable CH2 source=VCC | PSU CH2 Y-load source=VCC | PSU_MSO + CH2 load | vol max_only | CHA |
 | RS1G04 | IOZ | NO | NC not OE | -- | -- | -- | do not tick |
-| RS1G86 | VIH | HOLD | do not invent VIH_min | names only. AWG CH1=A CH2=B | AWG. XOR track+invert | VIH HOLD | CHA |
-| RS1G86 | VIL | yes | 0.20*VCC @1.65-1.95 CONFIRMED. not G08 0.15*VCC | same | AWG | VIL max_only | CHA |
-| RS1G86 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
-| RS1G86 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
-| RS1G86 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA |
-| RS1G86 | VOH | NO | unsigned HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
-| RS1G86 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS1G86 | VIH/VIL | yes | VIL 0.20*VCC @1.65-1.95; VIH 0.65*VCC signed. not G08 0.15*VCC | 1=A 2=B 3=GND 4=Y 5=VCC. AWG CH1=A CH2=B | PSU_MSO hide Freq + AWG. XOR track+invert | VIH min_only; VIL max_only | CHA |
+| RS1G86 | ICC 2^2 | yes | -- | DMM-on-VCC | PSU_MSO + AWG | icc max_only | CHA |
+| RS1G86 | delta_icc | yes | ICCT ABSENT. DeltaICC offset_v 0.6 via delta_icc_uA | DMM-on-VCC | PSU_MSO + AWG | delta_icc max_only | CHA. Do not invent ICCT name |
+| RS1G86 | II | yes | -- | DMM series A/B | PSU_MSO + AWG | ii max_only | CHA |
+| RS1G86 | VOH | yes | IOZ OFF. excel_plots CONFIRMED | PSU CH2 Y-load sink 0V | PSU_MSO + CH2 load | voh min_only | CHA |
+| RS1G86 | VOL | yes | recable CH2 source=VCC | PSU CH2 Y-load source=VCC | PSU_MSO + CH2 load | vol max_only | CHA |
 | RS1G86 | IOZ | NO | oe none | -- | -- | -- | do not tick |
-| RS2G08 | VIH/VIL | yes | bands HOLD. pin numbers HOLD | names only. AWG CH1=A CH2=B per channel | AWG. dual AND other=H track | bands HOLD | **CHA then CHB**. Do not skip rewire. Recable CHB after CHA Human Continue |
-| RS2G08 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA then CHB |
-| RS2G08 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
-| RS2G08 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA then CHB |
-| RS2G08 | VOH | NO | unsigned HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
-| RS2G08 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2G08 | VIH/VIL | yes | SoT CMOS. Path B A/B | Operator 8-pin: 1=1A CHA 2=1B CHA 3=2Y CHB 4=GND 5=2A CHB 6=2B CHB 7=1Y CHA 8=VCC. AWG CH1=A CH2=B per channel | PSU_MSO hide Freq + AWG. dual AND other=H track | VIH min_only; VIL max_only | **CHA then CHB**. Do not skip rewire. Recable CHB after CHA Human Continue |
+| RS2G08 | ICC 2^2 | yes | Path B A/B (not 1A/1B 2^4) | DMM-on-VCC | PSU_MSO + AWG | icc max_only | CHA then CHB |
+| RS2G08 | delta_icc | yes | ICCT ABSENT. DeltaICC offset_v 0.6 via delta_icc_uA | DMM-on-VCC | PSU_MSO + AWG | delta_icc max_only | CHA then CHB. Do not invent ICCT name |
+| RS2G08 | II | yes | -- | DMM series A/B | PSU_MSO + AWG | ii max_only | CHA then CHB |
+| RS2G08 | VOH | yes | IOZ OFF. excel_plots CONFIRMED | PSU CH2 Y-load sink 0V | PSU_MSO + CH2 load | voh min_only | CHA then CHB |
+| RS2G08 | VOL | yes | recable CH2 source=VCC | PSU CH2 Y-load source=VCC | PSU_MSO + CH2 load | vol max_only | CHA then CHB |
 | RS2G08 | IOZ | NO | oe none | -- | -- | -- | do not tick |
-| RS2G32 | VIH/VIL | yes | bands HOLD. pin numbers HOLD | names only. AWG CH1=A CH2=B per channel | AWG. dual OR other=L track | bands HOLD | **CHA then CHB**. Do not skip rewire. Recable CHB after CHA Human Continue |
-| RS2G32 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA then CHB |
-| RS2G32 | delta_icc | NO | ICCT ABSENT | -- | -- | -- | do not invent ICCT |
-| RS2G32 | II | yes | -- | DMM series A/B | AWG | ii max_only | CHA then CHB |
-| RS2G32 | VOH | NO | unsigned HOLD. excel_plots UNCONFIRMED | -- | -- | -- | do not tick |
-| RS2G32 | VOL | NO | unsigned HOLD | -- | -- | -- | do not tick |
+| RS2G32 | VIH/VIL | yes | SoT CMOS. Path B A/B | Operator 8-pin: 1=1A CHA 2=1B CHA 3=2Y CHB 4=GND 5=2A CHB 6=2B CHB 7=1Y CHA 8=VCC. AWG CH1=A CH2=B per channel | PSU_MSO hide Freq + AWG. dual OR other=L track | VIH min_only; VIL max_only | **CHA then CHB**. Do not skip rewire. Recable CHB after CHA Human Continue |
+| RS2G32 | ICC 2^2 | yes | Path B A/B (not 1A/1B 2^4) | DMM-on-VCC | PSU_MSO + AWG | icc max_only | CHA then CHB |
+| RS2G32 | delta_icc | yes | ICCT ABSENT. DeltaICC offset_v 0.6 via delta_icc_uA | DMM-on-VCC | PSU_MSO + AWG | delta_icc max_only | CHA then CHB. Do not invent ICCT name |
+| RS2G32 | II | yes | -- | DMM series A/B | PSU_MSO + AWG | ii max_only | CHA then CHB |
+| RS2G32 | VOH | yes | IOZ OFF. excel_plots CONFIRMED | PSU CH2 Y-load sink 0V | PSU_MSO + CH2 load | voh min_only | CHA then CHB |
+| RS2G32 | VOL | yes | recable CH2 source=VCC | PSU CH2 Y-load source=VCC | PSU_MSO + CH2 load | vol max_only | CHA then CHB |
 | RS2G32 | IOZ | NO | oe none | -- | -- | -- | do not tick |
 | RS1GT00 | VIH/VIL | yes | TTL kind; bands HOLD. do not copy G08 CMOS | names only. AWG CH1=A CH2=B | AWG. NAND other=H invert | bands HOLD | CHA |
 | RS1GT00 | ICC 2^2 | yes | -- | DMM-on-VCC | AWG | icc max_only | CHA |
@@ -172,4 +171,4 @@ Settle: PSU -> settle -> measure. Voltage `stable_eps_V`. Current NON_TIGHT unle
 | RS1GT125 | Path B DC | HOLD | process-only. OE present. IOZ ABSENT. VOH/VOL UNSURE. not SIM 24 | names only | -- | -- | do not invent IOZ |
 | RS1GT126 | Path B DC | HOLD | process-only. OE present active-H. IOZ ABSENT. VOH/VOL UNSURE. not SIM 24 | names only | -- | -- | do not invent IOZ |
 
-Ready (SIM): 24 CONFIRMED visa-free catalog (RS164 skip sequential). HOLD stubs process-only. Not ready (LIVE): JH board-by-board START; unsigned loads HOLD; GT34 VOL recable first.
+Ready (SIM): 24 CONFIRMED visa-free catalog (RS164 skip sequential). Scale-wave signed VOH/VOL/DeltaICC. HOLD stubs process-only. Not ready (LIVE): JH board-by-board START; GT-wave unsigned loads HOLD; GT34 VOL recable first.

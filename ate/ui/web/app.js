@@ -1461,7 +1461,7 @@ function familyScaleHint(dc) {
   } else if (cls.indexOf("nor") >= 0) {
     bits.push("LIVE NOR: other=L invert. TTL not G08 CMOS.");
   } else if (cls.indexOf("xor") >= 0) {
-    bits.push("LIVE XOR: track+invert. G86 VIL 0.20*VCC; VIH HOLD.");
+    bits.push("LIVE XOR: track+invert. G86 VIL 0.20*VCC; VIH 0.65*VCC signed.");
   } else if (cls.indexOf("inv") >= 0) {
     bits.push("LIVE INV: n=1 Y=NOT A. NC is not OE.");
   } else if (cls.indexOf("dual_and") >= 0 || (cls.indexOf("dual") >= 0 && cls.indexOf("and") >= 0)) {

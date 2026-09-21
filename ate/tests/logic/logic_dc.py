@@ -155,8 +155,8 @@ def _provisional_dc(model: ProductModel, test_id: str) -> bool:
     elif low == "vol":
         keys = ("VOL", "vol")
     elif low == "delta_icc":
-        # Unsigned ICCT must not green delta_icc. Still run process via _icct_blob.
-        keys = ("delta_icc", "DELTA_ICC", "ICCT_uA", "ICCT", "icct")
+        # Unsigned ICCT / delta_icc_uA must not green delta_icc. Still run process via _icct_blob.
+        keys = ("delta_icc_uA", "delta_icc", "DELTA_ICC", "ICCT_uA", "ICCT", "icct")
     elif low == "icc":
         keys = ("icc", "ICC", "ICC_uA")
     elif low == "ioz":
@@ -855,7 +855,12 @@ def _run_icc(instr, params: Any) -> dict[str, Any]:
 
 
 def _icct_blob(model: ProductModel) -> dict[str, Any]:
-    """ICCT maps to delta_icc via one_input_V or card offset_v. Do not invent 0.6."""
+    """Map delta_icc force voltage. Do not invent 0.6.
+
+    ICCT_uA (one_input_V / offset_v / map_to) when the ICCT name is present.
+    When ICCT name is ABSENT, a Datasheet-signed delta_icc_uA.offset_v
+    (DeltaICC symbol) is the map. UNCONFIRMED / empty stays fail-closed.
+    """
     dc = model.dc_limits if isinstance(model.dc_limits, dict) else {}
     for key in ("ICCT_uA", "ICCT", "icct"):
         block = dc.get(key)
@@ -869,6 +874,17 @@ def _icct_blob(model: ProductModel) -> dict[str, Any]:
             or block.get("offset_v") is not None
             or str(block.get("map_to") or "").strip().lower() == "delta_icc"
         ):
+            return block
+    for key in ("delta_icc_uA", "delta_icc", "DELTA_ICC"):
+        block = dc.get(key)
+        if not isinstance(block, dict):
+            continue
+        st = str(block.get("status") or "").strip().upper().replace("-", "_")
+        if st in ("ABSENT", "N_A", "NA"):
+            continue
+        if not is_datasheet_signed(block.get("status")):
+            continue
+        if block.get("one_input_V") is not None or block.get("offset_v") is not None:
             return block
     return {}
 

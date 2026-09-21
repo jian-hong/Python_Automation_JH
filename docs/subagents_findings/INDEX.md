@@ -2,7 +2,7 @@
 
 | Date | File | Keywords |
 |------|------|----------|
-| 2026-09-21 | 2026-09-21_gt-wave-bind-24.md | path-b, GT-wave, rs1gt00, 24 CONFIRMED, HOLD IOZ ABSENT, no invent VIH, CHA then CHB |
+| 2026-09-21 | 2026-09-21_scale-wave-sot-promote.md | path-b, DEMO DAY, scale-wave, signed loads, delta_icc_uA, G02 TTL, G86 VIL 0.20, CHA then CHB, SIM 24 |
 | 2026-09-21 | 2026-09-21_demo-day-confirm-scale-wave.md | path-b, DEMO DAY, CONFIRM-all, rs1g00, 17 CONFIRMED, excel_plots UNCONFIRMED, layout only, LIVE_MATRIX_17, no invent |
 | 2026-09-20 | 2026-09-20_soot-scale-wave-unconfirmed.md | SUPERSEDED, path-b, SOOT, JH DM unlock, Datasheet CONFIRM, VOID, rs1g00, UNCONFIRMED, 11 SIM, numbers HOLD |
 | 2026-09-21 | 2026-09-21_jh-coordinator-p1-p2.md | path-b, xyflow, logic-dc-flow, customise, NAND, NOR, INV, XOR, do not skip rewire, golden_auto, VOL board-change, 5-step cheat |

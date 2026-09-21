@@ -81,7 +81,7 @@ _PATH_B_IDS = (
 
 # CONFIRMED Path B SIM walk (JH 24 = 11 prior + 6 scale-wave + 7 GT-wave).
 # Archive 123/74 optional PARKED if present; missing does not block green.
-# Scale-wave: grounded function CONFIRMED; unsigned VOH/VOL/vcc_grid (except G86 VIL) HOLD.
+# Scale-wave: SoT signed vcc_grid / VOH / VOL / delta_icc_uA (ICCT name ABSENT).
 # GT-wave HOLD stubs rs1gt125/rs1gt126 are process-only -- not in this set.
 _CONFIRMED_SIM_PARTS = (
     "rs1gt34",
@@ -2085,17 +2085,24 @@ def _excel_lock_ok() -> list[str]:
             errors.append(f"{part} must bind excel_plots + workbook_policy (golden_auto)")
         errors.extend(el.binding_errors(m, list(enabled_tests_for_part(part) or [])))
         bound = el.bound_series_ids(m)
-        for banned in ("voh_at_ioh", "vol_at_iol", "ioz_vs_vcc", "delta_icc_vs_vcc"):
-            if banned in bound:
-                errors.append(f"{part} excel_plots must not bind {banned} (not enabled; no invent)")
-        for need in ("vih_vs_vcc", "vil_vs_vcc", "icc_vs_vcc", "ii_vs_vcc"):
+        if "ioz_vs_vcc" in bound:
+            errors.append(f"{part} excel_plots must not bind ioz_vs_vcc (oe none; no invent)")
+        for need in (
+            "vih_vs_vcc",
+            "vil_vs_vcc",
+            "icc_vs_vcc",
+            "ii_vs_vcc",
+            "voh_at_ioh",
+            "vol_at_iol",
+            "delta_icc_vs_vcc",
+        ):
             if need not in bound:
                 errors.append(f"{part} excel_plots missing {need}")
         plots_st = str(el.excel_plots_status(m) or "").upper()
-        if plots_st == "CONFIRMED":
+        if plots_st != "CONFIRMED":
             errors.append(
-                f"{part} excel_plots.status must not be CONFIRMED "
-                "(unsigned VOH/VOL/vcc_grid -- do not overstate loads)"
+                f"{part} excel_plots.status must be CONFIRMED "
+                "(signed enabled series -- voh/vol/delta_icc SoT)"
             )
     for part in _GT_WAVE_SKUS:
         m = load_product_model(part)
@@ -3311,7 +3318,10 @@ def _dual_channel_recipe_ok() -> list[str]:
 
 
 def _grid_copies_g08_cmos(m) -> bool:
-    """True when vcc_grid copies G08 CMOS 0.65*VCC / 0.15*VCC bands."""
+    """True when a vcc_grid row copies G08 CMOS pair 0.65*VCC AND 0.15*VCC.
+
+    VIH 0.65*VCC alone is not CMOS (TTL G02 uses 0.65/0.35 on the same row).
+    """
     grid = m.vcc_grid if isinstance(getattr(m, "vcc_grid", None), dict) else {}
     rows = list(grid.get("ranges") or []) + list(grid.get("fixed_points") or [])
     for row in rows:
@@ -3319,21 +3329,18 @@ def _grid_copies_g08_cmos(m) -> bool:
             continue
         vil = _formula_tok(row.get("VIL_max") or row.get("VIL_max_V"))
         vih = _formula_tok(row.get("VIH_min") or row.get("VIH_min_V"))
-        if vil.replace("0.15*", "0.15*") == "0.15*VCC" or vil == "0.15*VCC":
-            return True
-        if vih == "0.65*VCC":
+        if vih == "0.65*VCC" and vil == "0.15*VCC":
             return True
     return False
 
 
 def _next_wave_ok() -> list[str]:
-    """JH DEMO DAY 2026-09-21: scale-wave CONFIRMED from grounded OCR/card rows.
+    """JH DEMO DAY 2026-09-21: scale-wave CONFIRMED from attached SoT models.
 
-    Function/truth/isolation signed. Unsigned vcc_grid (except G86 VIL fragment),
-    VOH/VOL loads, and delta_icc numbers stay fail-closed. excel_plots.status
-    must stay UNCONFIRMED (enabled series only -- do not overstate unsigned loads).
-    Physics: G02 TTL not CMOS; G86 VIL 0.20*VCC; 2G CHA->CHB; OE/IOZ OFF;
-    ICCT ABSENT != invent ICCT.
+    Signed vcc_grid / VOH / VOL / delta_icc_uA. Enable voh/vol/delta_icc.
+    excel_plots.status CONFIRMED for signed enabled series. ICCT name ABSENT --
+    DeltaICC via delta_icc_uA.offset_v (do not invent ICCT / recipe.delta_offset_v).
+    Physics: G02 TTL not CMOS pair; G86 VIL 0.20*VCC; 2G CHA->CHB; OE/IOZ OFF.
     """
     from ate.tests.logic import logic_dc as ldc
     from ate.tests.logic import excel_lock as el
@@ -3365,28 +3372,37 @@ def _next_wave_ok() -> list[str]:
             errors.append(f"docs/datasheet/{want_card} missing (scale-wave SoT)")
         errors += _fail_closed_until_signed(part, m)
         gst = str((m.vcc_grid or {}).get("status") or "")
-        if part == "rs1g86":
-            if not is_datasheet_signed(gst):
-                errors.append("rs1g86 vcc_grid.status must be CONFIRMED (VIL 0.20*VCC card lock)")
-        elif is_datasheet_signed(gst):
-            errors.append(
-                f"{part} vcc_grid must stay UNCONFIRMED (no card VIH/VIL bands; do not invent), got {gst!r}"
-            )
+        if not is_datasheet_signed(gst):
+            errors.append(f"{part} vcc_grid.status must be CONFIRMED (SoT bands), got {gst!r}")
+        ranges = list((m.vcc_grid or {}).get("ranges") or [])
+        if len(ranges) < 4:
+            errors.append(f"{part} vcc_grid.ranges must copy SoT 4 bands, got {len(ranges)}")
         plots_st = str(el.excel_plots_status(m) or "").upper()
-        if plots_st == "CONFIRMED":
+        if plots_st != "CONFIRMED":
             errors.append(
-                f"{part} excel_plots.status must stay UNCONFIRMED "
-                "(do not overstate unsigned VOH/VOL/vcc_grid loads)"
+                f"{part} excel_plots.status must be CONFIRMED "
+                "(signed enabled series -- do not overstate unsigned)"
             )
+        bound = el.bound_series_ids(m)
+        for need in (
+            "vih_vs_vcc",
+            "vil_vs_vcc",
+            "icc_vs_vcc",
+            "ii_vs_vcc",
+            "voh_at_ioh",
+            "vol_at_iol",
+            "delta_icc_vs_vcc",
+        ):
+            if need not in bound:
+                errors.append(f"{part} excel_plots missing {need}")
+        if "ioz_vs_vcc" in bound:
+            errors.append(f"{part} excel_plots must not bind ioz_vs_vcc (oe none)")
         if m.has_oe():
             errors.append(f"{part}: invent OE -> FAIL")
         en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
-        for need in ("input_threshold", "icc", "ii"):
+        for need in ("input_threshold", "icc", "ii", "voh", "vol", "delta_icc"):
             if need not in en:
-                errors.append(f"{part} enabled_tests missing {need} (honesty; no invent voh/vol)")
-        for banned in ("voh", "vol", "ioz", "delta_icc"):
-            if banned in en:
-                errors.append(f"{part}: invent {banned} enabled -> FAIL")
+                errors.append(f"{part} enabled_tests missing {need} (SoT tables CONFIRMED)")
         if "ioz" in en:
             errors.append(f"{part}: invent IOZ enabled -> FAIL")
         try:
@@ -3404,25 +3420,47 @@ def _next_wave_ok() -> list[str]:
             errors.append(f"{part} ICCT must stay ABSENT (delta_icc from delta_icc_uA only), got {icct.get('status')!r}")
         if icct.get("one_input_V") is not None or icct.get("offset_v") is not None:
             errors.append(f"{part}: invent ICCT map -> FAIL")
-        if ldc._icct_blob(m):
-            errors.append(f"{part}: invent ICCT map into Path B delta_icc -> FAIL")
         if (m.recipe or {}).get("delta_offset_v") is not None:
             errors.append(f"{part}: invent recipe.delta_offset_v from ICCT -> FAIL")
-        if "delta_icc" in en:
-            errors.append(f"{part}: invent delta_icc enabled -> FAIL")
         dicc = _dc_block(m, "delta_icc_uA", "delta_icc")
         if not dicc:
             errors.append(f"{part} delta_icc_uA block missing (ICCT ABSENT != invent ICCT)")
         else:
-            st_d = str(dicc.get("status") or "").upper().replace("-", "_")
-            if st_d not in ("UNCONFIRMED", "ABSENT", "N_A", "NA"):
-                errors.append(f"{part} delta_icc_uA must stay UNCONFIRMED (numbers HOLD), got {dicc.get('status')!r}")
-            for banned_k in ("max", "typ", "limit", "value", "uA", "max_uA", "min"):
-                if dicc.get(banned_k) not in (None, "", [], ()):
-                    errors.append(f"{part}: invent delta_icc_uA number -> FAIL")
-                    break
-        if ldc._voh_vol_table(part, "voh") or ldc._voh_vol_table(part, "vol"):
-            errors.append(f"{part} UNCONFIRMED VOH/VOL must not expand (do not invent loads)")
+            if not is_datasheet_signed(dicc.get("status")):
+                errors.append(f"{part} delta_icc_uA.status must be CONFIRMED (SoT DeltaICC), got {dicc.get('status')!r}")
+            try:
+                off = float(dicc.get("offset_v"))
+            except (TypeError, ValueError):
+                off = None
+            if off is None or abs(off - 0.6) > 1e-9:
+                errors.append(f"{part} delta_icc_uA.offset_v must be SoT 0.6, got {dicc.get('offset_v')!r}")
+            try:
+                full = float(dicc.get("Full"))
+            except (TypeError, ValueError):
+                full = None
+            if full is None or abs(full - 500.0) > 1e-9:
+                errors.append(f"{part} delta_icc_uA.Full must be SoT 500, got {dicc.get('Full')!r}")
+            if str(dicc.get("map_to") or "").strip().lower() != "delta_icc":
+                errors.append(f"{part} delta_icc_uA.map_to must be delta_icc")
+        blob = ldc._icct_blob(m)
+        if not blob:
+            errors.append(f"{part} signed delta_icc_uA.offset_v must map Path B delta_icc (ICCT ABSENT)")
+        elif abs(float(blob.get("offset_v") or 0) - 0.6) > 1e-9:
+            errors.append(f"{part} delta_icc map offset_v must be SoT 0.6, got {blob.get('offset_v')!r}")
+        voh = _dc_block(m, "VOH", "voh")
+        vol = _dc_block(m, "VOL", "vol")
+        if not is_datasheet_signed(voh.get("status")):
+            errors.append(f"{part} VOH.status must be CONFIRMED (SoT loads), got {voh.get('status')!r}")
+        if not is_datasheet_signed(vol.get("status")):
+            errors.append(f"{part} VOL.status must be CONFIRMED (SoT loads), got {vol.get('status')!r}")
+        if len(voh.get("loads") or []) < 6:
+            errors.append(f"{part} VOH.loads must copy SoT 6-load table")
+        if len(vol.get("loads") or []) < 6:
+            errors.append(f"{part} VOL.loads must copy SoT 6-load table")
+        if not ldc._voh_vol_table(part, "voh"):
+            errors.append(f"{part} CONFIRMED VOH must expand (SoT loads)")
+        if not ldc._voh_vol_table(part, "vol"):
+            errors.append(f"{part} CONFIRMED VOL must expand (SoT loads)")
         rec = m.recipe if isinstance(m.recipe, dict) else {}
         if rec.get("stable_eps_A") is not None:
             errors.append(f"{part} recipe.stable_eps_A must stay null")
@@ -3437,18 +3475,52 @@ def _next_wave_ok() -> list[str]:
                 errors.append("rs1g00 NAND isolation A must invert with B=H")
             if dual_channel_continue(m):
                 errors.append("rs1g00 is 1Gxx -- dual_channel_continue off")
+            lim165 = lookup_vcc_grid_limits(m, 1.65) or {}
+            got_vih = lim165.get("VIH_min_V")
+            got_vil = lim165.get("VIL_max_V")
+            try:
+                if got_vih is None or abs(float(got_vih) - 0.65 * 1.65) > 1e-9:
+                    errors.append(
+                        f"rs1g00 VIH@1.65 must eval SoT 0.65*VCC={0.65 * 1.65}, got {got_vih}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(f"rs1g00 VIH@1.65 formula eval failed, got {got_vih!r}")
+            try:
+                if got_vil is None or abs(float(got_vil) - 0.15 * 1.65) > 1e-9:
+                    errors.append(
+                        f"rs1g00 VIL@1.65 must eval SoT 0.15*VCC={0.15 * 1.65}, got {got_vil}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(f"rs1g00 VIL@1.65 formula eval failed, got {got_vil!r}")
         elif part == "rs1g02":
             if "nor" not in runner or "nor" not in pc:
                 errors.append("rs1g02 runner/product_class must be gate_nor2")
             if not any(p.fix.get("B") == "L" and p.y_expect == "invert" for p in a_iso):
                 errors.append("rs1g02 NOR isolation A must invert with B=L")
             if _grid_copies_g08_cmos(m):
-                errors.append("rs1g02 must use TTL-style VIH/VIL (not G08 CMOS 0.65/0.15)")
+                errors.append("rs1g02 must use TTL-style VIH/VIL (not G08 CMOS 0.65/0.15 pair)")
             kind = str((m.vcc_grid or {}).get("kind") or "").upper()
-            if kind and kind != "TTL":
+            if kind != "TTL":
                 errors.append(f"rs1g02 vcc_grid.kind must be TTL (not CMOS), got {kind!r}")
             if dual_channel_continue(m):
                 errors.append("rs1g02 is 1Gxx -- dual_channel_continue off")
+            lim165 = lookup_vcc_grid_limits(m, 1.65) or {}
+            got_vih = lim165.get("VIH_min_V")
+            got_vil = lim165.get("VIL_max_V")
+            try:
+                if got_vih is None or abs(float(got_vih) - 0.65 * 1.65) > 1e-9:
+                    errors.append(
+                        f"rs1g02 VIH@1.65 must eval SoT 0.65*VCC={0.65 * 1.65}, got {got_vih}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(f"rs1g02 VIH@1.65 formula eval failed, got {got_vih!r}")
+            try:
+                if got_vil is None or abs(float(got_vil) - 0.35 * 1.65) > 1e-9:
+                    errors.append(
+                        f"rs1g02 VIL@1.65 must eval SoT 0.35*VCC={0.35 * 1.65}, got {got_vil}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(f"rs1g02 VIL@1.65 formula eval failed, got {got_vil!r}")
         elif part == "rs1g04":
             if "inv" not in runner or "inv" not in pc:
                 errors.append("rs1g04 runner/product_class must be gate_inv")
@@ -3502,11 +3574,20 @@ def _next_wave_ok() -> list[str]:
             except (TypeError, ValueError):
                 errors.append(f"rs1g86 VIL@1.65 formula eval failed, got {got_vil!r}")
             got_vih = lim165.get("VIH_min_V")
-            if got_vih is not None:
-                errors.append("rs1g86 VIH HOLD -- do not invent VIH_min on the VIL card lock")
+            try:
+                if got_vih is None or abs(float(got_vih) - 0.65 * 1.65) > 1e-9:
+                    errors.append(
+                        f"rs1g86 VIH@1.65 must eval SoT 0.65*VCC={0.65 * 1.65}, got {got_vih}"
+                    )
+            except (TypeError, ValueError):
+                errors.append(f"rs1g86 VIH@1.65 formula eval failed, got {got_vih!r}")
             if dual_channel_continue(m):
                 errors.append("rs1g86 is 1Gxx -- dual_channel_continue off")
         elif part in ("rs2g08", "rs2g32"):
+            if set(m.logic_inputs) != {"A", "B"}:
+                errors.append(
+                    f"{part} Path B logic_inputs must stay A,B (ICC 2^2; SoT 1A/1B is operator wire_map), got {m.logic_inputs}"
+                )
             if not dual_channel_continue(m):
                 errors.append(f"{part} must set recipe.dual_channel_continue CHA then CHB")
             if recipe_channels(m) != ["CHA", "CHB"]:
@@ -4280,9 +4361,11 @@ def _confirmed_sim_sweep_ok() -> list[str]:
             if part == "rs1g97" and "ioz" in ids:
                 errors.append("rs1g97 SIM: ioz must stay OFF")
             if part in _NEXT_WAVE_SKUS:
-                for banned in ("voh", "vol", "ioz", "delta_icc"):
-                    if banned in ids:
-                        errors.append(f"{part} SIM: {banned} must stay OFF (unsigned / ABSENT)")
+                if "ioz" in ids:
+                    errors.append(f"{part} SIM: invent IOZ enabled -> FAIL")
+                for need in ("voh", "vol", "delta_icc"):
+                    if need not in ids:
+                        errors.append(f"{part} SIM: {need} must run (SoT tables CONFIRMED)")
                 if part in _DUAL_CHA_CHB:
                     if not dual_channel_continue(m):
                         errors.append(f"{part} SIM: dual_channel_continue CHA then CHB required")

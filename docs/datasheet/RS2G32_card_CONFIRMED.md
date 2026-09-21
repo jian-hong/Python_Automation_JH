@@ -1,18 +1,21 @@
 # RS2G32_card_CONFIRMED -- JH DEMO DAY 2026-09-21
 
-SoT for Code YAML `ate/config/parts/rs2g32.yaml`. Reconstruct from grounded function rows (models/attachments missing). Do not invent.
+SoT for Code YAML `ate/config/parts/rs2g32.yaml`. Attached product_model CONFIRMED. Do not invent.
 
 ## CONFIRMED
 - product_class: dual_or2. runner: dual_or2.
 - recipe.dual_channel_continue: true. channels: [CHA, CHB]. Do not skip rewire.
-- oe: none. IOZ OFF. ICCT ABSENT.
+- Path B logic_inputs A,B (ICC 2^2). Operator 8-pin SoT: 1=1A CHA, 2=1B CHA, 3=2Y CHB, 4=GND, 5=2A CHB, 6=2B CHB, 7=1Y CHA, 8=VCC.
+- oe: none. IOZ OFF. ICCT name ABSENT (DeltaICC via delta_icc_uA.offset_v 0.6).
 - truth OR per channel: HH->H; LH->H; HL->H; LL->L.
-- isolation other=L track.
-- pin names A B GND Y VCC. AWG CH1=A CH2=B per channel. 8-pin numbers HOLD.
-- excel_plots.status UNCONFIRMED (enabled series vih/vil/icc/ii only).
+- isolation other=L track (Path B A/B).
+- vcc_grid PSU_MSO CMOS: 0.65/0.15 @1.65-1.95; 1.7/0.3; 2.2/0.4; 0.7/0.15.
+- VOH/VOL 6-load SoT. delta_icc_uA Full 500, vcc_min 3.0, offset_v 0.6.
+- campaign package VSSOP8 (SoT package MSOP8 -- do not merge SKUs).
+- enabled: input_threshold, icc, ii, voh, vol, delta_icc.
+- excel_plots.status CONFIRMED.
 
 ## UNCONFIRMED HOLD -- do not invent
-- vcc_grid bands (do not copy G08 CMOS)
-- VOH loads, VOL loads, delta_icc_uA numbers, pin numbers
-- enable voh/vol/delta_icc/ioz: OFF
+- stable_eps_A
+- ICCT name / OE / IOZ
 - extra rs2g*.yaml without a card: forbidden

@@ -6,7 +6,7 @@ Covers the 24 CONFIRMED Logic product_model SKUs (11 prior + 6 scale-wave
 + 7 GT-wave). Overlay one VCC so SIM stays fast. stable_eps_A stays
 null (NON_TIGHT). RS1G123 / RS1G74 are dropped/archive PARKED -- not in this
 mandatory set. HOLD stubs rs1gt125/rs1gt126 are process-only. Scale-wave
-unsigned VOH/VOL stay fail-closed (do not invent).
+signed VOH/VOL/delta_icc_uA run; ICCT name ABSENT (do not invent ICCT).
 Do not invent limits.
 """
 from __future__ import annotations
@@ -407,9 +407,11 @@ def check_logic_dc_sim() -> list[str]:
             if not m.has_oe() and "ioz" in en:
                 errors.append(f"{part}: oe none must not enable ioz")
             if part in _NEXT_WAVE_LOGIC:
-                for banned in ("voh", "vol", "ioz", "delta_icc"):
-                    if banned in en:
-                        errors.append(f"{part}: invent {banned} enabled -> FAIL")
+                if "ioz" in en:
+                    errors.append(f"{part}: invent IOZ enabled -> FAIL")
+                for need in ("voh", "vol", "delta_icc"):
+                    if need not in en:
+                        errors.append(f"{part}: enabled_tests missing {need} (SoT tables CONFIRMED)")
             if part in _GT_WAVE_LOGIC:
                 for banned in ("voh", "vol"):
                     if banned in en:
@@ -510,7 +512,7 @@ def part_sim_status() -> list[dict[str, Any]]:
                 if part == "rs1gt34":
                     extra += "VOL live NOT_RUN. "
                 if part in _NEXT_WAVE_LOGIC:
-                    extra += "unsigned VOH/VOL/ICCT HOLD. "
+                    extra += "signed VOH/VOL/DeltaICC; ICCT ABSENT. "
                 if part in _GT_WAVE_LOGIC:
                     extra += "GT-wave unsigned loads HOLD. "
                 if part in _DUAL_CHA_CHB:
