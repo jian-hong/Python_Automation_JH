@@ -1,0 +1,108 @@
+# RS1GT125 3-state buffer -- HOLD UNCONFIRMED stub (GT-wave 2026-09-21).
+# OE present. IOZ ABSENT -- do not invent IOZ. VOH/VOL UNSURE fail-closed. Process-only (not SIM 24).
+
+part: RS1GT125
+model: RS1GT125
+component: Logic
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+part_key: rs1gt125
+product_class: logic
+vcc: 5.0
+current_limit: 0.05
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+enabled_tests:
+  - tp
+  - supply_current
+  - input_threshold
+  - icc
+  - ii
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1GT125 HOLD)"
+    board_class: general
+    checklist:
+      - "RS1GT125 HOLD UNCONFIRMED. OE present. IOZ ABSENT -- do not invent IOZ."
+      - "VOH/VOL UNSURE fail-closed. Process-only -- not in SIM 24."
+    tests: [tp, supply_current, input_threshold, icc, ii]
+
+product_model:
+  part: RS1GT125
+  status: UNCONFIRMED
+  source_card: ""
+  confirm_note: "HOLD stub. OE present. IOZ ABSENT -- do not invent IOZ / do not copy G125 IOZ @3.6V. VOH/VOL UNSURE."
+  package: SC70-5
+  product_class: gate_buf
+  schmitt: false
+  oe:
+    pin: OE
+    active: low
+  output_pin: Y
+  output_type: three_state
+  logic_inputs:
+  - A
+  pins:
+  - {name: OE, role: oe, note: "OE present -- IOZ ABSENT do not invent"}
+  - {name: A, role: input}
+  - {name: GND, role: gnd}
+  - {name: Y, role: output}
+  - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    OE: {src: awg, ch: 2}
+  truth_table:
+    status: UNCONFIRMED
+    kind: combinational
+    note: HOLD. OE L passes A; OE H -> Y=Z. Not Datasheet-signed. Do not invent IOZ numbers.
+    rows:
+    - {OE: L, A: H, Y: H}
+    - {OE: L, A: L, Y: L}
+    - {OE: H, A: X, Y: Z}
+  isolation:
+    status: UNCONFIRMED
+    tests:
+      A:
+      - {sweep_pin: A, fix: {OE: L}, y_expect: track}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: AWG
+    note: Numbers HOLD. Do not copy G125 VIL 0.3*VCC.
+    ranges: []
+    fixed_points: []
+  pass_mode:
+    icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: UNSURE fail-closed -- do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: UNSURE fail-closed -- do not invent loads
+    IOZ_uA:
+      status: ABSENT
+      note: OE present but IOZ ABSENT -- do not invent IOZ / do not enable ioz
+    ICCT_uA:
+      status: ABSENT
+      note: do not invent ICCT
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: gate_buf
+    dual_channel_continue: false
+  gaps:
+  - HOLD UNCONFIRMED stub -- process-only, not SIM 24
+  - OE present; IOZ ABSENT -- do not invent IOZ
+  - VOH/VOL UNSURE fail-closed
+  - do not copy G125 IOZ @3.6V / VIL 0.3*VCC

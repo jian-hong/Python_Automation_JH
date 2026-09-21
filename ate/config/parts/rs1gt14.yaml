@@ -1,0 +1,126 @@
+# RS1GT14 Schmitt inverter -- GT-wave 2026-09-21. Function CONFIRMED.
+# VT+/- ONLY -- do not invent VIH/VIL. VT numbers HOLD. Do not copy G14 bands.
+
+part: RS1GT14
+model: RS1GT14
+component: Logic
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+part_key: rs1gt14
+product_class: logic
+vcc: 5.0
+current_limit: 0.05
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+enabled_tests:
+  - tp
+  - supply_current
+  - vth
+  - icc
+  - ii
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1GT14 Schmitt INV)"
+    board_class: general
+    checklist:
+      - "RS1GT14 Schmitt inverter. CONFIRMED function 2026-09-21. Tick vth (VT+/-). Do not invent VIH/VIL."
+      - "NC is not OE. Do not tick IOZ. Do not copy G14 VT numbers. Do not tick voh/vol until CONFIRMED loads."
+    tests: [tp, supply_current, vth, icc, ii]
+
+product_model:
+  part: RS1GT14
+  status: CONFIRMED
+  source_card: RS1GT14_card_CONFIRMED.md
+  confirm_note: "GT-wave 2026-09-21. Schmitt INV function CONFIRMED. VT+/- kind lock only -- do not invent VIH/VIL or copy G14 VT numbers. excel_plots UNCONFIRMED."
+  package: SC70-5
+  product_class: gate_inv
+  schmitt: true
+  oe: none
+  output_pin: Y
+  output_type: push_pull
+  logic_inputs:
+  - A
+  pins:
+  - {name: NC, role: nc, note: "NC not OE -- do not invent IOZ"}
+  - {name: A, role: input}
+  - {name: GND, role: gnd}
+  - {name: Y, role: output}
+  - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+  truth_table:
+    status: CONFIRMED
+    kind: combinational
+    note: Schmitt Y=NOT A. Function CONFIRMED (GT-wave). VT+/- only.
+    rows:
+    - {A: H, Y: L}
+    - {A: L, Y: H}
+  isolation:
+    status: CONFIRMED
+    tests:
+      A:
+      - {sweep_pin: A, fix: {}, y_expect: invert}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: AWG
+    kind: schmitt_VT
+    note: Schmitt VT+/- only. Do not invent VIH/VIL keys. Do not copy G14 VT+/- numbers.
+    ranges: []
+    fixed_points: []
+  pass_mode:
+    vth_vt_plus: range
+    vth_vt_minus: range
+    hysteresis: range
+    icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: do not invent loads
+    ICCT_uA:
+      status: ABSENT
+      note: do not invent ICCT / do not copy G14 offset_v 0.6
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD. ICCT ABSENT is not a map
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: gate_inv
+    dual_channel_continue: false
+  gaps:
+  - CONFIRMED Schmitt INV; VT+/- kind only; do not invent VIH/VIL; VT numbers HOLD
+  - NC not OE; IOZ OFF; ICCT ABSENT -- do not copy G14 0.6
+  - excel_plots UNCONFIRMED (vtplus/vtminus/dvt/icc/ii)
+  - stable_eps_A null
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    csv: sessions/csv/
+    report_pdf: report.pdf
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
+  workbook_policy:
+    golden_auto: one_per_version_overwrite
+    auto: one_per_version_overwrite
+    ultimate_manual: never_auto_write
+    pretty: never_auto_write
+  excel_plots:
+    status: UNCONFIRMED
+    series:
+      - vtplus_vs_vcc
+      - vtminus_vs_vcc
+      - dvt_vs_vcc
+      - icc_vs_vcc
+      - ii_vs_vcc

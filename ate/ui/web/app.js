@@ -562,18 +562,22 @@ function benchValues() {
   if (activeFamily !== "opamp") {
     const out = {
       vcc: condNum("vcc", d.vcc),
-      freq_hz: d.freq_hz,
-      amp_vpp: d.amp_vpp,
       n_repeats: d.n_repeats,
       ...extra,
     };
-    const vccb = extra.vccb != null ? extra.vccb : condNum("vccb", d.vccb);
-    if (vccb != null && Number.isFinite(Number(vccb))) out.vccb = Number(vccb);
-    if (isManualMode() && $("freq")) {
-      out.freq_hz = Number($("freq").value);
-      out.amp_vpp = Number($("amp").value);
+    if (logicStimulus() !== "PSU_MSO") {
+      out.freq_hz = d.freq_hz;
+      out.amp_vpp = d.amp_vpp;
+      if (isManualMode() && $("freq")) {
+        out.freq_hz = Number($("freq").value);
+        out.amp_vpp = Number($("amp").value);
+        out.n_repeats = Number($("repeats").value);
+      }
+    } else if (isManualMode() && $("repeats")) {
       out.n_repeats = Number($("repeats").value);
     }
+    const vccb = extra.vccb != null ? extra.vccb : condNum("vccb", d.vccb);
+    if (vccb != null && Number.isFinite(Number(vccb))) out.vccb = Number(vccb);
     return out;
   }
   if (isManualMode()) {
@@ -621,7 +625,7 @@ function params() {
 }
 
 function selectedTests() {
-  return [...document.querySelectorAll(".test-item input:checked")].map((i) => i.value);
+  return [...document.querySelectorAll("#test-list .test-item input[type=checkbox]:checked")].map((i) => i.value);
 }
 
 function mergeTestDefaults(ids) {
@@ -840,10 +844,14 @@ async function loadParamDefaults() {
     }
     renderConditions();
     renderDutPicks();
+    renderLogicDc();
     applyTestDefaults(false);
+    await loadLogicDcPanel();
   } catch (_) {
     paramCatalog = { tests: {}, gain_profiles: {}, psu_golden: { current_limit_a: 0.1 }, gbw_steps: [], gbw_run_labels: {}, controls: [], sample_size: 4 };
     renderConditions();
+    renderLogicDc();
+    try { await loadLogicDcPanel(); } catch (_) { /* ignore */ }
   }
 }
 
@@ -881,6 +889,247 @@ function renderConditions() {
   }).join("");
 }
 
+function prettyJson(obj) {
+  try {
+    return JSON.stringify(obj == null ? {} : obj, null, 2);
+  } catch (_) {
+    return "{}";
+  }
+}
+
+async function loadLogicDcPanel() {
+  const panel = $("panel-logic-dc");
+  if (!panel) return;
+  const part = (dbContext && dbContext.part_key) || "";
+  const logicFam = activeFamily === "logic" || activeFamily === "level";
+  if (!logicFam || !part) {
+    panel.classList.add("hidden");
+    return;
+  }
+  try {
+    const data = await rpc("get_product_model", { part });
+    const present = !!(data && data.present);
+    panel.classList.toggle("hidden", !present);
+    if (!present) {
+      if ($("logic-dc-status")) {
+        $("logic-dc-status").textContent = "No Path B product_model for this part.";
+      }
+      return;
+    }
+    const signed = !!data.greenable;
+    const plotsSt = (data.excel_plots && data.excel_plots.status) || "UNCONFIRMED";
+    const gridSt = (data.vcc_grid && data.vcc_grid.status) || "UNCONFIRMED";
+    if ($("logic-dc-status")) {
+      $("logic-dc-status").textContent =
+        `${data.part || part}  status=${data.status || "UNCONFIRMED"}  ` +
+        `truth_table.status=${data.truth_table_status || "UNCONFIRMED"}  ` +
+        `isolation.status=${data.isolation_status || ""}  ` +
+        `vcc_grid.status=${gridSt}  ` +
+        `excel_plots.status=${plotsSt}  ` +
+        (signed ? "Datasheet-signed" : "not Datasheet-signed; not greenable");
+    }
+    const gaps = data.gaps || [];
+    if ($("logic-dc-gaps")) {
+      $("logic-dc-gaps").textContent = gaps.length ? `Gaps: ${gaps.join(" | ")}` : "Gaps: none listed";
+    }
+    if ($("logic-dc-vcc-list")) {
+      $("logic-dc-vcc-list").value = (data.vcc_list || []).join(", ");
+    }
+    if ($("logic-dc-pass-mode")) {
+      $("logic-dc-pass-mode").value = prettyJson(data.pass_mode || data.limit_mode || {});
+    }
+    if ($("logic-dc-truth")) {
+      $("logic-dc-truth").value = prettyJson(data.truth_table || {});
+    }
+    if ($("logic-dc-isolation")) {
+      $("logic-dc-isolation").value = prettyJson(data.isolation || {});
+    }
+    if ($("logic-dc-hint")) $("logic-dc-hint").textContent = "";
+  } catch (e) {
+    panel.classList.add("hidden");
+    if ($("logic-dc-hint")) $("logic-dc-hint").textContent = String((e && e.message) || e);
+  }
+}
+
+function parseCardFieldValue(field, raw, deleted) {
+  if (deleted) return { deleted: true, value: null };
+  const t = field.type || "text";
+  const s = String(raw == null ? "" : raw).trim();
+  if (t === "bool") {
+    if (!s) return { deleted: true, value: null };
+    const low = s.toLowerCase();
+    return { deleted: false, value: low === "true" || low === "1" || low === "yes" };
+  }
+  if (t === "number" || t === "number_or_null") {
+    if (!s || lowNull(s)) return { deleted: t === "number_or_null", value: null };
+    const n = Number(s);
+    if (!Number.isFinite(n)) throw new Error(`${field.key} must be a number (amps/volts as written; do not invent)`);
+    return { deleted: false, value: n };
+  }
+  if (t === "list_csv") {
+    if (!s || lowNull(s)) return { deleted: true, value: null };
+    const nums = s.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n));
+    return { deleted: false, value: nums };
+  }
+  if (t === "json") {
+    if (!s || lowNull(s)) return { deleted: true, value: null };
+    try {
+      return { deleted: false, value: JSON.parse(s) };
+    } catch (e) {
+      if (s === "none" || s === "true" || s === "false") {
+        return { deleted: false, value: s === "none" ? "none" : s === "true" };
+      }
+      throw new Error(`${field.key} JSON: ${(e && e.message) || e}`);
+    }
+  }
+  if (!s || lowNull(s)) return { deleted: true, value: null };
+  return { deleted: false, value: s };
+}
+
+function lowNull(s) {
+  const low = String(s || "").trim().toLowerCase();
+  return low === "null" || low === "none" || low === "~";
+}
+
+function formatCardValue(field) {
+  const v = field.value;
+  const t = field.type || "text";
+  if (v === null || v === undefined) return "";
+  if (t === "json") {
+    try { return JSON.stringify(v, null, 2); } catch (_) { return ""; }
+  }
+  if (t === "list_csv" && Array.isArray(v)) return v.join(", ");
+  if (t === "bool") return v ? "true" : "false";
+  return String(v);
+}
+
+function renderCardFields(fields) {
+  const rows = fields || [];
+  let html = "<h3 class=\"subhead\">Card fields (OOP / OCR)</h3>";
+  html += "<p class=\"hint\">Each field is assignable, editable, or deletable. Save product_model writes matching <code>product_model</code> keys from <code>docs/datasheet/card_fields.schema.yaml</code>. PaddleOCR maps onto these keys. Do not install Baidu unless asked. Cannot promote Datasheet-signed. Do not invent loads or a uA epsilon.</p>";
+  if (!rows.length) {
+    html += "<p class=\"hint\">card_fields missing -- worker must load card_fields.schema.yaml.</p>";
+    return html;
+  }
+  html += "<table class=\"logic-dc-table\" id=\"logic-dc-card-fields\"><thead><tr><th>Field</th><th>OOP</th><th>Value</th><th></th></tr></thead><tbody>";
+  rows.forEach((f) => {
+    const key = f.key || "";
+    const oop = f.oop || "";
+    const editable = f.editable !== false;
+    const deletable = f.deletable !== false;
+    const t = f.type || "text";
+    const val = formatCardValue(f);
+    const disabled = editable ? "" : "disabled";
+    const isJson = t === "json";
+    const input = isJson
+      ? `<textarea class="mono-edit" data-card-field="${key}" data-card-type="${t}" rows="3" ${disabled}>${val}</textarea>`
+      : `<input data-card-field="${key}" data-card-type="${t}" type="text" value="${String(val).replace(/"/g, "&quot;")}" ${disabled} />`;
+    const del = (deletable && editable)
+      ? `<button type="button" class="btn ghost logic-dc-del" data-delete-field="${key}">Delete</button>`
+      : "";
+    html += `<tr data-card-row="${key}"><td><code>${key}</code></td><td>${oop}</td><td>${input}</td><td>${del}</td></tr>`;
+  });
+  html += "</tbody></table>";
+  return html;
+}
+
+function wireCardFieldDeletes() {
+  document.querySelectorAll("[data-delete-field]").forEach((btn) => {
+    btn.onclick = () => {
+      const key = btn.getAttribute("data-delete-field");
+      const row = document.querySelector(`[data-card-row="${key}"]`);
+      if (!row) return;
+      const el = row.querySelector("[data-card-field]");
+      if (el) {
+        el.value = "";
+        el.setAttribute("data-deleted", "1");
+      }
+      row.setAttribute("data-deleted", "1");
+    };
+  });
+  document.querySelectorAll("[data-card-field]").forEach((el) => {
+    el.addEventListener("input", () => {
+      el.removeAttribute("data-deleted");
+      const row = el.closest("[data-card-row]");
+      if (row) row.removeAttribute("data-deleted");
+    });
+  });
+}
+
+function parseJsonField(el, label) {
+  const raw = (el && el.value) || "";
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    throw new Error(`${label} JSON: ${(e && e.message) || e}`);
+  }
+}
+
+async function saveLogicDcPanel() {
+  const part = (dbContext && dbContext.part_key) || "";
+  if (!part) throw new Error("Apply a campaign part first");
+  const fields = (paramCatalog.logic_dc && paramCatalog.logic_dc.card_fields) || [];
+  const byKey = {};
+  fields.forEach((f) => { if (f && f.key) byKey[f.key] = f; });
+  const patch = {};
+  const deleted_fields = [];
+  const seen = new Set();
+  document.querySelectorAll("[data-card-field]").forEach((el) => {
+    const key = el.getAttribute("data-card-field");
+    if (!key) return;
+    if (el.closest("#logic-dc-card-fields")) return;
+    seen.add(key);
+    const spec = byKey[key] || { key, type: el.getAttribute("data-card-type") || "text", deletable: true };
+    const deleted = el.getAttribute("data-deleted") === "1";
+    const parsed = parseCardFieldValue(spec, el.value, deleted);
+    if (parsed.deleted) {
+      patch[key] = null;
+      deleted_fields.push(key);
+    } else {
+      patch[key] = parsed.value;
+    }
+  });
+  document.querySelectorAll("#logic-dc-card-fields [data-card-field]").forEach((el) => {
+    const key = el.getAttribute("data-card-field");
+    if (!key) return;
+    seen.add(key);
+    const spec = byKey[key] || { key, type: el.getAttribute("data-card-type") || "text", deletable: true };
+    const row = el.closest("[data-card-row]");
+    const deleted = el.getAttribute("data-deleted") === "1" || (row && row.getAttribute("data-deleted") === "1");
+    const parsed = parseCardFieldValue(spec, el.value, deleted);
+    if (parsed.deleted) {
+      patch[key] = null;
+      if (!deleted_fields.includes(key)) deleted_fields.push(key);
+    } else {
+      patch[key] = parsed.value;
+      const ix = deleted_fields.indexOf(key);
+      if (ix >= 0) deleted_fields.splice(ix, 1);
+    }
+  });
+  if ($("logic-dc-vcc-list") && !seen.has("vcc_list")) {
+    const vccRaw = ($("logic-dc-vcc-list").value || "").trim();
+    patch.vcc_list = vccRaw
+      ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : [];
+  }
+  if ($("logic-dc-pass-mode") && !seen.has("pass_mode")) {
+    patch.pass_mode = parseJsonField($("logic-dc-pass-mode"), "pass_mode");
+  }
+  if ($("logic-dc-truth") && !seen.has("truth_table")) {
+    patch.truth_table = parseJsonField($("logic-dc-truth"), "truth_table");
+  }
+  if ($("logic-dc-isolation") && !seen.has("isolation")) {
+    patch.isolation = parseJsonField($("logic-dc-isolation"), "isolation");
+  }
+  if (deleted_fields.length) patch.deleted_fields = deleted_fields;
+  const res = await rpc("save_product_model", { part, patch });
+  await loadLogicDcPanel();
+  await loadParamDefaults();
+  if ($("logic-dc-hint")) {
+    $("logic-dc-hint").textContent = `Saved ${res.part || part} via card_fields.schema.yaml (status stays unless Datasheet-signed in YAML).`;
+  }
+}
+
 function renderDutPicks() {
   const box = $("dut-picks");
   if (!box) return;
@@ -893,6 +1142,628 @@ function renderDutPicks() {
     html += `<label class="check"><input type="checkbox" class="dut-cb" value="${i}" ${checked} /> ${i}</label>`;
   }
   box.innerHTML = html;
+}
+
+function wirePassModeSync() {
+  document.querySelectorAll(".logic-dc-mode").forEach((sel) => {
+    sel.onchange = () => {
+      const id = sel.getAttribute("data-id");
+      if (!id) return;
+      document.querySelectorAll(`.logic-dc-mode[data-id="${id}"]`).forEach((other) => {
+        if (other !== sel) other.value = sel.value;
+      });
+    };
+  });
+}
+
+function passModeSelect(sid, cur, extraClass) {
+  const modes = [
+    ["", "infer"],
+    ["range", "range"],
+    ["min-only", "min-only"],
+    ["max-only", "max-only"],
+    ["fail-open", "fail-open"],
+    ["unspec", "unspec"],
+  ];
+  const c = String(cur || "").replace(/_/g, "-");
+  const opts = modes.map(([v, lab]) => `<option value="${v}" ${v === c ? "selected" : ""}>${lab}</option>`).join("");
+  const cls = extraClass ? `logic-dc-mode ${extraClass}` : "logic-dc-mode";
+  return `<select class="${cls}" data-id="${sid}">${opts}</select>`;
+}
+
+function numOrNull(raw) {
+  const t = String(raw == null ? "" : raw).trim();
+  if (!t || t.toLowerCase() === "null" || t.toLowerCase() === "none") return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+function seedVccGrid(dc) {
+  const g = (dc && (dc.vcc_plan || dc.vcc_grid)) || {};
+  const schmitt = !!(dc && dc.schmitt) || String(g.kind || "") === "schmitt_VT";
+  const fixed = Array.isArray(g.fixed_points) ? g.fixed_points.map((p) => ({ ...p })) : [];
+  const ranges = Array.isArray(g.ranges) ? g.ranges.map((r) => ({ ...r })) : [];
+  if (!fixed.length && !ranges.length) {
+    (dc.vcc_list || dc.vcc_sweep_list || []).forEach((v) => {
+      fixed.push(schmitt
+        ? { vcc: v, VT_plus: ["", ""], VT_minus: ["", ""] }
+        : { vcc: v, VIH_min_V: "", VIL_max_V: "" });
+    });
+  }
+  const pinDrive = (dc && dc.pin_drive) || {};
+  const hasAwg = Object.values(pinDrive).some((d) => d && String(d.src || "").toLowerCase() === "awg");
+  const stim = g.stimulus || dc.stimulus || (hasAwg ? "AWG" : "PSU_MSO");
+  const pm = schmitt
+    ? { "VT+": "range", "VT-": "range", HYST: "range", ...((g.pass_mode) || {}) }
+    : { VIH: "min_only", VIL: "max_only", ...((g.pass_mode) || {}) };
+  return {
+    stimulus: stimToken(stim) || (hasAwg ? "AWG" : "PSU_MSO"),
+    pass_mode: pm,
+    kind: g.kind || (schmitt ? "schmitt_VT" : ""),
+    fixed_points: fixed,
+    ranges,
+    status: g.status || "UNCONFIRMED",
+  };
+}
+
+function isSchmittGrid(dc) {
+  const g = (dc && (dc.vcc_plan || dc.vcc_grid)) || {};
+  return !!(dc && dc.schmitt) || String(g.kind || "") === "schmitt_VT";
+}
+
+function bandPassModeSelect(cur, cls) {
+  return passModeSelect("vcc-band", cur, cls || "vcc-band-mode").replace('data-id="vcc-band"', "");
+}
+
+function stimToken(raw) {
+  const s = String(raw || "").trim().toUpperCase().replace(/[-\/\s]/g, "_");
+  if (s === "PSU_MSO" || s === "PSUMSO") return "PSU_MSO";
+  if (s === "AWG") return "AWG";
+  return "";
+}
+
+function mergeVccGridJs(grid) {
+  const owned = {};
+  ((grid && grid.ranges) || []).forEach((band) => {
+    const start = Number(band.start);
+    const stop = Number(band.stop);
+    const step = Number(band.step) > 0 ? Number(band.step) : 0.1;
+    if (!Number.isFinite(start) || !Number.isFinite(stop) || step <= 0 || stop + 1e-9 < start) return;
+    const n = Math.round((stop - start) / step);
+    for (let i = 0; i <= n; i += 1) {
+      const v = Math.round((start + i * step) * 1e6) / 1e6;
+      if (v > stop + 1e-8) break;
+      owned[String(v)] = v;
+    }
+  });
+  ((grid && grid.fixed_points) || []).forEach((pt) => {
+    const v = Number(pt.vcc);
+    if (!Number.isFinite(v)) return;
+    const key = String(Math.round(v * 1e6) / 1e6);
+    owned[key] = Number(key);
+  });
+  return Object.keys(owned).map((k) => owned[k]).sort((a, b) => a - b);
+}
+
+function logicStimulus() {
+  const el = document.querySelector('input[name="logic-dc-stimulus"]:checked');
+  if (el && el.value) return stimToken(el.value) || el.value;
+  const dc = paramCatalog.logic_dc || {};
+  return stimToken((dc.vcc_grid && dc.vcc_grid.stimulus) || dc.stimulus) || "AWG";
+}
+
+function applyStimulusHide() {
+  const hide = logicStimulus() === "PSU_MSO";
+  ["freq-label", "amp-label"].forEach((id) => {
+    if ($(id)) $(id).classList.toggle("hidden", hide);
+  });
+  const awgNote = $("logic-dc-awg-note");
+  if (awgNote) awgNote.classList.toggle("hidden", hide);
+}
+
+function collectVccGridFromUi() {
+  const stimEl = document.querySelector('input[name="logic-dc-stimulus"]:checked');
+  const stimulus = stimToken(stimEl && stimEl.value) || "AWG";
+  const dc = paramCatalog.logic_dc || {};
+  const prev = (dc.vcc_grid || dc.vcc_plan) || {};
+  const schmitt = isSchmittGrid(dc);
+  const fixed = [];
+  document.querySelectorAll("#logic-dc-fixed-points .vcc-chip").forEach((chip) => {
+    const vcc = numOrNull(chip.querySelector(".vcc-fixed-vcc") && chip.querySelector(".vcc-fixed-vcc").value);
+    if (vcc == null) return;
+    const item = { vcc };
+    const modeEl = chip.querySelector(".vcc-band-mode");
+    if (modeEl && modeEl.value) item.pass_mode = String(modeEl.value).replace(/-/g, "_");
+    if (schmitt) {
+      const plusLo = numOrNull(chip.querySelector(".vcc-fixed-vtplus-lo") && chip.querySelector(".vcc-fixed-vtplus-lo").value);
+      const plusHi = numOrNull(chip.querySelector(".vcc-fixed-vtplus-hi") && chip.querySelector(".vcc-fixed-vtplus-hi").value);
+      const minusLo = numOrNull(chip.querySelector(".vcc-fixed-vtminus-lo") && chip.querySelector(".vcc-fixed-vtminus-lo").value);
+      const minusHi = numOrNull(chip.querySelector(".vcc-fixed-vtminus-hi") && chip.querySelector(".vcc-fixed-vtminus-hi").value);
+      if (plusLo != null || plusHi != null) item.VT_plus = [plusLo, plusHi];
+      if (minusLo != null || minusHi != null) item.VT_minus = [minusLo, minusHi];
+    } else {
+      item.VIH_min_V = numOrNull(chip.querySelector(".vcc-fixed-vih") && chip.querySelector(".vcc-fixed-vih").value);
+      item.VIL_max_V = numOrNull(chip.querySelector(".vcc-fixed-vil") && chip.querySelector(".vcc-fixed-vil").value);
+    }
+    fixed.push(item);
+  });
+  const ranges = [];
+  document.querySelectorAll("#logic-dc-ranges .vcc-range-row").forEach((row) => {
+    const start = numOrNull(row.querySelector(".vcc-range-start") && row.querySelector(".vcc-range-start").value);
+    const stop = numOrNull(row.querySelector(".vcc-range-stop") && row.querySelector(".vcc-range-stop").value);
+    if (start == null || stop == null) return;
+    const stepRaw = numOrNull(row.querySelector(".vcc-range-step") && row.querySelector(".vcc-range-step").value);
+    const item = {
+      start,
+      stop,
+      step: stepRaw == null ? 0.1 : stepRaw,
+    };
+    const modeEl = row.querySelector(".vcc-band-mode");
+    if (modeEl && modeEl.value) item.pass_mode = String(modeEl.value).replace(/-/g, "_");
+    if (schmitt) {
+      item.VT_plus = [
+        numOrNull(row.querySelector(".vcc-range-vtplus-lo") && row.querySelector(".vcc-range-vtplus-lo").value),
+        numOrNull(row.querySelector(".vcc-range-vtplus-hi") && row.querySelector(".vcc-range-vtplus-hi").value),
+      ];
+      item.VT_minus = [
+        numOrNull(row.querySelector(".vcc-range-vtminus-lo") && row.querySelector(".vcc-range-vtminus-lo").value),
+        numOrNull(row.querySelector(".vcc-range-vtminus-hi") && row.querySelector(".vcc-range-vtminus-hi").value),
+      ];
+    } else {
+      item.VIH_min_V = numOrNull(row.querySelector(".vcc-range-vih") && row.querySelector(".vcc-range-vih").value);
+      item.VIL_max_V = numOrNull(row.querySelector(".vcc-range-vil") && row.querySelector(".vcc-range-vil").value);
+    }
+    const label = String((row.querySelector(".vcc-range-label") && row.querySelector(".vcc-range-label").value) || "").trim();
+    if (label) item.label = label;
+    ranges.push(item);
+  });
+  const pm = {};
+  document.querySelectorAll("#logic-dc-grid-pass-mode .logic-dc-mode").forEach((sel) => {
+    const id = sel.getAttribute("data-id");
+    if (id && sel.value) pm[id] = String(sel.value).replace(/-/g, "_");
+  });
+  const out = {
+    stimulus,
+    pass_mode: Object.keys(pm).length
+      ? pm
+      : (schmitt ? { "VT+": "range", "VT-": "range" } : { VIH: "min_only", VIL: "max_only" }),
+    fixed_points: fixed,
+    ranges,
+    status: prev.status || "UNCONFIRMED",
+  };
+  if (schmitt) out.kind = "schmitt_VT";
+  const kindEl = $("logic-dc-grid-kind");
+  if (kindEl && kindEl.value) out.kind = kindEl.value;
+  return out;
+}
+
+function refreshVccPreview() {
+  const preview = $("logic-dc-vcc-preview");
+  const vccInput = $("logic-dc-vcc");
+  const merged = mergeVccGridJs(collectVccGridFromUi());
+  const txt = merged.length ? merged.join(", ") : "--";
+  if (preview) preview.textContent = `Preview merged vcc_list: ${txt}`;
+  if (vccInput) vccInput.value = merged.join(", ");
+}
+
+function pairVal(arr, idx) {
+  if (!Array.isArray(arr) || arr[idx] == null || arr[idx] === "") return "";
+  return arr[idx];
+}
+
+function fixedChipHtml(pt, schmitt) {
+  const v = pt && pt.vcc != null ? pt.vcc : "";
+  const mode = (pt && pt.pass_mode) || (schmitt ? "range" : "min-only");
+  const modeHtml = `<label>pass_mode ${bandPassModeSelect(mode, "vcc-band-mode")}</label>`;
+  if (schmitt) {
+    const plus = (pt && (pt.VT_plus || pt["VT+"])) || [];
+    const minus = (pt && (pt.VT_minus || pt["VT-"])) || [];
+    return `<div class="vcc-chip">
+    <label>VCC <input class="vcc-fixed-vcc" type="number" step="0.01" value="${v}" /></label>
+    <label>VT+ min <input class="vcc-fixed-vtplus-lo" type="number" step="0.01" value="${pairVal(plus, 0)}" /></label>
+    <label>VT+ max <input class="vcc-fixed-vtplus-hi" type="number" step="0.01" value="${pairVal(plus, 1)}" /></label>
+    <label>VT- min <input class="vcc-fixed-vtminus-lo" type="number" step="0.01" value="${pairVal(minus, 0)}" /></label>
+    <label>VT- max <input class="vcc-fixed-vtminus-hi" type="number" step="0.01" value="${pairVal(minus, 1)}" /></label>
+    ${modeHtml}
+    <button type="button" class="btn ghost vcc-remove-fixed">remove</button>
+  </div>`;
+  }
+  const vih = pt && pt.VIH_min_V != null && pt.VIH_min_V !== "" ? pt.VIH_min_V : "";
+  const vil = pt && pt.VIL_max_V != null && pt.VIL_max_V !== "" ? pt.VIL_max_V : "";
+  return `<div class="vcc-chip">
+    <label>VCC <input class="vcc-fixed-vcc" type="number" step="0.01" value="${v}" /></label>
+    <label>VIH min <input class="vcc-fixed-vih" type="number" step="0.01" value="${vih}" /></label>
+    <label>VIL max <input class="vcc-fixed-vil" type="number" step="0.01" value="${vil}" /></label>
+    ${modeHtml}
+    <button type="button" class="btn ghost vcc-remove-fixed">remove</button>
+  </div>`;
+}
+
+function rangeRowHtml(band, schmitt) {
+  const b = band || {};
+  const step = b.step != null && b.step !== "" ? b.step : 0.1;
+  const lab = b.label || "";
+  const mode = b.pass_mode || (schmitt ? "range" : "min-only");
+  const modeHtml = `<label>pass_mode ${bandPassModeSelect(mode, "vcc-band-mode")}</label>`;
+  if (schmitt) {
+    const plus = b.VT_plus || b["VT+"] || [];
+    const minus = b.VT_minus || b["VT-"] || [];
+    return `<div class="vcc-range-row">
+    <label>start <input class="vcc-range-start" type="number" step="0.01" value="${b.start != null ? b.start : ""}" /></label>
+    <label>stop <input class="vcc-range-stop" type="number" step="0.01" value="${b.stop != null ? b.stop : ""}" /></label>
+    <label>step <input class="vcc-range-step" type="number" step="0.01" value="${step}" /></label>
+    <label>VT+ min <input class="vcc-range-vtplus-lo" type="number" step="0.01" value="${pairVal(plus, 0)}" /></label>
+    <label>VT+ max <input class="vcc-range-vtplus-hi" type="number" step="0.01" value="${pairVal(plus, 1)}" /></label>
+    <label>VT- min <input class="vcc-range-vtminus-lo" type="number" step="0.01" value="${pairVal(minus, 0)}" /></label>
+    <label>VT- max <input class="vcc-range-vtminus-hi" type="number" step="0.01" value="${pairVal(minus, 1)}" /></label>
+    ${modeHtml}
+    <label>label <input class="vcc-range-label" type="text" value="${lab}" /></label>
+    <button type="button" class="btn ghost vcc-remove-range">remove</button>
+  </div>`;
+  }
+  const vih = b.VIH_min_V != null && b.VIH_min_V !== "" ? b.VIH_min_V : "";
+  const vil = b.VIL_max_V != null && b.VIL_max_V !== "" ? b.VIL_max_V : "";
+  return `<div class="vcc-range-row">
+    <label>start <input class="vcc-range-start" type="number" step="0.01" value="${b.start != null ? b.start : ""}" /></label>
+    <label>stop <input class="vcc-range-stop" type="number" step="0.01" value="${b.stop != null ? b.stop : ""}" /></label>
+    <label>step <input class="vcc-range-step" type="number" step="0.01" value="${step}" /></label>
+    <label>VIH min <input class="vcc-range-vih" type="number" step="0.01" value="${vih}" /></label>
+    <label>VIL max <input class="vcc-range-vil" type="number" step="0.01" value="${vil}" /></label>
+    ${modeHtml}
+    <label>label <input class="vcc-range-label" type="text" value="${lab}" /></label>
+    <button type="button" class="btn ghost vcc-remove-range">remove</button>
+  </div>`;
+}
+
+function pinWiringHtml(dc) {
+  const labels = dc.pin_wiring_labels || [];
+  const pins = dc.pins || [];
+  const drive = dc.pin_drive || {};
+  let items = labels.slice();
+  if (!items.length) {
+    items = pins.map((p) => {
+      const d = drive[p.name];
+      const extra = d && d.src ? ` <- ${String(d.src).toUpperCase()} CH${d.ch}` : "";
+      return `${p.name} pin ${p.number != null ? p.number : "?"} ${p.role || ""}${extra}`;
+    });
+    if (dc.oe && dc.oe.pin) items.push(`OE ${dc.oe.pin} active-${dc.oe.active}`);
+    if (dc.is_open_drain) items.push("open-drain: VOH N/A skip");
+    if (dc.is_sequential) items.push("sequential: gate 2^n / ICC / dICC stay disabled");
+    items.push(dc.wire_map && Object.keys(dc.wire_map).length
+      ? "wire_map present (CONFIRMED pins + pin_drive only)"
+      : "wire_map empty -- labels from pins + pin_drive; do not invent nets");
+  }
+  return (
+    "<h3 class=\"subhead\">Pin / wiring map</h3>" +
+    "<p class=\"hint\">From product_model pins + pin_drive. Human Continue after verify. Never invent nets. Missing pin numbers stay ? (HOLD).</p>" +
+    `<ul class="hint" id="logic-dc-wire-labels">${items.map((x) => `<li>${escapeAttr(x)}</li>`).join("")}</ul>`
+  );
+}
+
+function familyClassToken(dc) {
+  const rec = (dc && dc.recipe) || {};
+  return String((dc && dc.product_class) || rec.runner || rec.product_class || "")
+    .toLowerCase()
+    .replace(/-/g, "_");
+}
+
+function familyScaleHint(dc) {
+  const cls = familyClassToken(dc);
+  const nIn = ((dc && dc.logic_inputs) || []).length;
+  const oe = dc && dc.oe;
+  const seq = !!(dc && dc.is_sequential);
+  const corners = seq ? 0 : (1 << nIn);
+  const bits = [
+    `N-input + OE scale: n=${nIn} ICC 2^n=${corners}${oe ? " + OE" : " (OE none)"}`,
+  ];
+  if (cls.indexOf("nand") >= 0) {
+    bits.push("LIVE NAND: other=H invert. Do not copy G08 CMOS.");
+  } else if (cls.indexOf("nor") >= 0) {
+    bits.push("LIVE NOR: other=L invert. TTL not G08 CMOS.");
+  } else if (cls.indexOf("xor") >= 0) {
+    bits.push("LIVE XOR: track+invert. G86 VIL 0.20*VCC; VIH 0.65*VCC signed.");
+  } else if (cls.indexOf("inv") >= 0) {
+    bits.push("LIVE INV: n=1 Y=NOT A. NC is not OE.");
+  } else if (cls.indexOf("dual_and") >= 0 || (cls.indexOf("dual") >= 0 && cls.indexOf("and") >= 0)) {
+    bits.push("LIVE dual AND: CHA then CHB. Do not skip rewire.");
+  } else if (cls.indexOf("dual_or") >= 0 || (cls.indexOf("dual") >= 0 && cls.indexOf("or") >= 0)) {
+    bits.push("LIVE dual OR: CHA then CHB. Do not skip rewire.");
+  }
+  if (dc && dc.dual_channel_continue) {
+    bits.push("2Gxx dual-channel Continue CHA then CHB -- do not skip rewire prompt (OpAmp-style switch). Recable Channel B after CHA Human Continue.");
+  }
+  if (dc && dc.is_open_drain) bits.push("Open-drain: hide VOH (N_A).");
+  if (dc && dc.schmitt) bits.push("Schmitt: VT+ / VT- range. Do not collapse to VIH.");
+  if (oe) bits.push(`OE ${oe.pin} active-${oe.active} -- IOZ when inactive only.`);
+  return bits.join(" ");
+}
+
+function logicDcFlowNodes(dc) {
+  const pins = (dc && dc.pins) || [];
+  const drive = (dc && dc.pin_drive) || {};
+  return pins.map((p, i) => {
+    const d = drive[p.name] || {};
+    const num = p.number != null ? p.number : "?";
+    return {
+      id: "pin-" + String(p.name || i),
+      label: `${p.name || "?"} pin ${num}`,
+      role: p.role || "pin",
+      x: 56 + (i % 4) * 120,
+      y: 36 + Math.floor(i / 4) * 64,
+      src: d.src || "",
+      ch: d.ch,
+    };
+  });
+}
+
+function logicDcFlowHtml(dc) {
+  const nodes = logicDcFlowNodes(dc);
+  const w = 520;
+  const h = Math.max(120, 48 + Math.ceil(Math.max(nodes.length, 1) / 4) * 64);
+  const shapes = nodes.map((n) => {
+    const lab = escapeAttr(n.label);
+    return `<g class="logic-dc-flow-node" data-id="${escapeAttr(n.id)}" transform="translate(${n.x},${n.y})">
+      <rect class="logic-dc-flow-chip" x="-48" y="-16" width="96" height="32" rx="6" />
+      <text text-anchor="middle" dy="4">${lab}</text>
+    </g>`;
+  }).join("");
+  return (
+    "<h3 class=\"subhead\">Pin / wiring D&amp;D</h3>" +
+    "<p class=\"hint\" id=\"logic-dc-flow-contract\">Vanilla pin/wiring D&amp;D canvas (#logic-dc-flow). LAYOUT ONLY -- drag does not write product_model / wire_map. Never invent nets. Form customise below is the SoT editor (truth / vcc_plan / pass_mode / loads). No React xyflow. No xyflow npm.</p>" +
+    `<div id="logic-dc-flow" class="logic-dc-flow" data-w="${w}" data-h="${h}">
+      <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${shapes}</svg>
+    </div>`
+  );
+}
+
+function wireLogicDcFlow() {
+  const box = $("logic-dc-flow");
+  if (!box) return;
+  const svg = box.querySelector("svg");
+  if (!svg) return;
+  let drag = null;
+  svg.onpointerdown = (ev) => {
+    const g = ev.target && ev.target.closest && ev.target.closest(".logic-dc-flow-node");
+    if (!g) return;
+    const m = g.getAttribute("transform") || "";
+    const nums = /translate\(([^,]+),([^)]+)\)/.exec(m);
+    drag = {
+      el: g,
+      x: nums ? Number(nums[1]) : 0,
+      y: nums ? Number(nums[2]) : 0,
+      px: ev.clientX,
+      py: ev.clientY,
+    };
+    try { g.setPointerCapture(ev.pointerId); } catch (e) {}
+  };
+  svg.onpointermove = (ev) => {
+    if (!drag) return;
+    const nx = drag.x + (ev.clientX - drag.px);
+    const ny = drag.y + (ev.clientY - drag.py);
+    drag.el.setAttribute("transform", `translate(${nx},${ny})`);
+  };
+  svg.onpointerup = () => { drag = null; };
+  svg.onpointercancel = () => { drag = null; };
+}
+
+function renderCustomiseParameters(dc) {
+  const grid = seedVccGrid(dc);
+  const schmitt = isSchmittGrid(dc);
+  const n = (dc && dc.sample_size) || paramCatalog.sample_size || 1;
+  const stimPsu = grid.stimulus === "PSU_MSO" ? "checked" : "";
+  const stimAwg = grid.stimulus !== "PSU_MSO" ? "checked" : "";
+  const chips = (grid.fixed_points || []).map((pt) => fixedChipHtml(pt, schmitt)).join("") || "<p class=\"hint\">No fixed points. Add VCC.</p>";
+  const ranges = (grid.ranges || []).map((r) => rangeRowHtml(r, schmitt)).join("") || "<p class=\"hint\">No range sweeps. Add range.</p>";
+  const preview = mergeVccGridJs(grid);
+  const dualOn = !!(dc && dc.dual_channel_continue);
+  const dualChk = dualOn ? "checked" : "";
+  const pm = grid.pass_mode || {};
+  const gridModes = schmitt
+    ? ("VT+ " + passModeSelect("VT+", pm["VT+"] || pm.VTPLUS || "range") +
+      " VT- " + passModeSelect("VT-", pm["VT-"] || pm.VTMINUS || "range") +
+      " HYST " + passModeSelect("HYST", pm.HYST || "range"))
+    : ("VIH " + passModeSelect("VIH", pm.VIH || "min_only") +
+      " VIL " + passModeSelect("VIL", pm.VIL || "max_only"));
+  const oe = dc && dc.oe;
+  const oeTxt = oe ? `${oe.pin} active ${oe.active}` : "none";
+  const nIn = ((dc && dc.logic_inputs) || []).length;
+  const corners = dc && dc.is_sequential ? 0 : (dc.icc_corners || (nIn ? (1 << nIn) : 0));
+  return (
+    "<h3 class=\"subhead\">Customise Parameters</h3>" +
+    "<p class=\"hint\">vcc_plan editor: FIXED POINTS chips + RANGE SWEEPS + per-band limits + pass_mode (range / min-only / max-only). Same limits for every stepped VCC in a band. Preview merged vcc_list before START. Save Version overlay writes <code>_manifest/test_params.yaml</code> (test_params + vcc_plan). Card-CONFIRMED vcc_grid unlocks threshold numbers; overlay must not stamp UNCONFIRMED over CONFIRMED. Glyph gaps stay fail-closed. No xyflow. No invent.</p>" +
+    `<p class="hint" id="logic-dc-family-scale">${familyScaleHint(dc || {})}</p>` +
+    `<p class="hint">logic_inputs ${(dc.logic_inputs || []).join(",") || "--"} · OE ${oeTxt} · ICC corners ${corners}${dc && dc.is_sequential ? " (sequential -- 2^n disabled)" : " (2^n)"}</p>` +
+    pinWiringHtml(dc || {}) +
+    logicDcFlowHtml(dc || {}) +
+    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 CONFIRMED CHA then CHB. Do not skip rewire prompt (OpAmp-style switch). Extra rs2g yaml without Datasheet card forbidden.</label>` +
+    `<div class="logic-dc-stim">
+      <label class="check"><input type="radio" name="logic-dc-stimulus" value="PSU_MSO" ${stimPsu} /> PSU_MSO</label>
+      <label class="check"><input type="radio" name="logic-dc-stimulus" value="AWG" ${stimAwg} /> AWG</label>
+    </div>` +
+    "<p class=\"hint\" id=\"logic-dc-awg-note\">AWG: Freq/Amp stay on Advanced bench. PSU_MSO hides Freq/Amp (omit -- do not invent Hz/V).</p>" +
+    `<label>n (sample_size)<input id="logic-dc-n" type="number" min="1" step="1" value="${n}" /></label>` +
+    `<div id="logic-dc-grid-pass-mode"><p class="hint">vcc_plan pass_mode ${schmitt ? "(Schmitt VT range)" : "(VIH min_only / VIL max_only)"}: ${gridModes}</p></div>` +
+    (grid.kind ? `<input type="hidden" id="logic-dc-grid-kind" value="${grid.kind}" />` : "") +
+    "<h3 class=\"subhead\">FIXED POINTS</h3>" +
+    `<div id="logic-dc-fixed-points">${chips}</div>` +
+    "<button type=\"button\" class=\"btn ghost\" id=\"logic-dc-add-fixed\">Add VCC</button>" +
+    "<h3 class=\"subhead\">RANGE SWEEPS</h3>" +
+    `<div id="logic-dc-ranges">${ranges}</div>` +
+    "<button type=\"button\" class=\"btn ghost\" id=\"logic-dc-add-range\">Add range</button>" +
+    `<p class="hint" id="logic-dc-vcc-preview">Preview merged vcc_list: ${preview.length ? preview.join(", ") : "--"}</p>`
+  );
+}
+
+function wireCustomiseParams() {
+  const boxF = $("logic-dc-fixed-points");
+  const boxR = $("logic-dc-ranges");
+  const schmitt = isSchmittGrid(paramCatalog.logic_dc || {});
+  if ($("logic-dc-add-fixed") && boxF) {
+    $("logic-dc-add-fixed").onclick = () => {
+      boxF.insertAdjacentHTML("beforeend", fixedChipHtml({ vcc: "", VIH_min_V: "", VIL_max_V: "" }, schmitt));
+      refreshVccPreview();
+    };
+  }
+  if ($("logic-dc-add-range") && boxR) {
+    $("logic-dc-add-range").onclick = () => {
+      boxR.insertAdjacentHTML("beforeend", rangeRowHtml({ start: "", stop: "", step: 0.1 }, schmitt));
+      refreshVccPreview();
+    };
+  }
+  const panel = $("logic-dc-body");
+  if (panel) {
+    panel.onclick = (ev) => {
+      const t = ev.target;
+      if (t && t.classList && t.classList.contains("vcc-remove-fixed")) {
+        const chip = t.closest(".vcc-chip");
+        if (chip) chip.remove();
+        refreshVccPreview();
+      }
+      if (t && t.classList && t.classList.contains("vcc-remove-range")) {
+        const row = t.closest(".vcc-range-row");
+        if (row) row.remove();
+        refreshVccPreview();
+      }
+    };
+    panel.oninput = (ev) => {
+      if (ev.target && ev.target.closest && (ev.target.closest(".vcc-chip") || ev.target.closest(".vcc-range-row"))) {
+        refreshVccPreview();
+      }
+    };
+  }
+  document.querySelectorAll('input[name="logic-dc-stimulus"]').forEach((el) => {
+    el.onchange = () => applyStimulusHide();
+  });
+  applyStimulusHide();
+  refreshVccPreview();
+  wireLogicDcFlow();
+}
+
+function renderLogicDc() {
+  const panel = $("panel-logic-dc");
+  const body = $("logic-dc-body");
+  const meta = $("logic-dc-meta");
+  const hint = $("logic-dc-hint");
+  if (!panel || !body) return;
+  const dc = paramCatalog.logic_dc;
+  const show = activeFamily === "logic" && dc && (dc.logic_inputs || []).length;
+  panel.classList.toggle("hidden", !show);
+  if (!show) {
+    body.innerHTML = "";
+    if (meta) meta.textContent = "";
+    return;
+  }
+  const inputs = dc.logic_inputs || [];
+  const oe = dc.oe;
+  const oeTxt = oe ? `${oe.pin} active ${oe.active}` : "none";
+  const seq = !!dc.is_sequential;
+  const od = !!dc.is_open_drain;
+  if (meta) {
+    meta.textContent =
+      `${dc.part || ""} · inputs ${inputs.join(",")} · OE ${oeTxt}` +
+      ` · schmitt ${dc.schmitt ? "yes" : "no"}` +
+      (od ? " · open-drain (VOH N/A skip)" : "") +
+      (seq ? " · sequential (gate 2^n disabled)" : ` · ICC ${dc.icc_corners || 0} corners (2^n)`) +
+      (dc.isolation_status ? ` · isolation ${dc.isolation_status}` : "");
+  }
+  const enabled = dc.enabled_tests || [];
+  const enHtml = "<h3 class=\"subhead\">Enabled tests</h3>" +
+    (enabled.length
+      ? `<p class="logic-dc-chips">${enabled.map((id) => `<span class="mode-tag">${id}</span>`).join(" ")}</p>`
+      : "<p class=\"hint\">No enabled_tests on this part yaml.</p>");
+  const vcc = (dc.vcc_list || dc.vcc_sweep_list || []).join(", ");
+  const epsA = dc.stable_eps_A;
+  const epsAShow = (epsA === null || epsA === undefined || epsA === "") ? "" : String(epsA);
+  const customiseHtml = renderCustomiseParameters(dc);
+  const recipeHtml =
+    "<h3 class=\"subhead\">Recipe</h3>" +
+    `<p class="hint">logic_inputs: ${inputs.join(", ") || "--"} · vcc_list: ${vcc || "--"} · ICC pins: ${(dc.icc_pins || []).join(",") || "--"}</p>` +
+    `<p class="hint">Voltage settle uses stable_eps_V. Current uses stable_eps_A (amps) only; never reuse volts as amps. Blank/null = NON_TIGHT (wait settle_s once; not greenable as tight-settle). Set a grounded amp number for eps/N hard-FAIL. Tight claim without eps FAIL-closes. Do not invent a uA default.</p>` +
+    `<label>vcc_list (comma; filled from preview)<input id="logic-dc-vcc" type="text" value="${vcc}" /></label>` +
+    `<label>stable_eps_A overlay (amps; blank = null / NON_TIGHT)<input id="logic-dc-stable-eps-a" type="text" value="${epsAShow}" placeholder="null" /></label>`;
+  const cardHtml = renderCardFields(dc.card_fields || []);
+  const tt = dc.truth_table || [];
+  const pins = tt.length ? Object.keys(tt[0]) : inputs.concat([dc.output_pin || "Y"]);
+  let ttHtml = "<h3 class=\"subhead\">Truth table</h3>";
+  if (!tt.length) {
+    ttHtml += "<p class=\"hint\">No truth_table in product_model.</p>";
+  } else {
+    ttHtml += "<table class=\"logic-dc-table\"><thead><tr>" +
+      pins.map((p) => `<th>${p}</th>`).join("") +
+      "</tr></thead><tbody>" +
+      tt.map((row) => "<tr>" + pins.map((p) => `<td>${row[p] ?? ""}</td>`).join("") + "</tr>").join("") +
+      "</tbody></table>";
+  }
+  const iso = dc.isolation || {};
+  let isoHtml = "<h3 class=\"subhead\">Isolation (run = first track, else invert; skip PROPOSED)</h3>";
+  isoHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Sweep</th><th>Hold</th><th>Y</th><th>Status</th><th>Used</th></tr></thead><tbody>";
+  inputs.forEach((pin) => {
+    const block = iso[pin] || {};
+    const run = block.run || [];
+    const all = (block.all && block.all.length) ? block.all : run;
+    const runKey = (p) => {
+      const hold = p.hold || p.fix || {};
+      const holdTxt = Object.keys(hold).map((k) => `${k}=${hold[k]}`).join(" ");
+      return `${p.sweep || pin}|${holdTxt}|${p.y_expect || ""}`;
+    };
+    const runSet = new Set(run.map(runKey));
+    if (!all.length) {
+      isoHtml += `<tr><td>${pin}</td><td colspan="4">UNSURE -- no derivable combo</td></tr>`;
+      return;
+    }
+    all.forEach((p) => {
+      const hold = p.hold || p.fix || {};
+      const holdTxt = Object.keys(hold).map((k) => `${k}=${hold[k]}`).join(" ") || "--";
+      const st = p.status || p.source || "";
+      const used = runSet.has(runKey(p)) ? "run" : "";
+      isoHtml += `<tr><td>${p.sweep || pin}</td><td>${holdTxt}</td><td>${p.y_expect || ""}</td><td>${st}</td><td>${used}</td></tr>`;
+    });
+  });
+  isoHtml += "</tbody></table>";
+  const cornerRows = dc.icc_corner_rows || [];
+  const cornerPins = dc.icc_pins || inputs;
+  let cornerHtml = seq
+    ? "<h3 class=\"subhead\">ICC corners (sequential -- gate 2^n / ICC / ΔICC stay disabled)</h3>"
+    : `<h3 class="subhead">ICC corners (${dc.icc_corners || cornerRows.length} = 2^n)</h3>`;
+  if (seq) {
+    cornerHtml += "<p class=\"hint\">RS164-class sequential: do not tick Path B icc / delta_icc / input_threshold 2^n.</p>";
+  } else if (!cornerRows.length) {
+    cornerHtml += "<p class=\"hint\">No derived ICC corners.</p>";
+  } else {
+    cornerHtml += "<table class=\"logic-dc-table\" id=\"logic-dc-corners\"><thead><tr>" +
+      cornerPins.map((p) => `<th>${p}</th>`).join("") +
+      "</tr></thead><tbody>" +
+      cornerRows.map((row) => "<tr>" + cornerPins.map((p) => `<td>${row[p] ?? ""}</td>`).join("") + "</tr>").join("") +
+      "</tbody></table>";
+    if ((dc.icc_corners || 0) > cornerRows.length) {
+      cornerHtml += `<p class="hint">Showing first ${cornerRows.length} of ${dc.icc_corners}.</p>`;
+    }
+  }
+  const specs = dc.specs || [];
+  let specHtml = "<h3 class=\"subhead\">Limits + pass_mode</h3>";
+  specHtml += "<table class=\"logic-dc-table\"><thead><tr><th>Id</th><th>Mode</th><th>Min</th><th>Max</th><th>Test</th></tr></thead><tbody>";
+  specs.forEach((s) => {
+    const sid = s.id || "";
+    if (od && /^voh/i.test(sid)) {
+      specHtml += `<tr><td>${sid}</td><td>N/A</td><td>unspec</td><td>unspec</td><td>open-drain skip</td></tr>`;
+      return;
+    }
+    const unspec = s.min == null && s.max == null ? " unspec" : "";
+    let note = s.test || "";
+    if (dc.has_oe && /^ioz/i.test(sid)) note += " (IOZ when OE inactive only)";
+    specHtml += `<tr><td>${sid}</td><td>${passModeSelect(sid, s.pass_mode)}</td>` +
+      `<td>${s.min != null ? s.min : "unspec"}</td><td>${s.max != null ? s.max : "unspec"}</td><td>${note}${unspec}</td></tr>`;
+  });
+  specHtml += "</tbody></table>";
+  const gaps = (dc.gaps || []).map((g) => `<li>${g}</li>`).join("");
+  const gapHtml = gaps ? `<h3 class="subhead">Gaps</h3><ul class="hint">${gaps}</ul>` : "";
+  body.innerHTML = enHtml + customiseHtml + recipeHtml + cardHtml + ttHtml + isoHtml + cornerHtml + specHtml + gapHtml;
+  if (hint && !hint.textContent) {
+    hint.textContent = "Save Version overlay writes _manifest/test_params.yaml (vcc_plan + vcc_grid + merged vcc_list + pass_mode + n + stable_eps_A). Save product_model writes card_fields.schema.yaml keys. Ctrl+F5 after worker restart if RPC is new.";
+  }
+  wirePassModeSync();
+  wireCardFieldDeletes();
+  wireCustomiseParams();
 }
 
 function kindLabel(kind) {
@@ -2171,32 +3042,39 @@ async function loadTests() {
       const checked = !isResearch && preferred.has(t.id) ? "checked" : "";
       const tag = t.short_tag || t.id;
       const instr = (t.required_instruments || []).join("+") || "MSO+PSU+AWG";
-      const specBits = (t.specs || []).map((s) => {
-        const bits = [s.id || ""];
-        if (s.min != null) bits.push(`min ${s.min}`);
-        if (s.max != null) bits.push(`max ${s.max}`);
-        if (s.typ != null) bits.push(`typ ${s.typ} ${s.unit || ""}`.trim());
-        return bits.join(" ");
-      }).join("; ");
+      const specRows = (t.specs || []).map((s) => {
+        const sid = s.id || "";
+        const unspec = s.min == null && s.max == null;
+        const lim = unspec
+          ? "unspec"
+          : [s.min != null ? `min ${s.min}` : "", s.max != null ? `max ${s.max}` : ""].filter(Boolean).join(" ");
+        return `<div class="test-spec-row"><span class="mode-tag">${sid}</span> ${passModeSelect(sid, s.pass_mode, "test-pass-mode")} <span class="hint">${lim}</span></div>`;
+      }).join("");
       const info = (t.info && (t.info.description || t.info.title)) || t.notes || "";
-      const specLine = specBits || "datasheet unspec -- Results: Fetch limits";
-      const extra = [info, specLine].filter(Boolean).join(" · ");
+      const specLine = specRows || "<span class=\"mode-tag\">datasheet unspec -- Results: Fetch limits</span>";
       grid.innerHTML += `
-        <label class="test-item" for="${id}" title="${extra.replace(/"/g, "&quot;")}">
-          <input id="${id}" type="checkbox" value="${t.id}" ${checked} />
-          <span><strong>${tag}</strong> — ${t.label}<br/><span class="mode-tag">${specLine}</span><br/><span class="mode-tag">${t.fixture_mode} · ${instr}${isResearch ? " · research" : ""}</span>${info ? `<br/><span class="hint">${info}</span>` : ""}</span>
-        </label>`;
+        <div class="test-item">
+          <label class="check" for="${id}">
+            <input id="${id}" type="checkbox" value="${t.id}" ${checked} />
+            <span><strong>${tag}</strong> — ${t.label}</span>
+          </label>
+          <div class="test-spec-block">${specLine}<br/><span class="mode-tag">${t.fixture_mode} · ${instr}${isResearch ? " · research" : ""}</span>${info ? `<br/><span class="hint">${info}</span>` : ""}</div>
+        </div>`;
     }
     wrap.appendChild(grid);
     box.appendChild(wrap);
   }
   renderRunPlans();
-  document.querySelectorAll(".test-item input").forEach((inp) => {
+  document.querySelectorAll(".test-item input[type=checkbox]").forEach((inp) => {
     inp.addEventListener("change", () => {
       renderRunPlans();
       applyTestDefaults(false);
     });
   });
+  document.querySelectorAll(".test-pass-mode").forEach((sel) => {
+    sel.addEventListener("click", (ev) => ev.stopPropagation());
+  });
+  wirePassModeSync();
   applyTestDefaults(false);
 }
 
@@ -2377,6 +3255,90 @@ if ($("btn-forget-person")) {
         $("person-hint").textContent = `Forgot ${label} in yaml. Folders under ${label} were not deleted.`;
       }
       log(`Forgot person ${label} (yaml only)\n`);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+
+async function saveTestParamsOverlay() {
+  const pass_mode = {};
+  document.querySelectorAll("#logic-dc-body .logic-dc-mode").forEach((sel) => {
+    const id = sel.getAttribute("data-id");
+    if (id && sel.value) pass_mode[id] = sel.value;
+  });
+  document.querySelectorAll(".test-pass-mode").forEach((sel) => {
+    const id = sel.getAttribute("data-id");
+    if (id && sel.value) pass_mode[id] = sel.value;
+  });
+  const blob = { pass_mode };
+  const logicPanel = $("panel-logic-dc");
+  const logicOpen = logicPanel && !logicPanel.classList.contains("hidden");
+  const vccInput = $("logic-dc-vcc") || $("logic-dc-vcc-list");
+  if (logicOpen && vccInput) {
+    const vccRaw = (vccInput.value || "").trim();
+    blob.vcc_list = vccRaw
+      ? vccRaw.split(/[,\s]+/).map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : [];
+  }
+  const epsAInput = $("logic-dc-stable-eps-a");
+  if (logicOpen && epsAInput) {
+    const raw = (epsAInput.value || "").trim();
+    if (!raw || raw.toLowerCase() === "null" || raw.toLowerCase() === "none") {
+      blob.stable_eps_A = null;
+    } else {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) {
+        throw new Error("stable_eps_A must be a number in amps, or blank for null (NON_TIGHT)");
+      }
+      blob.stable_eps_A = n;
+    }
+  }
+  if (logicOpen && $("logic-dc-fixed-points")) {
+    const grid = collectVccGridFromUi();
+    blob.vcc_grid = grid;
+    blob.vcc_plan = grid;
+    blob.vcc_list = mergeVccGridJs(grid);
+    blob.pass_mode = blob.pass_mode || {};
+    const dc = paramCatalog.logic_dc || {};
+    if (!dc.schmitt && !isSchmittGrid(dc)) {
+      if (!blob.pass_mode.VIH) blob.pass_mode.VIH = "min_only";
+      if (!blob.pass_mode.VIL) blob.pass_mode.VIL = "max_only";
+    }
+    const nEl = $("logic-dc-n");
+    if (nEl) {
+      const n = Number(nEl.value);
+      if (Number.isFinite(n) && n >= 1) blob.sample_size = Math.trunc(n);
+    }
+    const dualEl = $("logic-dc-dual-continue");
+    if (dualEl) {
+      blob.recipe = blob.recipe || {};
+      blob.recipe.dual_channel_continue = !!dualEl.checked;
+      if (dualEl.checked) blob.recipe.channels = ["CHA", "CHB"];
+    }
+  }
+  const res = await rpc("save_test_params", { test_params: blob });
+  const hint = $("logic-dc-hint");
+  if (hint) hint.textContent = `Saved ${res.path || "_manifest/test_params.yaml"}`;
+  log(`Saved Version overlay test_params.yaml\n`);
+  await loadParamDefaults();
+  await loadTests();
+  return res;
+}
+
+if ($("btn-save-test-params")) {
+  $("btn-save-test-params").onclick = async () => {
+    try {
+      await saveTestParamsOverlay();
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+}
+if ($("btn-save-pass-mode")) {
+  $("btn-save-pass-mode").onclick = async () => {
+    try {
+      await saveTestParamsOverlay();
     } catch (e) {
       alert(e.message);
     }
@@ -2633,6 +3595,9 @@ $("btn-open").onclick = async () => {
     sessionOpen = true;
     $("btn-start").disabled = false;
     log(`Session open ${JSON.stringify(m)}\n`);
+    if (m.golden_auto) {
+      log(`Excel golden_auto/auto (pretty never auto): ${m.golden_auto}\n`);
+    }
     const need = ["MSO", "PSU", "AWG"];
     const miss = need.filter((k) => !m[k]);
     if (miss.length) {
@@ -2710,14 +3675,14 @@ $("btn-folder").onclick = async () => {
 
 if ($("btn-tests-all")) {
   $("btn-tests-all").onclick = () => {
-    document.querySelectorAll("#test-list .test-item input").forEach((i) => { i.checked = true; });
+    document.querySelectorAll("#test-list .test-item input[type=checkbox]").forEach((i) => { i.checked = true; });
     renderRunPlans();
     applyTestDefaults(false);
   };
 }
 if ($("btn-tests-none")) {
   $("btn-tests-none").onclick = () => {
-    document.querySelectorAll("#test-list .test-item input").forEach((i) => { i.checked = false; });
+    document.querySelectorAll("#test-list .test-item input[type=checkbox]").forEach((i) => { i.checked = false; });
     renderRunPlans();
     applyTestDefaults(false);
   };
@@ -3027,11 +3992,11 @@ async function paintSessionReport() {
     for (const m of meas) {
       n += 1;
       const res = String((m && m.result) || (s.success ? "pass" : "fail"));
-      tb.innerHTML += `<tr><td>${s.dut ?? ""}</td><td>${s.test_id || ""}</td><td>${(m && m.id) || ""}</td><td>${fmtSpec(m && m.min)}</td><td>${fmtSpec(m && m.max)}</td><td>${fmtSpec(m && m.typ)}</td><td>${fmtSpec(m && m.value)}</td><td>${res}</td><td>${s.summary || s.error || ""}</td></tr>`;
+      tb.innerHTML += `<tr><td>${s.dut ?? ""}</td><td>${s.test_id || ""}</td><td>${(m && m.id) || ""}</td><td>${fmtSpec(m && m.pass_mode)}</td><td>${fmtSpec(m && m.min)}</td><td>${fmtSpec(m && m.max)}</td><td>${fmtSpec(m && m.typ)}</td><td>${fmtSpec(m && m.value)}</td><td>${res}</td><td>${s.summary || s.error || ""}</td></tr>`;
     }
   }
   if (!n) {
-    tb.innerHTML = `<tr><td colspan="9">No session measurements yet -- START or DEMO</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="10">No session measurements yet -- START or DEMO</td></tr>`;
   }
   if ($("results-db-hint") && doc.identity) {
     const fail = (doc.header && doc.header.fail) || 0;
@@ -3311,11 +4276,27 @@ function pollLoop() {
       }
     };
   }
+  if ($("btn-save-logic-dc")) {
+    $("btn-save-logic-dc").onclick = async () => {
+      try {
+        await saveLogicDcPanel();
+      } catch (e) {
+        if ($("logic-dc-hint")) $("logic-dc-hint").textContent = String((e && e.message) || e);
+        alert(e.message);
+      }
+    };
+  }
   if ($("btn-fill-excel")) {
     $("btn-fill-excel").onclick = async () => {
       try {
         const res = await rpc("fill_workbook");
-        log(`Excel fill: ${res.status || ""} filled=${res.filled || 0} ${res.excel || ""}\n`);
+        log(`Excel fill: ${res.status || ""} filled=${res.filled || 0} plots=${res.plots || 0} ${res.excel || ""} ${res.policy || ""}\n`);
+        if (res.status === "orphan") {
+          alert(`Excel orphan FAIL: ${res.error || "second xlsx under workbook/"}`);
+        }
+        if (res.status === "ultimate") {
+          alert(`Excel ultimate_manual FAIL: ${res.error || "never auto-write the jot book"}`);
+        }
         if ($("results-db-hint")) {
           $("results-db-hint").textContent = `Excel ${res.status}: ${res.excel || ""} (${res.filled || 0} cells)`;
         }

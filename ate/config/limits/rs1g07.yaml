@@ -8,10 +8,58 @@ specs:
 - id: ICC_uA
   unit: uA
   max: 1.0
+  pass_mode: max-only
   test: supply_current
-  source: local:RS1G07_(RevA.6).pdf
+  source: local:RS1G07_(RevA.6).pdf ICC +25C 1uA
+- id: ICC_FULL_uA
+  unit: uA
+  max: 10.0
+  pass_mode: max-only
+  source: local:RS1G07_(RevA.6).pdf ICC Full 10uA (documented; not run-judge)
+- id: DELTA_ICC_uA
+  unit: uA
+  max: 500.0
+  pass_mode: max-only
+  test: delta_icc
+  source: local:RS1G07_(RevA.6).pdf dICC 3V to 5.5V one input VCC-0.6
+- id: II_uA
+  unit: uA
+  max: 1.0
+  pass_mode: max-only
+  test: ii
+  source: local:RS1G07_(RevA.6).pdf II +25C
+- id: II_FULL_uA
+  unit: uA
+  max: 5.0
+  pass_mode: max-only
+  source: local:RS1G07_(RevA.6).pdf II Full +/-5uA (documented; not run-judge)
 - id: VCC_V
   unit: V
   min: 1.65
   max: 5.5
+  pass_mode: range
   source: local:RS1G07_(RevA.6).pdf
+- id: VOL_1p65V_4mA
+  unit: V
+  max: 0.45
+  pass_mode: max-only
+  test: vol
+  source: local:RS1G07_(RevA.6).pdf IOL 4mA @1.65
+- id: VOL_2p3V_8mA
+  unit: V
+  max: 0.3
+  pass_mode: max-only
+  test: vol
+  source: local:RS1G07_(RevA.6).pdf IOL 8mA @2.3
+- id: VOL_3p0V_16mA
+  unit: V
+  max: 0.4
+  pass_mode: max-only
+  test: vol
+  source: local:RS1G07_(RevA.6).pdf IOL 16mA @3V
+- id: VOL_4p5V_32mA
+  unit: V
+  max: 0.55
+  pass_mode: max-only
+  test: vol
+  source: local:RS1G07_(RevA.6).pdf IOL 32mA @4.5

@@ -98,5 +98,43 @@ def screenshot():
     result = auto.quick_capture()
     if result:
         print(f"   已保存: {result}")
+
+
+def recover_scope_session(scope, run=True):
+    """Re-RUN after a display query. Path B DC does not use this; OpAmp capture does."""
+    try:
+        if run:
+            scope.write(":RUN")
+    except Exception:
+        pass
+
+
+def capture_scope_png(scope, filepath, timeout_ms=10000, jpeg_quality=90):
+    """MSO :DISP:DATA? to filepath. Does not park STOP after the JPEG."""
+    from pathlib import Path
+
+    path = Path(filepath)
+    old = getattr(scope, "timeout", None)
+    try:
+        try:
+            scope.timeout = timeout_ms
+        except Exception:
+            pass
+        scope.write(":DISP:DATA?")
+        raw = scope.read_raw() if hasattr(scope, "read_raw") else scope.read()
+        recover_scope_session(scope, run=True)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(raw, str):
+            path.write_text(raw)
+        else:
+            path.write_bytes(bytes(raw))
+        return str(path)
+    finally:
+        if old is not None:
+            try:
+                scope.timeout = old
+            except Exception:
+                pass
+
   
  

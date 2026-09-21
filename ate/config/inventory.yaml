@@ -24,7 +24,7 @@ parts:
   - {part: RS0204, sheet_class: "Level Shifters", category: level, ate_suite: logic, package: TSSOP14, model: RS0204YQ, pic: changthong, status: Ongoing, priority: 1, date: "20/3/2026", remark: "in Wuxi; campaign under Level/; dual-rail suite still logic", report: RS0204/RS0204 Data Report.xlsx}
 
   # --- Wave 1 TBD ---
-  - {part: RS1GT34, sheet_class: "Logic Series", category: logic, package: SOT-353, model: RS1GT34XC5, lot: CQ3H21.3, qty: 30, status: TBD, priority: 1}
+  - {part: RS1GT34, sheet_class: "Logic Series", category: logic, package: SOT-353, model: RS1GT34XC5, lot: CQ3H21.3, qty: 30, status: TBD, priority: 1, pic: chun_tak, remark: "Chun Tak / Core AE OK; Path B CONFIRMED Jian Hong 2026-09-18 (status gate only, not bench green)"}
   - {part: RS1G125, sheet_class: "Logic Series", category: logic, package: SC70-5, model: RS1G125XC5, status: TBD, priority: 1, remark: "Wait Sample", report: RS1G125/RS1G125XC5_Lab_Report.xlsx}
   - {part: RS1G07, sheet_class: "Logic Series", category: logic, package: SC70-5, model: RS1G07XC5, lot: CQ694T.3, qty: 30, status: TBD, priority: 1, report: RS1G07/RS1G07XC5_Lab_Report.xlsx}
   - {part: RS1G08, sheet_class: "Logic Series", category: logic, package: SC70-5, model: RS1G08XC5, lot: CR5R94.1, qty: 30, status: TBD, priority: 1, report: RS1G08/RS1G08_Lab_Report.xlsx, remark: "Also Wong Chun Wei RS1G08 template 27 Aug 2026 (loose xlsx)"}
@@ -70,3 +70,22 @@ parts:
   - {part: RS2227, sheet_class: "Analog Switch", category: analog_switch, package: MSOP, model: RS2227A, pic: lim, remark: "analog switch reference / prior-gen vs RS2323", report: RS2227/RS2227A Test Report.xlsx}
   - {part: RS29511, sheet_class: "Logic Series", category: logic, package: SOIC, model: RS29511, pic: soo, remark: "Soo Logic suite; not on Qualification Main", report: RS29511/RS29511 Test Report.xlsx}
   - {part: RS1GT32D, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1GT32D, pic: ariff, remark: "high-low temp 2025-12-22; not RS1GT32XC5", report: RS1GT32D/RS1GT32D高低温测试-20251222.xlsx}
+
+  # --- JH DEMO DAY scale wave 2026-09-21 (grounded function CONFIRMED; no invent lots) ---
+  - {part: RS1G00, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1G00, status: TBD, remark: "Path B CONFIRMED SoT 2026-09-21; signed CMOS/VOH/VOL/DeltaICC; excel_plots CONFIRMED; ICCT ABSENT"}
+  - {part: RS1G02, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1G02, status: TBD, remark: "Path B CONFIRMED SoT 2026-09-21; TTL not G08 CMOS pair; signed loads"}
+  - {part: RS1G04, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1G04, status: TBD, remark: "Path B CONFIRMED SoT 2026-09-21; INV n=1; NC not OE; signed TTL loads"}
+  - {part: RS1G86, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1G86, status: TBD, remark: "Path B CONFIRMED SoT 2026-09-21; VIL 0.20*VCC; VIH 0.65*VCC signed"}
+  - {part: RS2G08, sheet_class: "Logic Series", category: logic, package: VSSOP8, model: RS2G08, status: TBD, remark: "Path B CONFIRMED SoT 2026-09-21; dual AND CHA then CHB; Path B A/B; signed loads"}
+  - {part: RS2G32, sheet_class: "Logic Series", category: logic, package: VSSOP8, model: RS2G32, status: TBD, remark: "Path B CONFIRMED SoT 2026-09-21; dual OR CHA then CHB; Path B A/B; signed loads"}
+
+  # --- GT-wave 2026-09-21 (function CONFIRMED; HOLD stubs process-only) ---
+  - {part: RS1GT00, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1GT00, status: TBD, remark: "Path B CONFIRMED TTL NAND; ICCT->dICC @3.4; unsigned VOH/VOL HOLD"}
+  - {part: RS1GT02, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1GT02, status: TBD, remark: "Path B CONFIRMED TTL NOR; not G08 CMOS; unsigned bands HOLD"}
+  - {part: RS1GT04, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1GT04, status: TBD, remark: "Path B CONFIRMED TTL INV; NC not OE"}
+  - {part: RS1GT14, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1GT14, status: TBD, remark: "Path B CONFIRMED Schmitt VT+/- ONLY; do not invent VIH/VIL"}
+  - {part: RS2G00, sheet_class: "Logic Series", category: logic, package: VSSOP8, model: RS2G00, status: TBD, remark: "Path B CONFIRMED dual NAND CHA then CHB; pin numbers HOLD"}
+  - {part: RS2G125, sheet_class: "Logic Series", category: logic, package: VSSOP8, model: RS2G125, status: TBD, remark: "Path B CONFIRMED dual buf OE-L; IOZ ON @3.6V UNSURE; CHA then CHB"}
+  - {part: RS2GT08, sheet_class: "Logic Series", category: logic, package: VSSOP8, model: RS2GT08, status: TBD, remark: "Path B CONFIRMED dual TTL AND CHA then CHB; not G08 CMOS"}
+  - {part: RS1GT125, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1GT125, status: TBD, remark: "Path B HOLD UNCONFIRMED; OE present; IOZ ABSENT; do not invent IOZ"}
+  - {part: RS1GT126, sheet_class: "Logic Series", category: logic, package: SOT23, model: RS1GT126, status: TBD, remark: "Path B HOLD UNCONFIRMED; OE present active-H; IOZ ABSENT; do not invent IOZ"}

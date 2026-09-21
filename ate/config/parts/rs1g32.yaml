@@ -1,121 +1,316 @@
-# RS1G32 Logic OR gate — RUN-IC small logic. Owner Ariff.
-
-
-
 part: RS1G32
-
 model: RS1G32
-
 component: Logic
-
 device: RS1G32
-
 package: SOT23
-
 version: Version_1
-
 sample_size: 4
-
-year: "2026"
-
+year: '2026'
 owner: ariff
-
 part_key: rs1g32
-
 product_class: logic
-
-
-
 vcc: 1.65
-
 current_limit: 0.05
-
 timing:
-
   timeout_s: 4.0
-
   settle_s: 0.3
-
-
-
-vcc_sweep_list: [1.65, 3.3, 5.0, 5.5]
-
-ioff_vcc_list: [0.0, 5.5]
-
-vih_vil_vcc_list: [2.0, 3.3, 5.0]
-
+vcc_sweep_list:
+- 1.65
+- 3.3
+- 5.0
+- 5.5
+ioff_vcc_list:
+- 0.0
+- 5.5
+vih_vil_vcc_list:
+- 2.0
+- 3.3
+- 5.0
 vplus_v: 5.0
-
 voh_vol_settle_s: 1.0
-
-# Same RS1G08-class DC corners already used by ariff_dc defaults.
 voh_table:
-  - {vcc: 2.0, vref: 0.080, spec_min: 1.6, ioh_a: 0.008}
-  - {vcc: 3.3, vref: 0.240, spec_min: 2.5, ioh_a: 0.024}
-  - {vcc: 4.5, vref: 0.320, spec_min: 3.8, ioh_a: 0.032}
-  - {vcc: 5.0, vref: 0.320, spec_min: 4.2, ioh_a: 0.032}
-  - {vcc: 5.5, vref: 0.320, spec_min: 4.8, ioh_a: 0.032}
+- vcc: 2.0
+  vref: 0.08
+  spec_min: 1.6
+  ioh_a: 0.008
+- vcc: 3.3
+  vref: 0.24
+  spec_min: 2.5
+  ioh_a: 0.024
+- vcc: 4.5
+  vref: 0.32
+  spec_min: 3.8
+  ioh_a: 0.032
+- vcc: 5.0
+  vref: 0.32
+  spec_min: 4.2
+  ioh_a: 0.032
+- vcc: 5.5
+  vref: 0.32
+  spec_min: 4.8
+  ioh_a: 0.032
 vol_table:
-  - {vcc: 2.0, vref: 4.92, spec_max: 0.45, iol_a: 0.008}
-  - {vcc: 3.3, vref: 4.76, spec_max: 0.55, iol_a: 0.024}
-  - {vcc: 4.5, vref: 4.68, spec_max: 0.55, iol_a: 0.032}
-  - {vcc: 5.0, vref: 4.68, spec_max: 0.50, iol_a: 0.032}
-  - {vcc: 5.5, vref: 4.68, spec_max: 0.45, iol_a: 0.032}
-
+- vcc: 2.0
+  vref: 4.92
+  spec_max: 0.45
+  iol_a: 0.008
+- vcc: 3.3
+  vref: 4.76
+  spec_max: 0.55
+  iol_a: 0.024
+- vcc: 4.5
+  vref: 4.68
+  spec_max: 0.55
+  iol_a: 0.032
+- vcc: 5.0
+  vref: 4.68
+  spec_max: 0.5
+  iol_a: 0.032
+- vcc: 5.5
+  vref: 4.68
+  spec_max: 0.45
+  iol_a: 0.032
 enabled_tests:
-
-  - delta_supply_current
-
-  - off_current
-
-  - input_thresholds
-
-  - ioff_leakage
-
-  - input_leakage_sweep
-
-  - supply_current_sweep
-
-  - vih_vil
-
-  - voh_load
-
-  - vol_load
-
-
-
+- delta_supply_current
+- off_current
+- input_thresholds
+- ioff_leakage
+- input_leakage_sweep
+- supply_current_sweep
+- vih_vil
+- voh_load
+- vol_load
+- input_threshold
+- icc
+- delta_icc
+- ii
+- voh
+- vol
 fixture_modes:
-
   LOGIC:
-
-    label: "Logic board (RS1G32)"
-
+    label: Logic board (RS1G32)
     board_class: general
-
     checklist:
-
-      - "RS1G32 is small logic (OR)."
-
-      - "Select only the rows you need; leave others unchecked."
-
+    - RS1G32 is small logic (OR).
+    - Select only the rows you need; leave others unchecked.
     tests:
-
-      - delta_supply_current
-
-      - off_current
-
-      - input_thresholds
-
-      - ioff_leakage
-
-      - input_leakage_sweep
-
-      - supply_current_sweep
-
-      - vih_vil
-
-      - voh_load
-
-      - vol_load
-
-
+    - delta_supply_current
+    - off_current
+    - input_thresholds
+    - ioff_leakage
+    - input_leakage_sweep
+    - supply_current_sweep
+    - vih_vil
+    - voh_load
+    - vol_load
+    - input_threshold
+    - icc
+    - delta_icc
+    - ii
+    - voh
+    - vol
+product_model:
+  part: RS1G32
+  status: CONFIRMED
+  source_card: RS1G32_card_CONFIRMED.md
+  package: SC70-5
+  schmitt: false
+  oe: none
+  output_type: push_pull
+  output_pin: Y
+  vcc_op_min: 1.65
+  vcc_op_max: 5.5
+  logic_inputs:
+  - A
+  - B
+  pins:
+  - name: A
+    role: input
+    number: 1
+  - name: B
+    role: input
+    number: 2
+  - name: GND
+    role: gnd
+    number: 3
+  - name: Y
+    role: output
+    number: 4
+  - name: VCC
+    role: vcc
+    number: 5
+  truth_table:
+    status: CONFIRMED
+    rows:
+    - A: H
+      B: H
+      Y: H
+    - A: L
+      B: H
+      Y: H
+    - A: H
+      B: L
+      Y: H
+    - A: L
+      B: L
+      Y: L
+  isolation:
+    status: CONFIRMED
+    tests:
+      A:
+      - sweep_pin: A
+        fix:
+          B: L
+        y_expect: track
+      B:
+      - sweep_pin: B
+        fix:
+          A: L
+        y_expect: track
+  vcc_grid:
+    status: CONFIRMED
+    stimulus: PSU_MSO
+    pass_mode:
+      VIH: min_only
+      VIL: max_only
+    ranges:
+    - start: 1.65
+      stop: 1.95
+      step: 0.1
+      VIH_min: 0.65*VCC
+      VIL_max: 0.15*VCC
+    - start: 2.3
+      stop: 2.7
+      step: 0.1
+      VIH_min_V: 1.7
+      VIL_max_V: 0.3
+    - start: 3.0
+      stop: 3.6
+      step: 0.1
+      VIH_min_V: 2.2
+      VIL_max_V: 0.4
+    - start: 4.5
+      stop: 5.5
+      step: 0.1
+      VIH_min: 0.7*VCC
+      VIL_max: 0.15*VCC
+    fixed_points: []
+    note: CONFIRMED from SoT VIH/VIL bands (CMOS; do not invent extra rows)
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    voh: min_only
+    vol: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+  dc_limits:
+    VOH:
+      status: CONFIRMED
+      loads:
+      - IOH_mA: -0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOH_min: VCC-0.1
+      - IOH_mA: -4
+        vcc: 1.65
+        VOH_min_V: 1.2
+      - IOH_mA: -8
+        vcc: 2.3
+        VOH_min_V: 1.9
+      - IOH_mA: -16
+        vcc: 3.0
+        VOH_min_V: 2.4
+      - IOH_mA: -24
+        vcc: 3.0
+        VOH_min_V: 2.3
+      - IOH_mA: -32
+        vcc: 4.5
+        VOH_min_V: 3.8
+    VOL:
+      status: CONFIRMED
+      loads:
+      - IOL_mA: 0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOL_max_V: 0.1
+      - IOL_mA: 4
+        vcc: 1.65
+        VOL_max_V: 0.45
+      - IOL_mA: 8
+        vcc: 2.3
+        VOL_max_V: 0.3
+      - IOL_mA: 16
+        vcc: 3.0
+        VOL_max_V: 0.4
+      - IOL_mA: 24
+        vcc: 3.0
+        VOL_max_V: 0.55
+      - IOL_mA: 32
+        vcc: 4.5
+        VOL_max_V: 0.55
+    II_uA:
+      Full: 5.0
+    ICC_uA:
+      Full: 10.0
+    ICCT_uA:
+      status: UNCONFIRMED
+      Full: 500.0
+      vcc_min: 3.0
+      offset_v: 0.6
+      map_to: delta_icc
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    icc_corners: 4
+    search:
+      status: PROPOSED_FROM_LIVE
+      vih:
+        arm: 0.0
+        direction: up
+        no_reverse_in_stage: true
+      vil:
+        arm: VCC
+        direction: down
+        no_reverse_in_stage: true
+      step_ladder_V:
+      - 0.5
+      - 0.2
+      - 0.1
+      - 0.05
+      - 0.01
+      on_hit:
+        skip_rest_of_walk: true
+        rearm: true
+        restart_fraction_back: 0.3
+        next_smaller_step: true
+      after_precision:
+        interpolate: true
+        skip_to: next_test_or_vcc
+      coverage_order:
+      - input_threshold
+      - icc
+      - ii
+      - voh
+      - vol
+      - delta_icc
+  enabled_tests_model:
+  - input_threshold
+  - icc
+  - ii
+  - voh
+  - vol
+  - delta_icc
+  gaps:
+  - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
+  - vcc_grid/vcc_plan CONFIRMED from SoT VIH/VIL bands; do not invent extra rows
+  - dc_limits.VOH/VOL CONFIRMED 6-load SoT copy (0.1mA band + named high-load incl 24mA)
+  - IOZ OFF
+  - OR isolation other=L
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid + VOH/VOL CONFIRMED from SoT). Fail-closed remain
+    stable_eps_A null; do not invent.

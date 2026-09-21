@@ -74,3 +74,11 @@ owners:
   default_package: TSSOP14
   parts:
   - rs0204
+- id: chun_tak
+  label: Chun Tak
+  default_family: logic
+  default_part: rs1gt34
+  default_component: Logic
+  default_package: SOT23-5
+  parts:
+  - rs1gt34

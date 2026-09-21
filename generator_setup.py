@@ -8,6 +8,28 @@ import time
     # time.sleep(0.5)
     # psu.write(":OUTP CH1,ON")
 
+def setup_dc(gen, ch, voltage):
+    """DC level on an AWG channel. Returns True on success.
+
+    Path B Logic DC and existing family bodies import this. Offset is the
+    DC voltage (Rigol DG: APPL:DC freq,amp,offset -- freq/amp ignored).
+    """
+    try:
+        v = float(voltage)
+        gen.write(f":SOUR{ch}:APPL:DC DEF,DEF,{v}")
+        gen.write(f":OUTP{ch} ON")
+        return True
+    except Exception:
+        try:
+            v = float(voltage)
+            gen.write(f":SOUR{ch}:FUNC DC")
+            gen.write(f":SOUR{ch}:VOLT:OFFS {v}")
+            gen.write(f":OUTP{ch} ON")
+            return True
+        except Exception:
+            return False
+
+
 def setup_square(gen, ch, freq, vpp, offset, duty=50):
     gen.write(f":SOUR{ch}:APPL:SQU {freq},{vpp},{offset},0")
     gen.write(f":SOUR{ch}:FUNC:SQU:DCYC {duty}")

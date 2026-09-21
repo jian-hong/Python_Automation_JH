@@ -1,0 +1,135 @@
+# RS1GT00 TTL NAND-2 -- GT-wave 2026-09-21. Function CONFIRMED.
+# ICCT maps to delta_icc at GT-family 3.4V (do not invent 0.6). Unsigned VIH/VIL/VOH/VOL HOLD.
+
+part: RS1GT00
+model: RS1GT00
+component: Logic
+package: SOT23
+version: Version_1
+sample_size: 4
+year: "2026"
+part_key: rs1gt00
+product_class: logic
+vcc: 5.0
+current_limit: 0.05
+timing:
+  timeout_s: 4.0
+  settle_s: 0.3
+enabled_tests:
+  - tp
+  - supply_current
+  - input_threshold
+  - icc
+  - ii
+  - delta_icc
+fixture_modes:
+  LOGIC:
+    label: "Logic board (RS1GT00 TTL NAND)"
+    board_class: general
+    checklist:
+      - "RS1GT00 TTL NAND-2. CONFIRMED function 2026-09-21. Unsigned VIH/VIL/VOH/VOL HOLD."
+      - "ICCT maps to delta_icc at one_input_V 3.4 (GT family). Do not invent 0.6."
+      - "oe none. IOZ OFF. Do not tick voh/vol until CONFIRMED loads."
+    tests: [tp, supply_current, input_threshold, icc, ii, delta_icc]
+
+product_model:
+  part: RS1GT00
+  status: CONFIRMED
+  source_card: RS1GT00_card_CONFIRMED.md
+  confirm_note: "GT-wave 2026-09-21. TTL NAND function CONFIRMED. ICCT->delta_icc map at 3.4V (do not invent 0.6). Unsigned VIH/VIL/VOH/VOL HOLD. excel_plots UNCONFIRMED."
+  package: SC70-5
+  product_class: gate_nand2
+  schmitt: false
+  oe: none
+  output_pin: Y
+  output_type: push_pull
+  logic_inputs:
+  - A
+  - B
+  pins:
+  - {name: A, role: input}
+  - {name: B, role: input}
+  - {name: GND, role: gnd}
+  - {name: Y, role: output}
+  - {name: VCC, role: vcc}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    B: {src: awg, ch: 2}
+  truth_table:
+    status: CONFIRMED
+    kind: combinational
+    note: TTL NAND Y=NOT(A AND B). Function CONFIRMED (GT-wave). Do not copy G08 AND track.
+    rows:
+    - {A: H, B: H, Y: L}
+    - {A: L, B: H, Y: H}
+    - {A: H, B: L, Y: H}
+    - {A: L, B: L, Y: H}
+  isolation:
+    status: CONFIRMED
+    note: NAND other=H -> invert. Do not copy G08 AND track.
+    tests:
+      A:
+      - {sweep_pin: A, fix: {B: H}, y_expect: invert}
+      B:
+      - {sweep_pin: B, fix: {A: H}, y_expect: invert}
+  vcc_grid:
+    status: UNCONFIRMED
+    stimulus: AWG
+    kind: TTL
+    note: TTL-style VIH/VIL. Band numbers HOLD. Do not copy G08 CMOS 0.65/0.15.
+    ranges: []
+    fixed_points: []
+  pass_mode:
+    icc: max_only
+    delta_icc: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    VOH:
+      status: UNCONFIRMED
+      note: do not invent loads
+    VOL:
+      status: UNCONFIRMED
+      note: do not invent loads
+    ICCT_uA:
+      status: CONFIRMED
+      one_input_V: 3.4
+      map_to: delta_icc
+      note: GT-family ICCT maps to delta_icc at 3.4V -- do not invent 0.6. uA Full HOLD.
+    delta_icc_uA:
+      status: UNCONFIRMED
+      note: Numbers HOLD. delta_icc from ICCT map (3.4) not invented offset_v
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    runner: gate_nand2
+    dual_channel_continue: false
+  gaps:
+  - CONFIRMED TTL NAND + ICCT->delta_icc map 3.4; unsigned vcc_grid / VOH / VOL HOLD; excel_plots UNCONFIRMED
+  - NAND other=H invert; oe none; IOZ OFF
+  - do not invent 0.6 / VOH/VOL loads / VIH/VIL bands
+  - stable_eps_A null
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    csv: sessions/csv/
+    report_pdf: report.pdf
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
+  workbook_policy:
+    golden_auto: one_per_version_overwrite
+    auto: one_per_version_overwrite
+    ultimate_manual: never_auto_write
+    pretty: never_auto_write
+  excel_plots:
+    status: UNCONFIRMED
+    series:
+      - vih_vs_vcc
+      - vil_vs_vcc
+      - icc_vs_vcc
+      - ii_vs_vcc
+      - delta_icc_vs_vcc

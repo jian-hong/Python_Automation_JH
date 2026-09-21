@@ -76,7 +76,8 @@ Full table: [AGENTS.md](AGENTS.md). Cheat sheet:
 | New person | `ate/config/owners.yaml` |
 | Tracking SKU | `ate/config/inventory.yaml` |
 | Part recipe / enabled tests | `ate/config/parts/<key>.yaml` |
-| New measurement | `ate/tests/<family>/` + `register(TestSpec)` |
+| New measurement | Path A `ate/tests/<family>/` + `register(TestSpec)`; Path B `docs/LOGIC_DC.md`; Path C Setup Detected tests -> Wrap |
+| Logic DC SKU | `docs/LOGIC_DC.md` (STANDARD FORMAT) -- truth + pins + limits, not a forked runner. AE/FAE: `HANDOVER.md` |
 | New family | Setup Import family or `extra_families.yaml` |
 | Photo cells | campaign `_manifest/sheet_map.yaml` |
 | Console UI | `ate/ui/web/` + UI_CONTRACT |
@@ -99,6 +100,8 @@ Run the check that matches the layer you changed. More commands in AGENTS.md.
 
 | Doc | Use it for |
 |-----|------------|
+| [HANDOVER.md](HANDOVER.md) | AE/FAE Path B last-day map (add part, status table, physics locks) |
+| [docs/LOGIC_DC_HANDOVER.md](docs/LOGIC_DC_HANDOVER.md) | Same Path B handover (docs twin) |
 | [STATUS.md](STATUS.md) | Boss / stakeholder: Done, Ongoing, Not complete |
 | [docs/SHIP_NEXT.md](docs/SHIP_NEXT.md) | Printable next waves: A19 Excel, A20 limits/PDF, A21 UX, how to ship |
 | [AGENTS.md](AGENTS.md) | Vibe-code / agent: where to edit, add user/version, do-not list |

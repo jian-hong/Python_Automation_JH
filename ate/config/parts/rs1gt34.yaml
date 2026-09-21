@@ -1,28 +1,298 @@
-# RS1GT34 Logic buffer -- Qualification Main SOT-353. Fill enabled_tests / Wrap as needed.
+# RS1GT34 Logic buffer -- Path B CONFIRMED.
+# CONFIRMED_BY: Jian Hong @ 2026-09-18. Source: RS1GT34_card_CONFIRMED.md
+# LIVE session_2026-09-17_174350 measured; formal unlock = this CONFIRM.
+# Copy from attached CONFIRMED product_model. Do not invent extra loads / nets / 0.6.
+# No ioz (oe none). delta_icc ON -- ICCT 500uA @5.5 one_in@3.4 (not VCC-0.6).
+# Owner: Chun Tak / Core AE OK.
 
 part: RS1GT34
-model: RS1GT34XC5
+model: RS1GT34
 component: Logic
-package: SOT-353
+device: RS1GT34
+package: SOT23-5
 version: Version_1
-sample_size: 4
+sample_size: 1
 year: "2026"
+owner: chun_tak
 part_key: rs1gt34
 product_class: logic
+
 vcc: 5.0
 current_limit: 0.10
 timing:
   timeout_s: 4.0
   settle_s: 0.3
+
+# CONFIRMED VOH/VOL. 100uA band VCC-0.1 on merged vcc_list
+# (fixed 2.0/3.3 + range 4.5-5.5 step 0.1). High-load only at card-named VCC.
+# VOH min = VCC-0.1 at 100uA. PSU CH2 is Y-load (pin Y; Path B fixture).
+voh_table:
+  - {id: VOH_2p0V_100uA, vcc: 2.0, ioh_a: -0.0001, spec_min: 1.9}
+  - {id: VOH_3p3V_100uA, vcc: 3.3, ioh_a: -0.0001, spec_min: 3.2}
+  - {id: VOH_4p5V_100uA, vcc: 4.5, ioh_a: -0.0001, spec_min: 4.4}
+  - {id: VOH_4p6V_100uA, vcc: 4.6, ioh_a: -0.0001, spec_min: 4.5}
+  - {id: VOH_4p7V_100uA, vcc: 4.7, ioh_a: -0.0001, spec_min: 4.6}
+  - {id: VOH_4p8V_100uA, vcc: 4.8, ioh_a: -0.0001, spec_min: 4.7}
+  - {id: VOH_4p9V_100uA, vcc: 4.9, ioh_a: -0.0001, spec_min: 4.8}
+  - {id: VOH_5p0V_100uA, vcc: 5.0, ioh_a: -0.0001, spec_min: 4.9}
+  - {id: VOH_5p1V_100uA, vcc: 5.1, ioh_a: -0.0001, spec_min: 5.0}
+  - {id: VOH_5p2V_100uA, vcc: 5.2, ioh_a: -0.0001, spec_min: 5.1}
+  - {id: VOH_5p3V_100uA, vcc: 5.3, ioh_a: -0.0001, spec_min: 5.2}
+  - {id: VOH_5p4V_100uA, vcc: 5.4, ioh_a: -0.0001, spec_min: 5.3}
+  - {id: VOH_5p5V_100uA, vcc: 5.5, ioh_a: -0.0001, spec_min: 5.4}
+  - {id: VOH_2p0V_8mA, vcc: 2.0, ioh_a: -0.008, spec_min: 1.6}
+  - {id: VOH_3p3V_24mA, vcc: 3.3, ioh_a: -0.024, spec_min: 2.5}
+  - {id: VOH_4p5V_32mA, vcc: 4.5, ioh_a: -0.032, spec_min: 3.8}
+  - {id: VOH_5p0V_32mA, vcc: 5.0, ioh_a: -0.032, spec_min: 4.2}
+  - {id: VOH_5p5V_32mA, vcc: 5.5, ioh_a: -0.032, spec_min: 4.8}
+vol_table:
+  - {id: VOL_2p0V_100uA, vcc: 2.0, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_3p3V_100uA, vcc: 3.3, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p5V_100uA, vcc: 4.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p6V_100uA, vcc: 4.6, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p7V_100uA, vcc: 4.7, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p8V_100uA, vcc: 4.8, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p9V_100uA, vcc: 4.9, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p0V_100uA, vcc: 5.0, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p1V_100uA, vcc: 5.1, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p2V_100uA, vcc: 5.2, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p3V_100uA, vcc: 5.3, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p4V_100uA, vcc: 5.4, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p5V_100uA, vcc: 5.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_2p0V_8mA, vcc: 2.0, iol_a: 0.008, spec_max: 0.45}
+  - {id: VOL_3p3V_24mA, vcc: 3.3, iol_a: 0.024, spec_max: 0.55}
+  - {id: VOL_4p5V_32mA, vcc: 4.5, iol_a: 0.032, spec_max: 0.55}
+  - {id: VOL_5p0V_32mA, vcc: 5.0, iol_a: 0.032, spec_max: 0.5}
+  - {id: VOL_5p5V_32mA, vcc: 5.5, iol_a: 0.032, spec_max: 0.45}
+
+# Path B DC ids. n=1 Y=A. No ioz (oe none). No vth (not Schmitt).
+# delta_icc ON -- ICCT mapped (500uA @5.5V one_in@3.4V). Do not invent 0.6.
 enabled_tests:
-  - tp
-  - ten
-  - tdis
-  - supply_current
+  - input_threshold
+  - icc
+  - ii
+  - voh
+  - vol
+  - delta_icc
+
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1GT34)"
+    label: "Logic board (RS1GT34 / Path B CONFIRMED)"
     board_class: general
     checklist:
-      - "RS1GT34 is a single non-inverting buffer."
-    tests: [tp, ten, tdis, supply_current]
+      - "RS1GT34 is a single non-inverting buffer. Path B CONFIRMED Jian Hong 2026-09-18. This console check is not a Verify PASS claim."
+      - "PSU_MSO: PSU CH1=VCC; PSU CH2=Y-load for voh/vol (pin Y, Path B fixture); PSU CH3=A; DMM/SCOPE on Y. NC not wired. Do not invent AWG Freq/Amp."
+      - "vcc_grid CONFIRMED: fixed 2.0 (VIH>=1.0 VIL<=0.3) / 3.3 (VIH>=1.5 VIL<=0.55); range 4.5-5.5 step 0.1 (VIH>=2.0 VIL<=0.8)."
+      - "voh/vol CONFIRMED tables (100uA on merged vcc_list + named high-load). II +/-1uA +25C judged; Full +/-5uA documented. ICC 1uA/+25C judged; Full 10uA documented."
+      - "VOL resume (LIVE): recable PSU CH2 Y-load from VOH sink 0V to VOL source = VCC. Keep CH1=VCC, CH3=A, DMM on Y. Tick vol. Judge VOL <= max (max_only). Do not invent VOL measured. live.vol stays NOT_RUN until this session. Do not copy VOH LIVE numbers onto VOL."
+      - "delta_icc ON: ICCT 500uA @5.5V one_in@3.4V. Do not invent delta_offset_v=0.6."
+      - "oe none: do not enable ioz. n=1. Owner Chun Tak / Core AE OK. Excel: auto overwrite Version; pretty never auto."
+    tests:
+      - input_threshold
+      - icc
+      - ii
+      - voh
+      - vol
+      - delta_icc
+
+product_model:
+  part: RS1GT34
+  status: CONFIRMED
+  confirmed_by: Jian Hong
+  confirmed_at: "2026-09-18"
+  source_card: RS1GT34_card_CONFIRMED.md
+  truth_table_status: CONFIRMED
+  isolation_status: CONFIRMED
+  schmitt: false
+  oe: none
+  output_pin: Y
+  vcc_op_min: 2.0
+  vcc_op_max: 5.5
+  vcc_op_status: RANGE_METADATA
+  vcc_list_status: CONFIRMED
+  logic_inputs: [A]
+  # CONFIRMED card: SOT23-5 1=NC 2=A 3=GND 4=Y 5=VCC
+  pins:
+    - {name: NC, role: nc, number: 1}
+    - {name: A, role: input, number: 2}
+    - {name: GND, role: gnd, number: 3}
+    - {name: Y, role: output, number: 4}
+    - {name: VCC, role: vcc, number: 5}
+  pin_drive:
+    A: {src: psu, ch: 3}
+    VCC: {src: psu, ch: 1}
+  vcc_grid:
+    status: CONFIRMED
+    stimulus: PSU_MSO
+    pass_mode: {VIH: min_only, VIL: max_only}
+    fixed_points:
+      - {vcc: 2.0, VIH_min_V: 1.0, VIL_max_V: 0.3}
+      - {vcc: 3.3, VIH_min_V: 1.5, VIL_max_V: 0.55}
+    ranges:
+      - {start: 4.5, stop: 5.5, step: 0.1, VIH_min_V: 2.0, VIL_max_V: 0.8, label: "4.5-5.5 band"}
+  recipe:
+    threshold_step_v: 0.05
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null  # current settle: null = NON_TIGHT; do not invent uA
+    settle_timeout_s: 2.0
+    icc_corners: 2  # 2^1
+    # recipe.delta_offset_v omitted -- ICCT is 500uA @5.5 one_in@3.4, not VCC-0.6
+    search:
+      status: PROPOSED_FROM_LIVE
+      vih: {arm: 0.0, direction: up, no_reverse_in_stage: true}
+      vil: {arm: VCC, direction: down, no_reverse_in_stage: true}
+      step_ladder_V: [0.5, 0.2, 0.1, 0.05, 0.01]
+      step_select: "largest step compatible with card |limit|"
+      on_hit: {skip_rest_of_walk: true, rearm: true, restart_fraction_back: 0.3, next_smaller_step: true}
+      after_precision: {interpolate: true, skip_to: next_test_or_vcc}
+      coverage_order: [input_threshold, icc, ii, voh, vol, delta_icc]
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  limit_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    icc: {spec_id: ICC_uA, limit_mode: max_only, status: CONFIRMED, plus25C_max: 1.0, Full: 10.0}
+    delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only, status: CONFIRMED, map_from: ICCT_uA}
+    ICCT_uA:
+      status: CONFIRMED
+      Full: 500.0
+      vcc: 5.5
+      one_input_V: 3.4
+      map_to: delta_icc
+      pass_mode: max_only
+    ii: {spec_id: II_uA, limit_mode: max_only, status: CONFIRMED, plus25C_max: 1.0, Full: 5.0}
+    Ioff_uA: {plus25C_max: 1.0, Full: 10.0, note: "VCC=0; not IOZ"}
+    VOH:
+      status: CONFIRMED
+      loads:
+      - {IOH_mA: -0.1, vcc: [2.0, 5.5], VOH_min: "VCC-0.1"}
+      - {IOH_mA: -8, vcc: 2.0, VOH_min_V: 1.6}
+      - {IOH_mA: -24, vcc: 3.3, VOH_min_V: 2.5}
+      - {IOH_mA: -32, vcc: 4.5, VOH_min_V: 3.8}
+      - {IOH_mA: -32, vcc: 5.0, VOH_min_V: 4.2}
+      - {IOH_mA: -32, vcc: 5.5, VOH_min_V: 4.8}
+    VOL:
+      status: CONFIRMED
+      loads:
+      - {IOL_mA: 0.1, vcc: [2.0, 5.5], VOL_max_V: 0.1}
+      - {IOL_mA: 8, vcc: 2.0, VOL_max_V: 0.45}
+      - {IOL_mA: 24, vcc: 3.3, VOL_max_V: 0.55}
+      - {IOL_mA: 32, vcc: 4.5, VOL_max_V: 0.55}
+      - {IOL_mA: 32, vcc: 5.0, VOL_max_V: 0.5}
+      - {IOL_mA: 32, vcc: 5.5, VOL_max_V: 0.45}
+    voh: {status: CONFIRMED, note: "CONFIRMED IOH grid; PSU CH2 Y-load"}
+    vol: {status: CONFIRMED, note: "CONFIRMED IOL grid; PSU CH2 Y-load"}
+    input_threshold: {status: CONFIRMED, note: "VIH/VIL from vcc_grid CONFIRMED"}
+  wire_map:
+    source: pins+pin_drive
+    status: EDITABLE
+    note: "From CONFIRMED pins + pin_drive. PSU CH1=VCC. PSU CH2=Y-load (pin Y; voh/vol). PSU CH3=A. NC not wired. Do not invent AWG nets."
+    psu:
+      CH1: {pin: VCC, number: 5, role: vcc}
+      CH2: {pin: Y, number: 4, role: output, use: load}
+      CH3: {pin: A, number: 2, role: input}
+    gnd: {pin: GND, number: 3, role: gnd}
+    tests:
+      input_threshold:
+        psu: [CH1, CH3]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      icc:
+        psu: [CH1, CH3]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      delta_icc:
+        psu: [CH1, CH3]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      ii:
+        psu: [CH1, CH3]
+        dmm: A
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      voh:
+        psu: [CH1, CH2, CH3]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      vol:
+        psu: [CH1, CH2, CH3]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+  settle_prompt:
+    wait: true
+    voltage: "V eps/N: wait settle_s then stable_n within stable_eps_V; timeout hard-FAIL"
+    current_null: "I NON_TIGHT: wait settle_s once then measure (stable_eps_A null; not greenable as tight-settle)"
+    current_tight: "I tight: wait settle_s then stable_n within stable_eps_A; timeout hard-FAIL"
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    csv: sessions/csv/
+    report_pdf: report.pdf
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
+  # Session notes. Sibling of data_paths -- not a data_paths key (97/126/34 exact-match).
+  live:
+    voh:
+      status: LIVE_PASS
+      when: "2026-09-18"
+      session_note: "JH room VOH LIVE SUCCESS. Board still wired for VOH. VOL needs board change -- do not invent VOL."
+      golden_auto: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+      sessions: sessions/
+      pass_mode: min_only
+      rows:
+        - {IOH_mA: -8, vcc: 2.0, spec_min: 1.6, measured: 1.7089, result: PASS}
+        - {IOH_mA: -24, vcc: 3.3, spec_min: 2.5, measured: 2.8968, result: PASS}
+        - {IOH_mA: -32, vcc: 4.5, spec_min: 3.8, measured: 4.0695, result: PASS}
+        - {IOH_mA: -32, vcc: 5.0, spec_min: 4.2, measured: 4.5867, result: PASS}
+        - {IOH_mA: -32, vcc: 5.5, spec_min: 4.8, measured: 5.0992, result: PASS}
+    vol:
+      status: NOT_RUN
+      note: "board change required; do not invent VOL measured"
+  workbook_policy:
+    golden_auto: one_per_version_overwrite
+    auto: one_per_version_overwrite
+    ultimate_manual: never_auto_write
+    pretty: never_auto_write
+  excel_plots:
+    status: CONFIRMED
+    series:
+      - vih_vs_vcc
+      - vil_vs_vcc
+      - icc_vs_vcc
+      - delta_icc_vs_vcc
+      - ii_vs_vcc
+      - voh_at_ioh
+      - vol_at_iol
+  # CONFIRMED card: n=1 Y=A (non-inverting buffer). Jian Hong 2026-09-18.
+  truth_table:
+    status: CONFIRMED
+    source: "RS1GT34 RevA.1.1 §4"
+    rows:
+      - {A: L, Y: L}
+      - {A: H, Y: H}
+  isolation:
+    status: CONFIRMED
+    source: "derived from truth_table (Y=A); CONFIRMED"
+    tests:
+      A:
+        - {sweep_pin: A, fix: {}, y_expect: track}
+  gaps:
+    - "stable_eps_A null -- NON_TIGHT current settle until AE sets"
+    - "IOZ OFF (no OE)"
+    - "ICCT maps to delta_icc: 500uA @5.5 one_in@3.4 -- do not invent delta_offset_v=0.6"
+    - "VOL LIVE NOT_RUN -- board change required; do not invent VOL measured"
+

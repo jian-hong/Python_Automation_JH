@@ -31,6 +31,10 @@ _LOGIC_PROBE_IDS = frozenset(
         "vih_vil",
         "voh_load",
         "vol_load",
+        "input_threshold",
+        "delta_icc",
+        "ii",
+        "ioz",
     }
 )
 _OPA_BOARD_MODES = frozenset({"G11", "G_NEG100", "G201", "G1001"})
@@ -110,6 +114,27 @@ def _check_family_conditions() -> None:
     _assert_logic_catalog(ariff_cat)
     if "delta_supply_current" not in (ariff_cat.get("tests") or {}):
         raise AssertionError("rs1g08 catalog must include delta_supply_current")
+    if "input_threshold" not in (ariff_cat.get("tests") or {}):
+        raise AssertionError("rs1g08 catalog must include Path B input_threshold")
+    if "icc" not in (ariff_cat.get("tests") or {}):
+        raise AssertionError("rs1g08 catalog must include Path B icc")
+    if "vccb" in ((ariff_cat.get("tests") or {}).get("icc") or {}):
+        raise AssertionError("rs1g08 icc must not inherit RS0204 vccb")
+    rs08_ldc = ariff_cat.get("logic_dc") or {}
+    if int(rs08_ldc.get("icc_corners") or 0) != 4:
+        raise AssertionError(f"rs1g08 logic_dc icc_corners must be 4, got {rs08_ldc}")
+    rs97_cat = catalog_for_ui("rs1g97", family="logic")
+    _assert_logic_catalog(rs97_cat)
+    rs97_ldc = rs97_cat.get("logic_dc") or {}
+    if int(rs97_ldc.get("icc_corners") or 0) != 8:
+        raise AssertionError(f"rs1g97 logic_dc icc_corners must be 8, got {rs97_ldc}")
+    if "ioz" in (rs97_cat.get("tests") or {}):
+        raise AssertionError("rs1g97 catalog must not include ioz")
+    for banned in ("ioff", "ioff_leakage", "off_current"):
+        if banned in (rs97_cat.get("tests") or {}):
+            raise AssertionError(f"rs1g97 catalog must not include {banned}")
+    if "input_threshold" in (logic_cat.get("tests") or {}):
+        raise AssertionError("rs29511 catalog must not include Path B input_threshold")
     if "cap_load" in (ariff_cat.get("tests") or {}):
         raise AssertionError("rs1g08 catalog must not include Soo cap_load")
     for need in ("vih_vil", "voh_load", "vol_load", "supply_current_sweep"):
@@ -131,6 +156,8 @@ def _check_family_conditions() -> None:
         raise AssertionError("rs0204 catalog must not include Soo cap_load")
     if "gbw" in (rs0204_cat.get("tests") or {}):
         raise AssertionError("rs0204 catalog must not expose gbw")
+    if rs0204_cat.get("logic_dc"):
+        raise AssertionError("rs0204 must not grow a Path B logic_dc catalog (dual-rail stays rs0204.py)")
 
     demo_cat = catalog_for_ui("rs622", family="demo_ingest")
     _assert_logic_catalog(demo_cat)

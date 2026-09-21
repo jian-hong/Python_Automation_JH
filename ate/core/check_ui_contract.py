@@ -77,6 +77,24 @@ def main() -> int:
         errors.append("STS datalog export / datasheet fetch controls missing")
     if 'id="btn-fill-excel"' not in html:
         errors.append("Fill Excel numbers control missing")
+    if 'id="panel-logic-dc"' not in html or 'id="logic-dc-truth"' not in html:
+        errors.append("Logic DC product_model panel missing")
+    if 'id="logic-dc-isolation"' not in html or 'id="logic-dc-pass-mode"' not in html:
+        errors.append("Logic DC isolation/pass_mode editors missing")
+    if 'id="logic-dc-vcc-list"' not in html or 'id="logic-dc-gaps"' not in html:
+        errors.append("Logic DC vcc_list/gaps fields missing")
+    if 'id="btn-save-logic-dc"' not in html:
+        errors.append("Logic DC save control missing")
+    if 'id="btn-save-test-params"' not in html or 'id="logic-dc-body"' not in html:
+        errors.append("Logic DC recipe panel / Save Version overlay missing")
+    if 'id="add-test-format"' not in html or "STANDARD FORMAT" not in html:
+        errors.append("STANDARD FORMAT checklist (#add-test-format) missing")
+    if 'id="btn-save-pass-mode"' not in html:
+        errors.append("Test program Save pass_mode overlay missing")
+    tp_at = html.find("<h2>Test program</h2>")
+    fmt_at = html.find('id="add-test-format"')
+    if tp_at < 0 or fmt_at < 0 or not (tp_at < fmt_at < tp_at + 4000):
+        errors.append("STANDARD FORMAT checklist must live on Test program (always visible)")
 
     js_path = WEB / "app.js"
     if not js_path.is_file():
@@ -87,6 +105,20 @@ def main() -> int:
             errors.append("app.js has invalid if ! without parentheses")
         if "inventoryRows" not in js or "loadInventory" not in js:
             errors.append("Setup tracking sheet must load inventory")
+        if "loadLogicDcPanel" not in js or "get_product_model" not in js:
+            errors.append("Logic DC panel must load get_product_model")
+        if "save_product_model" not in js or "saveLogicDcPanel" not in js:
+            errors.append("Logic DC panel must save product_model")
+        if "renderLogicDc" not in js or "save_test_params" not in js or "pass_mode" not in js:
+            errors.append("Logic DC recipe panel / pass_mode visualisation missing")
+        if "test-pass-mode" not in js or "passModeSelect" not in js or "fail-open" not in js:
+            errors.append("Test program pass_mode selects missing")
+        if "icc_corner_rows" not in js or "Enabled tests" not in js:
+            errors.append("Logic DC panel must visualise enabled tests and ICC corners")
+        if "saveTestParamsOverlay" not in js or "btn-save-pass-mode" not in js:
+            errors.append("Test program / Logic DC must share saveTestParamsOverlay")
+        if "wirePassModeSync" not in js:
+            errors.append("pass_mode selects must sync Test program and Logic DC")
         if "!(inventoryRows || []).length" not in js:
             errors.append("family rail click must retry loadInventory when tracking rows are empty")
         combo = re.search(

@@ -1,7 +1,3 @@
-# RS1G14 Logic (Eugene) — reuse Ariff DC slots via enabled_tests
-# Tree: #Test_Database/Logic/RS1G14/SOT23/Version_1
-# Parked: pvt, nvt, cpd, cin
-
 part: RS1G14
 model: RS1G14
 component: Logic
@@ -9,32 +5,262 @@ device: RS1G14
 package: SOT23
 version: Version_1
 sample_size: 4
-year: "2026"
+year: '2026'
 owner: eugene
 part_key: rs1g14
-
 vcc: 5.0
-current_limit: 0.10
+current_limit: 0.1
 htol_ns: 230
 timing:
   timeout_s: 4.0
   settle_s: 0.3
-
 enabled_tests:
-  - supply_current
-  - delta_supply_current
-  - ioff_leakage
-  - input_leakage_sweep
-
+- supply_current
+- delta_supply_current
+- ioff_leakage
+- input_leakage_sweep
+- vth
+- icc
+- ii
+- delta_icc
+- voh
+- vol
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1G14 / Eugene)"
+    label: Logic board (RS1G14 / Eugene)
     board_class: general
     checklist:
-      - "Logic fixture for RS1G14"
-      - "DMM required for DC / leakage rows"
+    - Logic fixture for RS1G14
+    - DMM required for DC / leakage rows
     tests:
-      - supply_current
-      - delta_supply_current
-      - ioff_leakage
-      - input_leakage_sweep
+    - supply_current
+    - delta_supply_current
+    - ioff_leakage
+    - input_leakage_sweep
+    - vth
+    - icc
+    - ii
+    - delta_icc
+    - voh
+    - vol
+product_model:
+  part: RS1G14
+  status: CONFIRMED
+  source_card: RS1G14_card_CONFIRMED.md
+  package: SC70-5
+  schmitt: true
+  oe: none
+  output_type: push_pull
+  output_pin: Y
+  vcc_op_min: 1.65
+  vcc_op_max: 5.5
+  logic_inputs:
+  - A
+  pins:
+  - name: NC
+    role: nc
+    number: 1
+  - name: A
+    role: input
+    number: 2
+  - name: GND
+    role: gnd
+    number: 3
+  - name: Y
+    role: output
+    number: 4
+  - name: VCC
+    role: vcc
+    number: 5
+  truth_table:
+    status: CONFIRMED
+    rows:
+    - A: H
+      Y: L
+    - A: L
+      Y: H
+  isolation:
+    status: CONFIRMED
+    tests:
+      A:
+      - sweep_pin: A
+        fix: {}
+        y_expect: invert
+  vcc_grid:
+    status: CONFIRMED
+    stimulus: PSU_MSO
+    kind: schmitt_VT
+    fixed_points:
+    - vcc: 1.65
+      VT_plus:
+      - 0.75
+      - 1.05
+      VT_minus:
+      - 0.3
+      - 0.6
+      dVT:
+      - 0.35
+      - 0.6
+    - vcc: 2.3
+      VT_plus:
+      - 1.25
+      - 1.55
+      VT_minus:
+      - 0.35
+      - 0.65
+      dVT:
+      - 0.6
+      - 1.2
+    - vcc: 3.0
+      VT_plus:
+      - 1.5
+      - 2.1
+      VT_minus:
+      - 0.45
+      - 0.75
+      dVT:
+      - 1.05
+      - 1.65
+    - vcc: 4.5
+      VT_plus:
+      - 2.3
+      - 3.0
+      VT_minus:
+      - 0.7
+      - 1.0
+      dVT:
+      - 1.6
+      - 2.0
+    - vcc: 5.5
+      VT_plus:
+      - 2.8
+      - 3.4
+      VT_minus:
+      - 0.85
+      - 1.15
+      dVT:
+      - 1.95
+      - 2.25
+    ranges: []
+    note: CONFIRMED Schmitt VT+/- / dVT from RS1G14_card_CONFIRMED (SoT copy; do not invent)
+  pass_mode:
+    vth_vt_plus: range
+    vth_vt_minus: range
+    hysteresis: range
+    voh: min_only
+    vol: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+  dc_limits:
+    VOH:
+      status: CONFIRMED
+      loads:
+      - IOH_mA: -0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOH_min: VCC-0.1
+      - IOH_mA: -4
+        vcc: 1.65
+        VOH_min_V: 1.2
+      - IOH_mA: -8
+        vcc: 2.3
+        VOH_min_V: 1.9
+      - IOH_mA: -16
+        vcc: 3.0
+        VOH_min_V: 2.4
+      - IOH_mA: -24
+        vcc: 3.0
+        VOH_min_V: 2.3
+      - IOH_mA: -32
+        vcc: 4.5
+        VOH_min_V: 3.8
+    VOL:
+      status: CONFIRMED
+      loads:
+      - IOL_mA: 0.1
+        vcc:
+        - 1.65
+        - 5.5
+        VOL_max_V: 0.1
+      - IOL_mA: 4
+        vcc: 1.65
+        VOL_max_V: 0.45
+      - IOL_mA: 8
+        vcc: 2.3
+        VOL_max_V: 0.3
+      - IOL_mA: 16
+        vcc: 3.0
+        VOL_max_V: 0.4
+      - IOL_mA: 24
+        vcc: 3.0
+        VOL_max_V: 0.55
+      - IOL_mA: 32
+        vcc: 4.5
+        VOL_max_V: 0.55
+    II_uA:
+      Full: 5.0
+    ICC_uA:
+      Full: 10.0
+    ICCT_uA:
+      status: UNCONFIRMED
+      Full: 500.0
+      vcc_min: 3.0
+      offset_v: 0.6
+      map_to: delta_icc
+  recipe:
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null
+    settle_timeout_s: 2.0
+    icc_corners: 2
+    search:
+      status: PROPOSED_FROM_LIVE
+      vih:
+        arm: 0.0
+        direction: up
+        no_reverse_in_stage: true
+      vil:
+        arm: VCC
+        direction: down
+        no_reverse_in_stage: true
+      step_ladder_V:
+      - 0.5
+      - 0.2
+      - 0.1
+      - 0.05
+      - 0.01
+      on_hit:
+        skip_rest_of_walk: true
+        rearm: true
+        restart_fraction_back: 0.3
+        next_smaller_step: true
+      after_precision:
+        interpolate: true
+        skip_to: next_test_or_vcc
+      coverage_order:
+      - vth
+      - icc
+      - ii
+      - voh
+      - vol
+      - delta_icc
+  enabled_tests_model:
+  - vth
+  - icc
+  - ii
+  - delta_icc
+  - voh
+  - vol
+  gaps:
+  - JH CONFIRMED 2026-09-17 grounded fields (truth/pins/isolation). Status gate only -- not a bench green.
+  - vcc_grid/vcc_plan CONFIRMED Schmitt VT+/- / dVT from signed card/SoT; do not invent extra rows
+  - Schmitt VT+/- range -- not plain VIH/VIL
+  - IOZ OFF
+  - voh/vol enabled: push_pull + CONFIRMED SoT dc_limits.VOH/VOL
+  - VT+/- / dVT CONFIRMED from RS1G14_card_CONFIRMED (spot-check vs card)
+  - Data retention MAX UNSURE (PDF MIN 1.5 only -- do not invent MAX)
+  confirmed_by: Jian Hong 2026-09-18 (vcc_grid + VOH/VOL CONFIRMED from signed card/SoT). Fail-closed remain
+    stable_eps_A null; data retention MAX UNSURE; do not invent.

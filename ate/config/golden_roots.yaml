@@ -1,8 +1,14 @@
 # Optional golden codebases to scan for def test_* (AST only; never execute).
 # Missing paths are skipped. ate/tests is always scanned.
+# Relative paths resolve against the repo root.
+#
+# Colleague trees are READ-ONLY patterns. Do not scrape params into YAML.
+# See Lim DC goldens: goldens/see_lin/<PART>/current_tests.py with fallback
+# C:/Users/OoiJianHong/Downloads/See Lim Repo (ate/tests/logic/seelim_dc.py).
+# Path B START runtime is ate/tests/logic/logic_dc.py, not those goldens.
 #
 # roots:
-#   - path: absolute or ~ path
+#   - path: absolute, ~, or repo-relative path
 #     label: short name for UI
 
 roots:
@@ -10,3 +16,11 @@ roots:
     label: LabAutomation-1
   - path: "C:/Users/OoiJianHong/LabAutomation_14.7"
     label: LabAutomation_14.7
+  - path: "goldens/see_lin"
+    label: see_lin
+  - path: "C:/Users/OoiJianHong/Downloads/See Lim Repo"
+    label: See-Lim-Repo
+  - path: "C:/Users/OoiJianHong/Downloads/Ariff Repo"
+    label: Ariff-Repo
+  - path: "C:/Users/OoiJianHong/Downloads/Eugene Repo"
+    label: Eugene-Repo

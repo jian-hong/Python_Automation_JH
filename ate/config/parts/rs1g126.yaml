@@ -1,5 +1,7 @@
-# RS1G126 Logic bus buffer — RUN-IC small logic. Owner Lim.
-# Lim codes in Downloads/code/RS1G126 (input() waits) — not imported.
+# RS1G126 Logic bus buffer -- Path B product_model.
+# ten/tdis stay AC. Lim Downloads/code not imported.
+# truth_table / isolation: CONFIRMED. Jian Hong signed 2026-09-17
+# (RS1G126_card_CONFIRMED.md).
 
 part: RS1G126
 model: RS1G126
@@ -19,25 +21,234 @@ timing:
   timeout_s: 4.0
   settle_s: 0.3
 
+# CONFIRMED VOH/VOL Full load grid (same table as RS1G97). Jian Hong 2026-09-17.
+# 100uA @1.65-5.5 expanded onto CONFIRMED vcc_list only. VOH min = VCC-0.1.
+# PSU CH2 is Y-load: VOH sink rail 0V; VOL source rail = VCC. Not datasheet Vref.
+voh_table:
+  - {id: VOH_1p65V_100uA, vcc: 1.65, ioh_a: -0.0001, spec_min: 1.55}
+  - {id: VOH_2p3V_100uA, vcc: 2.3, ioh_a: -0.0001, spec_min: 2.2}
+  - {id: VOH_3p0V_100uA, vcc: 3.0, ioh_a: -0.0001, spec_min: 2.9}
+  - {id: VOH_4p5V_100uA, vcc: 4.5, ioh_a: -0.0001, spec_min: 4.4}
+  - {id: VOH_5p5V_100uA, vcc: 5.5, ioh_a: -0.0001, spec_min: 5.4}
+  - {id: VOH_1p65V_4mA, vcc: 1.65, ioh_a: -0.004, spec_min: 1.2}
+  - {id: VOH_2p3V_8mA, vcc: 2.3, ioh_a: -0.008, spec_min: 1.9}
+  - {id: VOH_3p0V_16mA, vcc: 3.0, ioh_a: -0.016, spec_min: 2.4}
+  - {id: VOH_3p0V_24mA, vcc: 3.0, ioh_a: -0.024, spec_min: 2.3}
+  - {id: VOH_4p5V_32mA, vcc: 4.5, ioh_a: -0.032, spec_min: 3.8}
+vol_table:
+  - {id: VOL_1p65V_100uA, vcc: 1.65, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_2p3V_100uA, vcc: 2.3, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_3p0V_100uA, vcc: 3.0, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_4p5V_100uA, vcc: 4.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_5p5V_100uA, vcc: 5.5, iol_a: 0.0001, spec_max: 0.1}
+  - {id: VOL_1p65V_4mA, vcc: 1.65, iol_a: 0.004, spec_max: 0.45}
+  - {id: VOL_2p3V_8mA, vcc: 2.3, iol_a: 0.008, spec_max: 0.3}
+  - {id: VOL_3p0V_16mA, vcc: 3.0, iol_a: 0.016, spec_max: 0.4}
+  - {id: VOL_3p0V_24mA, vcc: 3.0, iol_a: 0.024, spec_max: 0.55}
+  - {id: VOL_4p5V_32mA, vcc: 4.5, iol_a: 0.032, spec_max: 0.55}
+
 enabled_tests:
   - tp
   - ten
   - tdis
-  - supply_current
-  - ioff_leakage
-  - input_thresholds
+  - input_threshold
+  - icc
+  - delta_icc
+  - ii
+  - voh
+  - vol
+  - ioz
 
 fixture_modes:
   LOGIC:
-    label: "Logic board (RS1G126 / Lim)"
+    label: "Logic board (RS1G126 / Path B DC)"
     board_class: general
     checklist:
       - "RS1G126 is small logic (bus buffer), not analog switch."
-      - "Lim recipes stay in Downloads/code; ATE uses platform Logic ids."
+      - "OE active high. IOZ when OE inactive (data don't-care, Vout sweep)."
+      - "truth_table.status=CONFIRMED (Jian Hong 2026-09-17). Not a bench green."
+      - "ten/tdis remain AC (Path B DC does not replace them)."
     tests:
       - tp
       - ten
       - tdis
-      - supply_current
-      - ioff_leakage
-      - input_thresholds
+      - input_threshold
+      - icc
+      - delta_icc
+      - ii
+      - voh
+      - vol
+      - ioz
+
+product_model:
+  part: RS1G126
+  status: CONFIRMED
+  confirmed_by: Jian Hong
+  confirmed_at: "2026-09-17"
+  source_card: RS1G126_card_CONFIRMED.md
+  truth_table_status: CONFIRMED
+  isolation_status: CONFIRMED
+  schmitt: false
+  oe:
+    pin: OE
+    active: high
+  output_pin: Y
+  vcc_op_min: 1.65  # range metadata. Sweep is CONFIRMED vcc_list.
+  vcc_op_max: 5.5
+  vcc_op_status: RANGE_METADATA
+  vcc_list: [1.65, 2.3, 3.0, 4.5, 5.5]
+  vcc_list_status: CONFIRMED
+  logic_inputs: [A]
+  pins:
+    - {name: OE, role: oe, number: 1}
+    - {name: A, role: input, number: 2}
+    - {name: GND, role: gnd, number: 3}
+    - {name: Y, role: output, number: 4}
+    - {name: VCC, role: vcc, number: 5}
+  pin_drive:
+    A: {src: awg, ch: 1}
+    OE: {src: awg, ch: 2}
+  recipe:
+    threshold_step_v: 0.05
+    settle_s: 0.05
+    stable_n: 3
+    stable_eps_V: 0.005
+    stable_eps_A: null  # current settle: null = NON_TIGHT; do not invent uA
+    settle_timeout_s: 2.0
+    icc_corners: "data x OE"
+    ioz_when: oe_inactive
+    delta_offset_v: 0.6  # datasheet dICC: one input at VCC-0.6V
+    delta_vcc_min: 3.0
+    # IOZ card: VO=0V to 5.5V, VCC=3.6V, max 10 uA
+    ioz_vcc_list: [3.6]
+    ioz_vout_list: [0.0, 5.5]
+  pass_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    ioz: max_only
+    voh: min_only
+    vol: max_only
+  limit_mode:
+    VIH: min_only
+    VIL: max_only
+    icc: max_only
+    delta_icc: max_only
+    ii: max_only
+    ioz: max_only
+    voh: min_only
+    vol: max_only
+  dc_limits:
+    icc: {spec_id: ICC_uA, limit_mode: max_only}
+    delta_icc: {spec_id: DELTA_ICC_uA, limit_mode: max_only}
+    ii: {spec_id: II_uA, limit_mode: max_only}
+    ioz: {spec_id: IOZ_uA, limit_mode: max_only}
+    voh: {status: CONFIRMED, note: "wired CONFIRMED Full IOH grid; PSU CH2 Y-load"}
+    vol: {status: CONFIRMED, note: "wired CONFIRMED Full IOL grid; PSU CH2 Y-load"}
+  # AE/FAE handoff. From CONFIRMED pins + pin_drive only. Never invent nets.
+  wire_map:
+    source: pins+pin_drive
+    status: CONFIRMED
+    note: "From CONFIRMED pins + pin_drive. PSU CH1=VCC (role vcc). PSU CH2=Y-load (CONFIRMED VOH/VOL fixture). Do not invent nets."
+    psu:
+      CH1: {pin: VCC, number: 5, role: vcc}
+      CH2: {pin: Y, number: 4, role: output, use: load}
+    awg:
+      CH1: {pin: A, number: 2, role: input}
+      CH2: {pin: OE, number: 1, role: oe}
+    gnd: {pin: GND, number: 3, role: gnd}
+    tests:
+      tp:
+        psu: [CH1]
+        awg: [CH1, CH2]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      ten:
+        psu: [CH1]
+        awg: [CH1, CH2]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      tdis:
+        psu: [CH1]
+        awg: [CH1, CH2]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      input_threshold:
+        psu: [CH1]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      icc:
+        psu: [CH1]
+        awg: [CH1, CH2]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      delta_icc:
+        psu: [CH1]
+        awg: [CH1, CH2]
+        dmm: VCC
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      ii:
+        psu: [CH1]
+        awg: [CH1, CH2]
+        dmm: [A]
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      voh:
+        psu: [CH1, CH2]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      vol:
+        psu: [CH1, CH2]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+      ioz:
+        psu: [CH1, CH2]
+        awg: [CH1, CH2]
+        dmm: Y
+        scope: {CH1: {pin: Y, number: 4, role: output, use: debug}}
+  settle_prompt:
+    wait: true
+    voltage: "V eps/N: wait settle_s then stable_n within stable_eps_V; timeout hard-FAIL"
+    current_null: "I NON_TIGHT: wait settle_s once then measure (stable_eps_A null; not greenable as tight-settle)"
+    current_tight: "I tight: wait settle_s then stable_n within stable_eps_A; timeout hard-FAIL"
+  data_paths:
+    excel: "#Test_Database/{Component}/{Part}/{Package}/{Operator}/{Version_N}/workbook/"
+    report: sessions/report.json
+    datalog: sessions/datalog.md
+    csv: sessions/csv/
+    report_pdf: report.pdf
+    records: "{test}/DUT_n/records/"
+    attach: "{test}/DUT_n/"
+  workbook_policy:
+    golden_auto: one_per_version_overwrite
+    auto: one_per_version_overwrite
+    ultimate_manual: never_auto_write
+    pretty: never_auto_write
+  excel_plots:
+    series:
+      - vih_vs_vcc
+      - vil_vs_vcc
+      - icc_vs_vcc
+      - delta_icc_vs_vcc
+      - ii_vs_vcc
+      - voh_at_ioh
+      - vol_at_iol
+      - ioz_vs_vcc
+  # Function table (OE, A -> Y / Z). CONFIRMED Jian Hong 2026-09-17.
+  truth_table:
+    status: CONFIRMED
+    source: "RS1G126_(RevA.4) function table"
+    rows:
+      - {OE: H, A: H, Y: H}
+      - {OE: H, A: L, Y: L}
+      - {OE: L, A: X, Y: Z}
+  isolation:
+    status: CONFIRMED
+    note: "Unused data ties N/A (single data pin). OE active required. Do not invent extra ties."
+    tests:
+      A:
+        - {sweep_pin: A, fix: {OE: H}, y_expect: track}
+  gaps:
+    - "Q1V / automotive: UNSURE on card -- leave unset"
+    - "XDFN6 NC/VCC pin map differs -- package-specific fixture, not invented here"
