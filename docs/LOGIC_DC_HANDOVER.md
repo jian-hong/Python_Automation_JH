@@ -173,6 +173,7 @@ Do not fork these. Missing file = not local-ready.
 - `ate/config/parts/` CONFIRMED + PARKED yamls above (scale-wave unsigned nested fields stay UNCONFIRMED)
 - `docs/datasheet/RS1G00_card_CONFIRMED.md` (and G02/G04/G86/2G08/2G32)
 - `docs/LIVE_MATRIX_17.md`
+- `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`
 
 Checks: `python -m ate.core.check_logic_dc` and `python -m ate.core.check_logic_dc_sim`.
 
