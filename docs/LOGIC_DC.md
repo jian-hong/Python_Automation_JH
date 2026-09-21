@@ -4,7 +4,7 @@ Live console only (`ate/` + worker **8766** + UI **5174**). Vibe-coder map: `AGE
 
 New RS1Gxx (2-input, 3-input, N-input, with/without OE) should not need a forked `logic_dc.py`.
 
-Operator bench (DEMO/SIM vs HUMAN+instruments, Excel/log paths, 97/126 checklist): `docs/LOGIC_DC_OPERATOR.md`. AE/FAE last-day map: `docs/LOGIC_DC_HANDOVER.md` (also repo-root `HANDOVER.md`). Dual-channel Continue (2Gxx): `docs/LOGIC_DC_DUAL_CHANNEL.md`. DEMO/SIM and `check_logic_dc` are **not** a reproduce claim.
+Operator bench (DEMO/SIM vs HUMAN+instruments, Excel/log paths, 97/126 checklist): `docs/LOGIC_DC_OPERATOR.md`. AE/FAE last-day map: `docs/LOGIC_DC_HANDOVER.md` (also repo-root `HANDOVER.md`). LIVE START order: `docs/LIVE_MATRIX_17.md`. Dual-channel Continue (2Gxx): `docs/LOGIC_DC_DUAL_CHANNEL.md`. DEMO/SIM and `check_logic_dc` are **not** a reproduce claim.
 
 ## Which path (labels match Setup)
 
@@ -87,7 +87,7 @@ Aliases accepted: `logic_dc:` (same mapping as `product_model:`); `vcc_sweep_lis
 
 ### What the shared runner derives
 
-- **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4, 07 open-drain n=1 = 2. Sequential (`product_class` / `recipe.runner` contains `sequential`, including RS164 shift-register) is not combinational 2^n -- Path B gate ICC is FAIL-closed. RS1G123 / RS1G74 are dropped/archive optional UNCONFIRMED stubs -- not in the 11 CONFIRMED SIM set; do not invent VT+/- or gate 2^n.
+- **ICC** -- all `2^n` corners (`logic_inputs`; plus OE when `oe != none`). SIM: 2-input AND = 4, 3-input 97 = 8, 126 A+OE = 4, 07 open-drain n=1 = 2. Sequential (`product_class` / `recipe.runner` contains `sequential`, including RS164 shift-register) is not combinational 2^n -- Path B gate ICC is FAIL-closed. RS1G123 / RS1G74 are dropped/archive optional UNCONFIRMED stubs -- not in the 17 CONFIRMED SIM set; do not invent VT+/- or gate 2^n.
 - **VIH/VIL (or VT+/VT-)** -- unused ties from the truth table. Prefer a combo where **Y tracks the swept pin non-inverting**. Invert only when no track combo exists (See Lim RS1G97 algorithm; not a per-SKU hardcoded forever). `isolation_for_run` skips rows marked `PROPOSED` / `HOLD CONFIRM`. Per-VCC VIH min / VIL max come from `vcc_grid` (owning fixed point or range band). Range steps inherit band limits -- never a fixed-point row. `vcc_grid.status` UNCONFIRMED is not greenable. When `recipe.search` is present, `threshold_search.py` walks VIH up / VIL down: limit-scaled first step, on-hit skip rest, no reverse. Missing search keeps `threshold_step_v`.
 - **II** -- per input, VI=0 and VI=max.
 - **Delta ICC** -- one input at VCC-offset, or at `dc_limits.ICCT_uA.one_input_V` when ICCT is mapped. RS1GT34 enables `delta_icc` from ICCT (500uA @5.5V one_in@3.4). Do not invent `delta_offset_v=0.6`. CMOS cards may map `ICCT_uA.offset_v` (on the card, not invented).

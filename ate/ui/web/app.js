@@ -917,10 +917,15 @@ async function loadLogicDcPanel() {
       return;
     }
     const signed = !!data.greenable;
+    const plotsSt = (data.excel_plots && data.excel_plots.status) || "UNCONFIRMED";
+    const gridSt = (data.vcc_grid && data.vcc_grid.status) || "UNCONFIRMED";
     if ($("logic-dc-status")) {
       $("logic-dc-status").textContent =
-        `${data.part || part}  truth_table.status=${data.truth_table_status || "UNCONFIRMED"}  ` +
+        `${data.part || part}  status=${data.status || "UNCONFIRMED"}  ` +
+        `truth_table.status=${data.truth_table_status || "UNCONFIRMED"}  ` +
         `isolation.status=${data.isolation_status || ""}  ` +
+        `vcc_grid.status=${gridSt}  ` +
+        `excel_plots.status=${plotsSt}  ` +
         (signed ? "Datasheet-signed" : "not Datasheet-signed; not greenable");
     }
     const gaps = data.gaps || [];
@@ -1504,7 +1509,7 @@ function logicDcFlowHtml(dc) {
   }).join("");
   return (
     "<h3 class=\"subhead\">Pin / wiring D&amp;D</h3>" +
-    "<p class=\"hint\">Vanilla pin/wiring D&amp;D canvas (#logic-dc-flow). Drag nodes to layout only -- never invent nets. No React xyflow. No xyflow npm.</p>" +
+    "<p class=\"hint\" id=\"logic-dc-flow-contract\">Vanilla pin/wiring D&amp;D canvas (#logic-dc-flow). LAYOUT ONLY -- drag does not write product_model / wire_map. Never invent nets. Form customise below is the SoT editor (truth / vcc_plan / pass_mode / loads). No React xyflow. No xyflow npm.</p>" +
     `<div id="logic-dc-flow" class="logic-dc-flow" data-w="${w}" data-h="${h}">
       <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${shapes}</svg>
     </div>`
@@ -1570,7 +1575,7 @@ function renderCustomiseParameters(dc) {
     `<p class="hint">logic_inputs ${(dc.logic_inputs || []).join(",") || "--"} · OE ${oeTxt} · ICC corners ${corners}${dc && dc.is_sequential ? " (sequential -- 2^n disabled)" : " (2^n)"}</p>` +
     pinWiringHtml(dc || {}) +
     logicDcFlowHtml(dc || {}) +
-    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 UNCONFIRMED stubs CHA then CHB. Do not skip rewire prompt (OpAmp-style switch). Extra rs2g yaml without Datasheet card forbidden.</label>` +
+    `<label class="check"><input type="checkbox" id="logic-dc-dual-continue" ${dualChk} /> 2Gxx dual-channel Continue (CHA then CHB). Off on 1Gxx. RS2G08/RS2G32 CONFIRMED CHA then CHB. Do not skip rewire prompt (OpAmp-style switch). Extra rs2g yaml without Datasheet card forbidden.</label>` +
     `<div class="logic-dc-stim">
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="PSU_MSO" ${stimPsu} /> PSU_MSO</label>
       <label class="check"><input type="radio" name="logic-dc-stimulus" value="AWG" ${stimAwg} /> AWG</label>

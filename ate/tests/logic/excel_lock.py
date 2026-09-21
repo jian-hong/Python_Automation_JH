@@ -736,6 +736,7 @@ def _write_setup(ws: Any, model: ProductModel) -> None:
         ("vcc_list", list(model.vcc_list)),
         ("vcc_grid", dict(model.vcc_grid or {})),
         ("pass_mode", dict(model.pass_mode)),
+        ("excel_plots_status", excel_plots_status(model) or "UNCONFIRMED"),
         ("excel_plots", [r.get("id") for r in normalize_excel_plots(model)]),
         ("wire_map", dict(model.wire_map or {})),
         ("sample_size", model.sample_size),

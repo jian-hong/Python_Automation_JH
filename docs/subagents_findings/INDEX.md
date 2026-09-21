@@ -2,9 +2,10 @@
 
 | Date | File | Keywords |
 |------|------|----------|
-| 2026-09-20 | 2026-09-20_soot-scale-wave-unconfirmed.md | path-b, SOOT, JH DM unlock, Datasheet CONFIRM, VOID, rs1g00, UNCONFIRMED, 11 SIM, numbers HOLD |
+| 2026-09-21 | 2026-09-21_demo-day-confirm-scale-wave.md | path-b, DEMO DAY, CONFIRM-all, rs1g00, 17 CONFIRMED, excel_plots UNCONFIRMED, layout only, LIVE_MATRIX_17, no invent |
+| 2026-09-20 | 2026-09-20_soot-scale-wave-unconfirmed.md | SUPERSEDED, path-b, SOOT, JH DM unlock, Datasheet CONFIRM, VOID, rs1g00, UNCONFIRMED, 11 SIM, numbers HOLD |
 | 2026-09-21 | 2026-09-21_jh-coordinator-p1-p2.md | path-b, xyflow, logic-dc-flow, customise, NAND, NOR, INV, XOR, do not skip rewire, golden_auto, VOL board-change, 5-step cheat |
-| 2026-09-21 | 2026-09-21_jh-confirm-all-scale-wave.md | VOID, path-b, CONFIRM-all, rs1g00, JH DM unlock != Datasheet CONFIRM |
+| 2026-09-21 | 2026-09-21_jh-confirm-all-scale-wave.md | VOID (DM-unlock), path-b, CONFIRM-all, rs1g00; superseded by DEMO DAY authorized CONFIRM |
 | 2026-09-20 | 2026-09-20_jh-last-day-handover.md | path-b, handover, HANDOVER.md, AE, FAE, GT34 VOL resume, inventory gaps, rs74aup1g07, no invent |
 | 2026-09-18 | 2026-09-18_scale-wave-park.md | path-b, PARKED, rs1g74, rs1g123, rs1g00, rs1g02, rs1g04, rs1g86, rs2g08, rs2g32, UNCONFIRMED, numbers HOLD, dual_channel_continue |
 | 2026-09-18 | 2026-09-18_drop-g74-g123-scale11.md | path-b, logic-dc, sim, archive, rs1g123, rs1g74, dropped, 11 CONFIRMED, 2Gxx, RS74AUP1G07, dc.py |

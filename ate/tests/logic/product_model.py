@@ -1250,6 +1250,7 @@ def panel_payload(part_key: str) -> dict[str, Any]:
         "present": True,
         "part": model.part,
         "part_key": key,
+        "status": model.status,
         "truth_table_status": model.truth_table_status,
         "isolation_status": model.isolation_status,
         "greenable": is_datasheet_signed(model.truth_table_status)

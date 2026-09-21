@@ -79,9 +79,9 @@ _PATH_B_IDS = (
     "ioz",
 )
 
-# CONFIRMED Path B SIM walk (JH 11). Archive 123/74 optional PARKED if present;
-# missing does not block green. Scale-wave G00/G02/G04/G86/2G08/2G32 stay
-# UNCONFIRMED DRAFT -- JH DM unlock is not Datasheet CONFIRM; not in this set.
+# CONFIRMED Path B SIM walk (JH 17 = 11 prior + 6 scale-wave DEMO DAY 2026-09-21).
+# Archive 123/74 optional PARKED if present; missing does not block green.
+# Scale-wave: grounded function CONFIRMED; unsigned VOH/VOL/vcc_grid (except G86 VIL) HOLD.
 _CONFIRMED_SIM_PARTS = (
     "rs1gt34",
     "rs1g97",
@@ -94,6 +94,12 @@ _CONFIRMED_SIM_PARTS = (
     "rs1gt32",
     "rs1g125",
     "rs164",
+    "rs1g00",
+    "rs1g02",
+    "rs1g04",
+    "rs1g86",
+    "rs2g08",
+    "rs2g32",
 )
 _ARCHIVE_SIM_PARTS = ("rs1g74", "rs1g123")
 _NEXT_WAVE_SKUS = ("rs1g00", "rs1g02", "rs1g04", "rs1g86", "rs2g08", "rs2g32")
@@ -1518,12 +1524,8 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must name next-wave RS1G00 / RS2G08")
     if "numbers HOLD" not in text and "Numbers HOLD" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must say next-wave numbers HOLD")
-    if "17 CONFIRMED" in text:
-        errors.append("LOGIC_DC_OPERATOR.md must not claim 17 CONFIRMED (scale-wave stay UNCONFIRMED)")
-    if "11 CONFIRMED" not in text:
-        errors.append("LOGIC_DC_OPERATOR.md must name 11 CONFIRMED SIM")
-    if "JH DM unlock" not in text:
-        errors.append("LOGIC_DC_OPERATOR.md must say JH DM unlock != Datasheet CONFIRM")
+    if "17 CONFIRMED" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must name 17 CONFIRMED SIM")
     if "excel_plots" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must name excel_plots (card-backed series only)")
     if "orphan" not in text.lower():
@@ -1534,6 +1536,12 @@ def _operator_doc_ok() -> list[str]:
         errors.append("LOGIC_DC_OPERATOR.md must point at HANDOVER.md / LOGIC_DC_HANDOVER.md")
     if "VOL board-change resume" not in text:
         errors.append("LOGIC_DC_OPERATOR.md must include GT34 VOL board-change resume")
+    if "layout only" not in text.lower():
+        errors.append("LOGIC_DC_OPERATOR.md must say pin D&D is layout only")
+    if "LIVE_MATRIX_17" not in text:
+        errors.append("LOGIC_DC_OPERATOR.md must point at docs/LIVE_MATRIX_17.md")
+    if "CONFIRM-all scale wave VOID" in text or "JH DM unlock" in text:
+        errors.append("LOGIC_DC_OPERATOR.md must drop CONFIRM-all VOID / JH DM unlock")
     logic = Path(__file__).resolve().parents[2] / "docs" / "LOGIC_DC.md"
     if "LOGIC_DC_OPERATOR.md" not in logic.read_text(encoding="utf-8"):
         errors.append("docs/LOGIC_DC.md must point at LOGIC_DC_OPERATOR.md")
@@ -1660,7 +1668,7 @@ def _panel_ok() -> list[str]:
     if "dual-channel Continue" not in js and "dual_channel_continue" not in js:
         errors.append("Customise Parameters must show 2Gxx dual-channel Continue switch")
     if "RS2G08" not in js or "CHA then CHB" not in js:
-        errors.append("Customise Parameters dual-channel must name RS2G08/CHA then CHB (UNCONFIRMED stubs)")
+        errors.append("Customise Parameters dual-channel must name RS2G08/CHA then CHB")
     if "do not skip rewire" not in js.lower():
         errors.append("Customise Parameters dual-channel must say do not skip rewire")
     if "1 << nIn" not in js:
@@ -1681,6 +1689,14 @@ def _panel_ok() -> list[str]:
         errors.append("Customise Parameters must have vanilla pin/wiring D&D canvas (#logic-dc-flow)")
     if "no xyflow npm" not in js.lower():
         errors.append("Customise Parameters D&D must say No xyflow npm")
+    if "layout only" not in js.lower():
+        errors.append("Customise Parameters D&D must say layout only")
+    if "does not write product_model" not in js.lower():
+        errors.append("Customise Parameters D&D must say drag does not write product_model")
+    if "excel_plots.status=" not in js:
+        errors.append("Logic DC status bar must show excel_plots.status (do not overstate unsigned loads)")
+    if "vcc_grid.status=" not in js:
+        errors.append("Logic DC status bar must show vcc_grid.status")
     if "xyflow" in js.lower() and "no xyflow" not in js.lower():
         errors.append("Customise Parameters must not introduce xyflow")
     if "freq-label" not in html:
@@ -2055,6 +2071,12 @@ def _excel_lock_ok() -> list[str]:
         for need in ("vih_vs_vcc", "vil_vs_vcc", "icc_vs_vcc", "ii_vs_vcc"):
             if need not in bound:
                 errors.append(f"{part} excel_plots missing {need}")
+        plots_st = str(el.excel_plots_status(m) or "").upper()
+        if plots_st == "CONFIRMED":
+            errors.append(
+                f"{part} excel_plots.status must not be CONFIRMED "
+                "(unsigned VOH/VOL/vcc_grid -- do not overstate loads)"
+            )
     m08 = load_product_model("rs1g08")
     if m08 is not None and el.uses_excel_lock(m08):
         errors.append("rs1g08 must keep sheet_map paste.values (no Path B excel_lock)")
@@ -3152,7 +3174,7 @@ def _sts_latest_ok() -> list[str]:
 
 
 def _dual_channel_recipe_ok() -> list[str]:
-    """2Gxx Continue flag. RS2G08/32 UNCONFIRMED CHA then CHB. Path B registry stays dual_channel=False."""
+    """2Gxx Continue flag. RS2G08/32 CONFIRMED CHA then CHB. Path B registry stays dual_channel=False."""
     errors: list[str] = []
     extra2g = [
         p.name
@@ -3240,22 +3262,22 @@ def _grid_copies_g08_cmos(m) -> bool:
 
 
 def _next_wave_ok() -> list[str]:
-    """UNCONFIRMED G00/G02/G04/G86/2G08/2G32 locks. Numbers HOLD. No CONFIRM.
+    """JH DEMO DAY 2026-09-21: scale-wave CONFIRMED from grounded OCR/card rows.
 
-    JH DM unlock is not Datasheet CONFIRM. Function bind stays (NAND/NOR/INV/XOR
-    / dual CHA->CHB, G86 VIL 0.20*VCC formula). Status + nested truth/isolation
-    / vcc_grid stay UNCONFIRMED so numbers are not greenable. Do not call
-    _fail_closed_until_signed here -- unsigned HOLD is the pass path.
-    Physics: G02 TTL not CMOS; 2G CHA->CHB; OE/IOZ OFF; ICCT ABSENT != invent.
-    enabled_tests honesty: input_threshold/icc/ii on; voh/vol/ioz/delta_icc off.
+    Function/truth/isolation signed. Unsigned vcc_grid (except G86 VIL fragment),
+    VOH/VOL loads, and delta_icc numbers stay fail-closed. excel_plots.status
+    must stay UNCONFIRMED (enabled series only -- do not overstate unsigned loads).
+    Physics: G02 TTL not CMOS; G86 VIL 0.20*VCC; 2G CHA->CHB; OE/IOZ OFF;
+    ICCT ABSENT != invent ICCT.
     """
     from ate.tests.logic import logic_dc as ldc
+    from ate.tests.logic import excel_lock as el
 
     errors: list[str] = []
     load_family("logic")
     for part in _NEXT_WAVE_SKUS:
         if not has_product_model(part):
-            errors.append(f"{part} UNCONFIRMED product_model missing (next-wave bind)")
+            errors.append(f"{part} CONFIRMED product_model missing (scale-wave bind)")
             continue
         m = load_product_model(part)
         if m is None:
@@ -3263,23 +3285,27 @@ def _next_wave_ok() -> list[str]:
             continue
         if is_parked(m):
             errors.append(f"{part} next-wave must not be PARKED")
-        if (
-            is_datasheet_signed(m.status)
-            or is_datasheet_signed(m.truth_table_status)
-            or is_datasheet_signed(m.isolation_status)
-        ):
-            errors.append(
-                f"{part} must stay UNCONFIRMED (JH DM unlock != Datasheet CONFIRM; numbers HOLD)"
-            )
-        if not is_unconfirmed_status(m.status):
-            errors.append(f"{part} status must be UNCONFIRMED, got {m.status!r}")
-        if not is_unconfirmed_status(m.truth_table_status):
-            errors.append(f"{part} truth_table.status must be UNCONFIRMED, got {m.truth_table_status!r}")
-        if not is_unconfirmed_status(m.isolation_status):
-            errors.append(f"{part} isolation.status must be UNCONFIRMED, got {m.isolation_status!r}")
+        if not is_datasheet_signed(m.status):
+            errors.append(f"{part} product_model.status must be CONFIRMED (JH DEMO DAY), got {m.status!r}")
+        if not is_datasheet_signed(m.truth_table_status):
+            errors.append(f"{part} truth_table.status must be CONFIRMED, got {m.truth_table_status!r}")
+        if not is_datasheet_signed(m.isolation_status):
+            errors.append(f"{part} isolation.status must be CONFIRMED, got {m.isolation_status!r}")
+        errors += _fail_closed_until_signed(part, m)
         gst = str((m.vcc_grid or {}).get("status") or "")
-        if is_datasheet_signed(gst):
-            errors.append(f"{part} vcc_grid must stay UNCONFIRMED (numbers HOLD), got {gst!r}")
+        if part == "rs1g86":
+            if not is_datasheet_signed(gst):
+                errors.append("rs1g86 vcc_grid.status must be CONFIRMED (VIL 0.20*VCC card lock)")
+        elif is_datasheet_signed(gst):
+            errors.append(
+                f"{part} vcc_grid must stay UNCONFIRMED (no card VIH/VIL bands; do not invent), got {gst!r}"
+            )
+        plots_st = str(el.excel_plots_status(m) or "").upper()
+        if plots_st == "CONFIRMED":
+            errors.append(
+                f"{part} excel_plots.status must stay UNCONFIRMED "
+                "(do not overstate unsigned VOH/VOL/vcc_grid loads)"
+            )
         if m.has_oe():
             errors.append(f"{part}: invent OE -> FAIL")
         en = {str(x).strip().lower() for x in (enabled_tests_for_part(part) or [])}
@@ -3755,15 +3781,15 @@ def _confirmed_sim_sweep_ok() -> list[str]:
 
     errors: list[str] = []
     if frozenset(_CONFIRMED_SIM_PARTS) != frozenset(_ACTIVE_LOGIC):
-        errors.append("CONFIRMED SIM walk must match the 11 CONFIRMED _ACTIVE_LOGIC set")
-    if len(_CONFIRMED_SIM_PARTS) != 11:
-        errors.append(f"_CONFIRMED_SIM_PARTS must be 11 prior CONFIRMED, got {len(_CONFIRMED_SIM_PARTS)}")
+        errors.append("CONFIRMED SIM walk must match the 17 CONFIRMED _ACTIVE_LOGIC set")
+    if len(_CONFIRMED_SIM_PARTS) != 17:
+        errors.append(f"_CONFIRMED_SIM_PARTS must be 17 (11 prior + 6 scale-wave), got {len(_CONFIRMED_SIM_PARTS)}")
     if frozenset(_ARCHIVE_SIM_PARTS) != frozenset(_ARCHIVE_LOGIC):
         errors.append("archive SIM parts must match dropped RS1G74 / RS1G123 set")
     if frozenset(_NEXT_WAVE_SKUS) != frozenset(_NEXT_WAVE_LOGIC):
         errors.append("scale-wave SKUs must match sim _NEXT_WAVE_LOGIC")
-    if set(_NEXT_WAVE_SKUS) & set(_CONFIRMED_SIM_PARTS):
-        errors.append("scale-wave UNCONFIRMED must not join CONFIRMED SIM set")
+    if set(_NEXT_WAVE_SKUS) - set(_CONFIRMED_SIM_PARTS):
+        errors.append("scale-wave CONFIRMED must join CONFIRMED SIM set")
     if set(_ARCHIVE_SIM_PARTS) & set(_CONFIRMED_SIM_PARTS):
         errors.append("PARKED RS1G74 / RS1G123 must stay out of CONFIRMED SIM")
 
@@ -3874,7 +3900,26 @@ def _confirmed_sim_sweep_ok() -> list[str]:
             if part == "rs1g97" and "ioz" in ids:
                 errors.append("rs1g97 SIM: ioz must stay OFF")
             if part in _NEXT_WAVE_SKUS:
-                errors.append(f"{part} SIM: UNCONFIRMED next-wave must stay out of CONFIRMED walk")
+                for banned in ("voh", "vol", "ioz", "delta_icc"):
+                    if banned in ids:
+                        errors.append(f"{part} SIM: {banned} must stay OFF (unsigned / ABSENT)")
+                if part in ("rs2g08", "rs2g32"):
+                    if not dual_channel_continue(m):
+                        errors.append(f"{part} SIM: dual_channel_continue CHA then CHB required")
+                    elif recipe_channels(m) != ["CHA", "CHB"]:
+                        errors.append(f"{part} SIM: skip CHA->CHB -> FAIL, got {recipe_channels(m)}")
+                    else:
+                        specs = [get(tid) for tid in ids]
+                        specs = [s for s in specs if s is not None]
+                        over = apply_dual_channel_continue(specs, m)
+                        if any(not getattr(s, "dual_channel", False) for s in over):
+                            errors.append(
+                                f"{part} SIM: CHA->CHB Continue must OR dual_channel onto Path B specs"
+                            )
+                        if any(getattr(s, "dual_channel", False) for s in specs):
+                            errors.append(
+                                f"{part} SIM: apply_dual_channel_continue must not mutate registered spec"
+                            )
             drive_names = list(m.logic_inputs)
             if m.has_oe() and m.oe_pin and m.oe_pin not in drive_names:
                 drive_names.append(m.oe_pin)
@@ -4114,24 +4159,60 @@ def _handover_ok() -> list[str]:
             if token not in text:
                 errors.append(f"{path.name} must name {token}")
         if "2026-09-21" not in text:
-            errors.append(f"{path.name} must name JH LAST-DAY UNLOCK 2026-09-21")
-        if "CONFIRM-all" not in text:
-            errors.append(f"{path.name} must name CONFIRM-all scale wave")
-        if "VOID" not in text:
-            errors.append(f"{path.name} must mark CONFIRM-all VOID")
-        if "JH DM unlock" not in text:
-            errors.append(f"{path.name} must say JH DM unlock != Datasheet CONFIRM")
-        if "CONFIRMED (11)" not in text:
-            errors.append(f"{path.name} must list CONFIRMED (11)")
-        if "CONFIRMED (17)" in text:
-            errors.append(f"{path.name} must not claim CONFIRMED (17); scale-wave stay UNCONFIRMED DRAFT")
-        if "UNCONFIRMED (6)" not in text:
-            errors.append(f"{path.name} must list UNCONFIRMED (6) scale-wave DRAFT")
+            errors.append(f"{path.name} must name JH DEMO DAY / LAST-DAY 2026-09-21")
+        if "CONFIRM-all" not in text and "DEMO DAY" not in text:
+            errors.append(f"{path.name} must name CONFIRM-all or DEMO DAY scale wave")
+        if "CONFIRMED (17)" not in text:
+            errors.append(f"{path.name} must list CONFIRMED (17)")
+        if "Demo cheat" not in text and "demo cheat" not in text:
+            errors.append(f"{path.name} must include Demo cheat (open console -> pick part)")
+        if "layout only" not in text.lower():
+            errors.append(f"{path.name} must say pin D&D is layout only")
+        if "CONFIRM-all VOID" in text:
+            errors.append(f"{path.name} must drop CONFIRM-all VOID (JH DEMO DAY CONFIRMED)")
+        if "LIVE_MATRIX_17" not in text:
+            errors.append(f"{path.name} must point at docs/LIVE_MATRIX_17.md")
         for family in ("NAND", "NOR", "INV", "XOR", "dual AND", "dual OR"):
             if family not in text:
                 errors.append(f"{path.name} must name LIVE family {family}")
         if "5-step cheat" not in text:
             errors.append(f"{path.name} must include 5-step cheat (AE/FAE add a part)")
+    live_path = root / "docs" / "LIVE_MATRIX_17.md"
+    if not live_path.is_file():
+        errors.append("docs/LIVE_MATRIX_17.md missing (LIVE START matrix)")
+    else:
+        live = live_path.read_text(encoding="utf-8")
+        for part in (
+            "RS1GT34",
+            "RS1G08",
+            "RS1G07",
+            "RS1G14",
+            "RS1G32",
+            "RS1GT08",
+            "RS1GT32",
+            "RS1G125",
+            "RS1G97",
+            "RS1G126",
+            "RS164",
+            "RS1G00",
+            "RS1G02",
+            "RS1G04",
+            "RS1G86",
+            "RS2G08",
+            "RS2G32",
+            "RS1G74",
+            "RS1G123",
+        ):
+            if part not in live:
+                errors.append(f"LIVE_MATRIX_17.md must list {part}")
+        if "CHA then CHB" not in live:
+            errors.append("LIVE_MATRIX_17.md must name CHA then CHB Continue")
+        if "recable" not in live.lower():
+            errors.append("LIVE_MATRIX_17.md must name GT34 VOL recable")
+        if "no remote" not in live.lower():
+            errors.append("LIVE_MATRIX_17.md must say no remote LIVE")
+        if "excel_plots" not in live:
+            errors.append("LIVE_MATRIX_17.md must name excel_plots (unsigned loads)")
     return errors
 
 

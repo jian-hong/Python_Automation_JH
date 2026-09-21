@@ -2,7 +2,7 @@
 
 **PR #5 HEAD SHA:** `fa68109`
 
-This file is the bench/operator map. Writer/import format stays in `docs/LOGIC_DC.md`. Verify is a separate agent. This page is **not** a reproduce claim and does **not** claim Verify PASS / bench green.
+This file is the bench/operator map. Writer/import format stays in `docs/LOGIC_DC.md`. AE/FAE: `HANDOVER.md` / `docs/LOGIC_DC_HANDOVER.md`. LIVE START order: `docs/LIVE_MATRIX_17.md`. Verify is a separate agent. This page is **not** a reproduce claim and does **not** claim Verify PASS / bench green.
 
 Settle loop (this PR): recipe `settle_s=0.05`, `stable_n=3`, `stable_eps_V=0.005`, `settle_timeout_s=2.0`. Voltage (VOH/VOL/threshold) waits eps/N vs `stable_eps_V`. Current (ICC / ΔICC / II / IOZ) uses `stable_eps_A` only -- 97/126 default is **null**. Do **not** reuse `stable_eps_V` as amps (0.005 V would be a 5 mA window). Do **not** invent a uA epsilon.
 
@@ -74,8 +74,8 @@ Use these without a live DMM/PSU/AWG. They prove schema and UI, **not** instrume
 1. Product-model schema load (`ate/config/parts/<key>.yaml` `product_model` / `logic_dc:`). Isolation derives from `truth_table` (Y tracks the swept pin; invert only if no track combo).
 2. `pass_mode` on part yaml + limits yaml + Setup **Logic DC recipe** / Test program (range / min_only / max_only / fail-open / unspec). Missing min/max stay **unspec** unless fail-open.
 3. Fail-closed until Datasheet-signed **CONFIRMED**. UNCONFIRMED SKUs cannot green. RS1G97 and RS1G126 are CONFIRMED (Jian Hong 2026-09-17) for the status gate only -- that is not a bench green. RS1GT34 is Path B **CONFIRMED** (Jian Hong 2026-09-18) for the status gate only -- that is not a bench green.
-4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (pin/wiring map labels, vanilla `#logic-dc-flow` D&D layout -- No xyflow npm, 2Gxx dual-channel Continue switch -- do not skip rewire, FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, per-band limits + `pass_mode` range/min-only/max-only, stimulus PSU_MSO vs AWG, n, N-input + OE) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (`vcc_plan` alias of `vcc_grid`, merged `vcc_list`, `pass_mode`, `sample_size`, `stable_eps_A`). PSU_MSO hides Freq/Amp. Not xyflow. Visual tables still write pass_mode on the limits table.
-5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free Path B catalog: `python -m ate.core.check_logic_dc_sim` (the 11 CONFIRMED; overlay one VCC; `stable_eps_A` null = NON_TIGHT; G07 VOH SKIP; RS164 sequential 2^n SKIP). CONFIRMED Path B `TestSpec.run` walk (`_confirmed_sim_sweep_ok`) for GT34, G97, G126, G08, G07, G14, G32, GT08, GT32, G125, RS164 -- `fixture_modes.SIM.tests` if present, else LOGIC `enabled_tests`. RS164 Path B gate ids stay OFF (sequential, not 2^n). Import-format alias `ate/tests/logic/dc.py` is the same runner (not a second fork). RS1G123 / RS1G74 are PARKED UNCONFIRMED archive -- not in the mandatory SIM set; missing yaml does not block green; FAIL if treated as gate 2^n. Scale-wave G00/G02/G04/G86/2G08/2G32 stay UNCONFIRMED DRAFT -- JH DM unlock != Datasheet CONFIRM; unsigned VOH/VOL/VIH (G86 VIL formula bind; vcc_grid UNCONFIRMED) numbers HOLD. Timeout SIM raises. **Not a reproduce claim.**
+4. Panel recipe edit: JSON **Save product_model** writes part yaml from `docs/datasheet/card_fields.schema.yaml` (cannot promote to Datasheet-signed). **Customise Parameters** (pin/wiring map labels, vanilla `#logic-dc-flow` D&D **layout only** -- drag does not write product_model / wire_map, No xyflow npm, 2Gxx dual-channel Continue switch -- do not skip rewire, FIXED POINTS chips + RANGE SWEEPS, merged `vcc_list` preview, per-band limits + `pass_mode` range/min-only/max-only, stimulus PSU_MSO vs AWG, n, N-input + OE) **Save Version overlay** writes `#Test_Database/.../{Operator}/Version_N/_manifest/test_params.yaml` (`vcc_plan` alias of `vcc_grid`, merged `vcc_list`, `pass_mode`, `sample_size`, `stable_eps_A`). PSU_MSO hides Freq/Amp. Status bar shows product_model / truth / isolation / vcc_grid / excel_plots.status (do not overstate unsigned loads). Not xyflow. Visual tables still write pass_mode on the limits table.
+5. `python -m ate.core.check_logic_dc` (also `check_add_test`, `check_family_load`). Visa-free Path B catalog: `python -m ate.core.check_logic_dc_sim` (the 17 CONFIRMED; overlay one VCC; `stable_eps_A` null = NON_TIGHT; G07 VOH SKIP; RS164 sequential 2^n SKIP). CONFIRMED Path B `TestSpec.run` walk (`_confirmed_sim_sweep_ok`) for GT34, G97, G126, G08, G07, G14, G32, GT08, GT32, G125, RS164 + scale-wave G00/G02/G04/G86/2G08/2G32 -- `fixture_modes.SIM.tests` if present, else LOGIC `enabled_tests`. RS164 Path B gate ids stay OFF (sequential, not 2^n). Import-format alias `ate/tests/logic/dc.py` is the same runner (not a second fork). RS1G123 / RS1G74 are PARKED UNCONFIRMED archive -- not in the mandatory SIM set; missing yaml does not block green; FAIL if treated as gate 2^n. Scale-wave function/truth/isolation CONFIRMED (JH DEMO DAY 2026-09-21 grounded OCR/card rows; on-disk DRAFT card SoT). Unsigned VOH/VOL/VIH (except G86 VIL 0.20*VCC fragment CONFIRMED) numbers HOLD. excel_plots.status UNCONFIRMED on the six. Timeout SIM raises. **Not a reproduce claim.**
 
 DEMO on Run walks ticked tests with mock numbers and writes `sessions/` JSON. It does **not** stamp the lab xlsx as PASS. DEMO is not PSU->settle->measure. START.bat is still how the zip console comes up.
 
@@ -99,7 +99,7 @@ PSU CH1 is VCC. PSU CH2 is Y-load/vref (VOH sink rail 0V, VOL source rail = VCC 
 
 ## Customise Parameters (`vcc_grid`)
 
-Setup **Logic DC recipe** -- Customise Parameters (no xyflow; vanilla `#logic-dc-flow` pin/wiring D&D; No xyflow npm):
+Setup **Logic DC recipe** -- Customise Parameters (no xyflow; vanilla `#logic-dc-flow` pin/wiring D&D **layout only** -- drag does not write product_model; No xyflow npm):
 
 1. **FIXED POINTS** chips -- add/remove VCC; each chip has editable VIH min / VIL max.
 2. **RANGE SWEEPS** -- Add range start/stop/step (default 0.1); optional label; **same** VIH/VIL limits for every stepped VCC in that band. Range steps inherit band limits -- they are not stored as a fixed-point row.
@@ -284,13 +284,13 @@ Eight overnight models are **CONFIRMED** for grounded extract/card fields (truth
 5. RS1G125 OE active-L -> tick ioz when OE inactive only (`recipe.ioz_when: oe_inactive`; force OE=H, never active L). Enable voh/vol (three_state + CONFIRMED SoT). RS164 sequential_shift_register -- do not tick Path B gate 2^n; VOH/VOL stay UNCONFIRMED (do not expand).
 **Dropped / archive (not Path B scale):** RS1G123 / RS1G74 stay optional **PARKED** UNCONFIRMED stubs. Missing yaml does not block green. Do not invent VT+/- or gate 2^n. If yaml is present: Path B gate 2^n stay off; 74 runner `sequential_dff_clr_pre` (alias `sequential_dff`); 123 runner `sequential_monostable_rc`; 123 ICCT ABSENT; schmitt false. `check_logic_dc` FAILs if treated as gate 2^n.
 
-**CONFIRM-all scale wave VOID (JH LAST-DAY UNLOCK 2026-09-21 Asia/Kuala_Lumpur; JH DM unlock != Datasheet CONFIRM):** On-disk DRAFT cards stay UNCONFIRMED. Function bind only (truth/isolation rows + G86 VIL 0.20*VCC formula). Nested truth_table / isolation / vcc_grid stay UNCONFIRMED -- numbers HOLD, not greenable. All six ICCT ABSENT -- delta_icc from `delta_icc_uA` only (do not invent ICCT). RS1G00 NAND other=H invert; oe none; IOZ OFF. RS1G02 NOR other=L invert, TTL-style VIH/VIL (not G08 CMOS). RS1G04 INV n=1, NC not OE, IOZ OFF. RS1G86 XOR dual isolation track+invert; VIL 0.20*VCC at 1.65-1.95 function bind; vcc_grid UNCONFIRMED; VIH HOLD. RS2G08 / RS2G32 dual AND/OR with `recipe.dual_channel_continue` CHA then CHB. Invent OE/IOZ/ICCT or skip CHA->CHB FAILs. Unsigned VOH/VOL loads HOLD. Do not invent signed loads.
+**JH DEMO DAY CONFIRM-all scale wave (2026-09-21):** Grounded OCR/card rows CONFIRMED for function/truth/isolation on RS1G00/G02/G04/G86/2G08/2G32 (on-disk DRAFT card is SoT; `ate_ds_extract/models` missing -- do not invent box PDFs). All six ICCT ABSENT -- delta_icc from `delta_icc_uA` only (do not invent ICCT). RS1G00 NAND other=H invert; oe none; IOZ OFF. RS1G02 NOR other=L invert, TTL-style VIH/VIL (not G08 CMOS). RS1G04 INV n=1, NC not OE, IOZ OFF. RS1G86 XOR dual isolation track+invert; VIL 0.20*VCC at 1.65-1.95 CONFIRMED; VIH HOLD. RS2G08 / RS2G32 dual AND/OR with `recipe.dual_channel_continue` CHA then CHB. Invent OE/IOZ/ICCT or skip CHA->CHB FAILs. Unsigned VOH/VOL loads HOLD. excel_plots.status UNCONFIRMED (enabled series only). Do not invent signed loads. LIVE START: `docs/LIVE_MATRIX_17.md` (no remote LIVE).
 
 No Verify PASS.
 
 ## Ready vs Not ready (SIM only -- not bench green)
 
-`python -m ate.core.check_logic_dc_sim` on the **11 CONFIRMED** Logic SKUs (skip OpAmp/LDO/Switch/Level). Visa-free. Fail-closed on invent / `stable_eps_A` null / glyph gaps. Dual-channel Continue path is ready. RS2G08 / RS2G32 are UNCONFIRMED stubs CHA then CHB (unsigned VOH/VOL numbers HOLD). Extra `rs2g*.yaml` without a Datasheet card stays forbidden.
+`python -m ate.core.check_logic_dc_sim` on the **17 CONFIRMED** Logic SKUs (skip OpAmp/LDO/Switch/Level). Visa-free. Fail-closed on invent / `stable_eps_A` null / glyph gaps. Dual-channel Continue path is ready. RS2G08 / RS2G32 are CONFIRMED CHA then CHB (unsigned VOH/VOL numbers HOLD). Extra `rs2g*.yaml` without a Datasheet card stays forbidden.
 
 | Part | SIM | Live | Gaps / blocked |
 |------|-----|------|----------------|
@@ -307,12 +307,12 @@ No Verify PASS.
 | RS164 | SIM skip (sequential) | none | not combinational 2^n; VOH/VOL UNCONFIRMED; Ioff+ICCT ABSENT |
 | RS1G123 | PARKED | none | JH dropped. UNCONFIRMED archive. Sequential -- FAIL if treated as gate 2^n |
 | RS1G74 | PARKED | none | JH dropped. UNCONFIRMED archive. Sequential -- FAIL if treated as gate 2^n |
-| RS1G00 | UNCONFIRMED HOLD | none | NAND other=H invert; ICCT ABSENT; unsigned VOH/VOL/VIH numbers HOLD; no invent OE/IOZ |
-| RS1G02 | UNCONFIRMED HOLD | none | NOR other=L invert; TTL-style VIH/VIL -- not G08 CMOS; bands HOLD |
-| RS1G04 | UNCONFIRMED HOLD | none | INV n=1; NC not OE; IOZ OFF; unsigned loads HOLD |
-| RS1G86 | UNCONFIRMED HOLD | none | XOR track+invert; VIL 0.20*VCC @1.65-1.95 formula bind; vcc_grid UNCONFIRMED; VIH HOLD |
-| RS2G08 | UNCONFIRMED HOLD | none | dual AND; CHA then CHB Continue; no invent OE/IOZ; pin numbers HOLD |
-| RS2G32 | UNCONFIRMED HOLD | none | dual OR; CHA then CHB Continue; no invent OE/IOZ; pin numbers HOLD |
+| RS1G00 | SIM green | none | NAND other=H invert; ICCT ABSENT; unsigned VOH/VOL/VIH numbers HOLD; excel_plots UNCONFIRMED; no invent OE/IOZ |
+| RS1G02 | SIM green | none | NOR other=L invert; TTL-style VIH/VIL -- not G08 CMOS; bands HOLD |
+| RS1G04 | SIM green | none | INV n=1; NC not OE; IOZ OFF; unsigned loads HOLD |
+| RS1G86 | SIM green | none | XOR track+invert; VIL 0.20*VCC @1.65-1.95 CONFIRMED; VIH HOLD; excel_plots UNCONFIRMED |
+| RS2G08 | SIM green | none | dual AND; CHA then CHB Continue; no invent OE/IOZ; pin numbers HOLD |
+| RS2G32 | SIM green | none | dual OR; CHA then CHB Continue; no invent OE/IOZ; pin numbers HOLD |
 
 **Next SKU (not this turn -- no invent extra cards)**
 
