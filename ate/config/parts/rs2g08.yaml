@@ -34,7 +34,7 @@ fixture_modes:
 product_model:
   part: RS2G08
   status: CONFIRMED
-  source_card: ON_DISK_DRAFT
+  source_card: RS2G08_card_CONFIRMED.md
   confirm_note: "JH DEMO DAY 2026-09-21. Grounded OCR/card rows CONFIRMED. CHA then CHB. Unsigned numbers HOLD. excel_plots UNCONFIRMED (enabled series only)."
   package: VSSOP8
   product_class: dual_and2

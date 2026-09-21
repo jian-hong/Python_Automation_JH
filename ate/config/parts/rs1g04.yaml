@@ -33,7 +33,7 @@ fixture_modes:
 product_model:
   part: RS1G04
   status: CONFIRMED
-  source_card: ON_DISK_DRAFT
+  source_card: RS1G04_card_CONFIRMED.md
   confirm_note: "JH DEMO DAY 2026-09-21. Grounded OCR/card rows CONFIRMED. NC not OE. Unsigned numbers HOLD. excel_plots UNCONFIRMED (enabled series only)."
   package: SC70-5
   product_class: gate_inv

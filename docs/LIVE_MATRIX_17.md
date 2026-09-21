@@ -6,6 +6,8 @@ Shared START: `START.bat` -> UI `127.0.0.1:5174` worker `8766` -> person selecte
 
 Pin D&D `#logic-dc-flow` is **layout only** -- drag does not write product_model / wire_map. Form customise is SoT (truth / vcc_plan / pass_mode / loads). PSU_MSO hides Freq/Amp. excel_plots.status must match SoT; scale-wave plots stay UNCONFIRMED (enabled series only -- do not overstate unsigned loads).
 
+SoT cards (scale-wave reconstruct; unsigned loads HOLD): `docs/datasheet/RS1G00_card_CONFIRMED.md` `RS1G02_card_CONFIRMED.md` `RS1G04_card_CONFIRMED.md` `RS1G86_card_CONFIRMED.md` `RS2G08_card_CONFIRMED.md` `RS2G32_card_CONFIRMED.md`.
+
 PARKED (not LIVE): RS1G74, RS1G123.
 
 | Part | Tick (Path B DC) | Skip / HOLD | Wire (pin_drive + pins) | Stimulus / settle | pass_mode | Continue |

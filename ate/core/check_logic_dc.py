@@ -3291,6 +3291,13 @@ def _next_wave_ok() -> list[str]:
             errors.append(f"{part} truth_table.status must be CONFIRMED, got {m.truth_table_status!r}")
         if not is_datasheet_signed(m.isolation_status):
             errors.append(f"{part} isolation.status must be CONFIRMED, got {m.isolation_status!r}")
+        want_card = f"{part.upper()}_card_CONFIRMED.md"
+        src = str((m.raw or {}).get("source_card") or "")
+        if src != want_card:
+            errors.append(f"{part} source_card must be {want_card} (SoT), got {src!r}")
+        card_path = Path(__file__).resolve().parents[2] / "docs" / "datasheet" / want_card
+        if not card_path.is_file():
+            errors.append(f"docs/datasheet/{want_card} missing (scale-wave SoT)")
         errors += _fail_closed_until_signed(part, m)
         gst = str((m.vcc_grid or {}).get("status") or "")
         if part == "rs1g86":
