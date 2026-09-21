@@ -2,6 +2,8 @@
 
 No remote LIVE. Operator owns instruments. Code owns config. DEMO/SIM is not Verify PASS.
 
+SoT 17 START narrative (cards/models 2026-09-21, CONFIRMED x6 scale-wave included): `docs/LIVE_MATRIX_17_2026-09-21.md`. This table is Path B Code ticks for 24 CONFIRMED + HOLD/PARKED.
+
 Shared START: `START.bat` -> UI `127.0.0.1:5174` worker `8766` -> person selected -> Open Session -> Human Continue on `wire_map` -> START (not DEMO). Null `stable_eps_A` = NON_TIGHT. Fill **golden_auto** Version `workbook/` only. pretty / ultimate_manual `never_auto_write`. STS `sessions/datalog.md|.pdf` + Version-root `report.pdf`. `sessions/csv/` + `datapoints.csv` + `path_b_write.json`. Campaign `#Test_Database/Logic/<Part>/<Package>/<Operator>/Version_N/`.
 
 Pin D&D `#logic-dc-flow` is **layout only** -- drag does not write product_model / wire_map. Form customise is SoT (truth / vcc_plan / pass_mode / loads). PSU_MSO hides Freq/Amp. excel_plots.status must match SoT; scale-wave plots CONFIRMED (signed enabled series). GT-wave plots stay UNCONFIRMED (unsigned loads).

@@ -2,7 +2,7 @@
 
 **JH DEMO DAY 2026-09-21 + GT-wave.** Scale-wave G00/G02/G04/G86/2G08/2G32 **CONFIRMED** (signed vcc_grid / VOH / VOL / delta_icc_uA; ICCT name ABSENT). GT-wave RS1GT00/GT02/GT04/GT14 + RS2G00/2G125/2GT08 **CONFIRMED**. HOLD stubs RS1GT125/GT126 process-only (OE present, IOZ ABSENT). `excel_plots.status` CONFIRMED on scale-wave signed series; GT-wave plots stay UNCONFIRMED. PARKED G74/G123 is not scale. DEMO/SIM is not a reproduce / not Verify PASS / not LIVE.
 
-Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LOGIC_DC_OPERATOR.md`. LIVE START order: `docs/LIVE_MATRIX_17.md` (per part, per DC test). Scale-wave FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. GT-wave FAIL bars: `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. Writer format: `docs/LOGIC_DC.md`. Dual Continue: `docs/LOGIC_DC_DUAL_CHANNEL.md`.
+Canonical twin: `docs/LOGIC_DC_HANDOVER.md` (same map). Operator bench: `docs/LOGIC_DC_OPERATOR.md`. LIVE START order: `docs/LIVE_MATRIX_17.md` (per part, per DC test). SoT 17 START narrative: `docs/LIVE_MATRIX_17_2026-09-21.md`. Scale-wave FAIL bars: `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. GT-wave FAIL bars: `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`. Writer format: `docs/LOGIC_DC.md`. Dual Continue: `docs/LOGIC_DC_DUAL_CHANNEL.md`.
 
 ## Demo cheat (open console -> pick part -> customise -> SIM -> Excel/STS)
 
@@ -197,6 +197,7 @@ Do not fork these. Missing file = not local-ready.
 - `docs/datasheet/RS1G00_card_CONFIRMED.md` (and G02/G04/G86/2G08/2G32)
 - `docs/datasheet/RS1GT00_card_CONFIRMED.md` (and GT02/GT04/GT14 / 2G00 / 2G125 / 2GT08)
 - `docs/LIVE_MATRIX_17.md`
+- `docs/LIVE_MATRIX_17_2026-09-21.md`
 - `docs/SCALE_WAVE_VERIFY_CHECKLIST_2026-09-21.md`
 - `docs/GT_WAVE_VERIFY_CHECKLIST_2026-09-21.md`
 
